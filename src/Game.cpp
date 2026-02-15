@@ -22,8 +22,27 @@ Game::Game()
 }
 
 std::vector<Pin> Game::createPins(float centerX, float startY) {
-    return createPins(centerX, startY);
+    std::vector<Pin> out;
+
+    float spacing = 35.0f; // keep
+    float radius  = 12.0f; // keep
+
+    for (int row = 0; row < 4; row++) {
+        int count = row + 1;
+        float y = startY - row * spacing;
+
+        float rowWidth = (count - 1) * spacing;
+        float startX = centerX - rowWidth / 2.0f;
+
+        for (int i = 0; i < count; i++) {
+            float x = startX + i * spacing;
+            out.emplace_back(sf::Vector2f(x, y), radius);
+        }
+    }
+
+    return out;
 }
+
 
 void Game::run() {
     while (window.isOpen()) {

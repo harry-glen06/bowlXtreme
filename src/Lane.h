@@ -4,7 +4,7 @@
 struct Lane {
     float width = 250.0f;
     float top = 40.0f;
-    float height = 520.0f;
+    float height = 620.0f;
 
     float gutterWidth = 28.0f;
     float bumperThickness = 6.0f;
@@ -13,7 +13,7 @@ struct Lane {
     float right = 0.0f;
     float bottom = 0.0f;
 
-    bool bumpersOn = false;
+    bool bumpersOn = true;
 
     sf::RectangleShape laneRect;
     sf::RectangleShape leftGutter;

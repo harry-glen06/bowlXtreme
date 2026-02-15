@@ -31,7 +31,7 @@ private:
 
 private:
     const float windowW = 900.0f;
-    const float windowH = 600.0f;
+    const float windowH = 800.0f;
 
     sf::RenderWindow window;
     sf::Clock clock;
