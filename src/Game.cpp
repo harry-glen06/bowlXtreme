@@ -1,94 +1,333 @@
-Game constructor:
-    set up laneRect (centered, long rectangle)
-    set default values:
-        score = 0
-        state = AIMING
-        aimAngleDeg = -90
-        aimSpeedDeg = (some number like 140)
-        launchSpeed = (some number like 650)
+#include "Game.h"
+#include "Physics.h"
+#include <string>
+#include <cmath>
 
-    set ball start position near bottom of lane
-    ball.reset(ballStart)
+Game::Game()
+: window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
+, ball(21.0f)
+, hud(font, "", 20)
+{
+    window.setFramerateLimit(60);
 
-    resetPins()
+    lane.init(windowW);
 
-resetGame():
-    score = 0
-    state = AIMING
-    aimAngleDeg = -90
-    ball.reset(ballStart)
-    resetPins()
+    ball.reset(sf::Vector2f(windowW / 2.0f, lane.bottom - 30.0f));
+    pins = createPins(lane.centerX(), 220.0f);
 
-resetPins():
-    clear pins list
+    fontOk = font.openFromFile("assets/arial.ttf");
+    hud = sf::Text(font, "", 20);
+    hud.setFillColor(sf::Color::White);
+    hud.setPosition(sf::Vector2f(20.0f, 15.0f));
+}
 
-    find laneCenterX
-    choose startY near top of lane
-    spacing = 28
+std::vector<Pin> Game::createPins(float centerX, float startY) {
+    return createPins(centerX, startY);
+}
 
-    build triangle rows:
-        row 1: 1 pin
-        row 2: 2 pins
-        row 3: 3 pins
-        row 4: 4 pins
+void Game::run() {
+    while (window.isOpen()) {
+        handleEvents();
+        float dt = clock.restart().asSeconds();
+        update(dt);
+        draw();
+    }
+}
 
-    for each row:
-        place pins centered around laneCenterX
-        add Pin(position) to pins list
+void Game::handleEvents() {
+    while (true) {
+        auto ev = window.pollEvent();
+        if (!ev.has_value()) break;
+        if (ev->is<sf::Event::Closed>()) window.close();
+    }
+}
 
-handleInput(dt):
-    if key R pressed:
-        resetGame()
+void Game::resetPins() {
+    pins = createPins(lane.centerX(), 220.0f);
+}
 
-    if state == AIMING:
-        if Left pressed:
-            aimAngleDeg -= aimSpeedDeg * dt
-        if Right pressed:
-            aimAngleDeg += aimSpeedDeg * dt
+void Game::resetBall() {
+    ball.reset(sf::Vector2f(windowW / 2.0f, lane.bottom - 30.0f));
+    rollLocked = false;
+    rollDir = sf::Vector2f(0.0f, -1.0f);
+    aimDeg = -90.0f;
+    inGutter = false;
+    gutterSide = 0;
+}
 
-        clamp aimAngleDeg to stay mostly pointing up lane
-            for example: between -140 and -40
+void Game::startPendingReset() {
+    pendingReset = true;
+    resetTimer = 0.0f;
+}
 
-        if Space pressed:
-            direction = vector(cos(angle), sin(angle)) using aimAngleDeg
-            ball.launch(direction, launchSpeed)
-            state = ROLLING
+void Game::finishPendingResetIfReady(float dt) {
+    if (!pendingReset) return;
 
-update(dt):
-    if state == ROLLING:
-        ball.update(dt)
+    resetTimer += dt;
 
-        keep ball inside lane:
-            if ball outside left or right:
-                push it back inside
-                optionally flip x velocity a little
-            same for top/bottom
+    bool pinsStill = true;
+    for (const auto& pin : pins) {
+        if (!pin.isActive()) continue;
+        if (length(pin.getVel()) > pinsStillSpeed) {
+            pinsStill = false;
+            break;
+        }
+    }
 
-        checkCollisions()
+    bool ready = (pinsStill && resetTimer >= endBuffer) || (resetTimer >= maxResetWait);
+    if (!ready) return;
 
-        if ball speed is very small:
-            ball.stop()
-            state = RESULT
+    // Count fallen pins and remove them
+    int knockedThisShot = 0;
+    for (auto& pin : pins) {
+        if (!pin.isActive()) continue;
+        if (pin.isFallen()) {
+            knockedThisShot++;
+            pin.setActive(false);
+        }
+    }
 
-checkCollisions():
-    for each pin:
-        if pin is already knocked: continue
+    totalScore += knockedThisShot;
 
-        if distance(ball.pos, pin.pos) < ball.radius + pin.radius:
-            pin.knock()
-            score += 1
+    // Strike
+    if (shot == 1 && knockedThisShot == 10) {
+        frame++;
+        shot = 1;
+        resetPins();
+        resetBall();
+        pendingReset = false;
+        return;
+    }
 
-draw(window):
-    draw background
-    draw laneRect
+    // Normal shot advance
+    shot++;
+    if (shot == 3) {
+        frame++;
+        shot = 1;
+        resetPins();
+    }
 
-    for each pin:
-        if not knocked:
-            pin.draw(window)
+    resetBall();
+    pendingReset = false;
+}
 
-    ball.draw(window)
+void Game::applyGuttersAndBumpers() {
+    sf::Vector2f p = ball.getPos();
+    sf::Vector2f v = ball.getVel();
+    float r = ball.getRadius();
 
-    if state == AIMING:
-        draw an aim line from ball position in the aim direction
+    float playL = lane.playLeft();
+    float playR = lane.playRight();
 
-    draw score text if you want
+    if (inGutter) {
+        if (gutterSide == -1) p.x = lane.left + lane.gutterWidth * 0.5f;
+        if (gutterSide ==  1) p.x = lane.right - lane.gutterWidth * 0.5f;
+
+        v.x = 0.0f;
+        v.y = -420.0f;
+    } else {
+        if (lane.bumpersOn) {
+            float minSide = 80.0f;
+            float bounce = 0.75f;
+
+            if (p.x < playL + r) {
+                p.x = playL + r;
+                if (v.x < 0.0f) v.x = -v.x * bounce;
+                if (std::abs(v.x) < minSide) v.x = minSide;
+            }
+            if (p.x > playR - r) {
+                p.x = playR - r;
+                if (v.x > 0.0f) v.x = -v.x * bounce;
+                if (std::abs(v.x) < minSide) v.x = -minSide;
+            }
+        } else {
+            if (p.x < playL + r) { inGutter = true; gutterSide = -1; }
+            if (p.x > playR - r) { inGutter = true; gutterSide =  1; }
+        }
+    }
+
+    ball.setPos(p);
+    ball.setVel(v);
+}
+
+void Game::doCollisions() {
+    // Ball -> pin
+    {
+        sf::Vector2f bp = ball.getPos();
+        sf::Vector2f bv = ball.getVel();
+        float br = ball.getRadius();
+        float bm = 4.0f;
+
+        for (auto& pin : pins) {
+            if (!pin.isActive()) continue;
+
+            sf::Vector2f pp = pin.getPos();
+            sf::Vector2f pv = pin.getVel();
+
+            sf::Vector2f pvBefore = pv;
+            sf::Vector2f bvBefore = bv;
+
+            resolveCircleCollision(
+                bp, bv, bm, br,
+                pp, pv, pin.getMass(), pin.getRadius(),
+                0.55f
+            );
+
+            pin.setPos(pp);
+            pin.setVel(pv);
+
+            float impact = length(pv - pvBefore);
+
+            if (impact > 5.0f) {
+                bv *= 0.92f;
+            }
+
+            float fallThreshold = 80.0f;
+            float spinScale = 0.01f;
+
+            if (!pin.isFallen() && impact > fallThreshold) {
+                pin.setFallen(true);
+
+                float spin = (bvBefore.x - pvBefore.x) * spinScale;
+                if (spin > 6.0f) spin = 6.0f;
+                if (spin < -6.0f) spin = -6.0f;
+
+                pin.setAngularVel(spin);
+            }
+        }
+
+        ball.setPos(bp);
+        ball.setVel(bv);
+    }
+
+    // Pin -> pin
+    {
+        float rest = 0.20f;
+        for (size_t i = 0; i < pins.size(); i++) {
+            if (!pins[i].isActive()) continue;
+            for (size_t j = i + 1; j < pins.size(); j++) {
+                if (!pins[j].isActive()) continue;
+
+                sf::Vector2f p1 = pins[i].getPos();
+                sf::Vector2f v1 = pins[i].getVel();
+
+                sf::Vector2f p2 = pins[j].getPos();
+                sf::Vector2f v2 = pins[j].getVel();
+
+                resolveCircleCollision(
+                    p1, v1, pins[i].getMass(), pins[i].getRadius(),
+                    p2, v2, pins[j].getMass(), pins[j].getRadius(),
+                    rest
+                );
+
+                pins[i].setPos(p1);
+                pins[i].setVel(v1);
+                pins[j].setPos(p2);
+                pins[j].setVel(v2);
+            }
+        }
+    }
+}
+
+void Game::updateHud() {
+    if (!fontOk) return;
+
+    hud.setString(
+        "Frame: " + std::to_string(frame) +
+        "   Shot: " + std::to_string(shot) +
+        "   Score: " + std::to_string(totalScore) +
+        "   Bumpers: " + std::string(lane.bumpersOn ? "ON" : "OFF")
+    );
+}
+
+void Game::update(float dt) {
+    // Move/aim before roll
+    if (!rollLocked && !pendingReset) {
+        sf::Vector2f p = ball.getPos();
+        float r = ball.getRadius();
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
+            p.x -= moveSpeed * dt;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
+            p.x += moveSpeed * dt;
+
+        float playL = lane.playLeft();
+        float playR = lane.playRight();
+
+        if (p.x < playL + r) p.x = playL + r;
+        if (p.x > playR - r) p.x = playR - r;
+
+        ball.setPos(p);
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
+            aimDeg -= aimTurnSpeed * dt;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
+            aimDeg += aimTurnSpeed * dt;
+
+        if (aimDeg < -140.0f) aimDeg = -140.0f;
+        if (aimDeg > -40.0f) aimDeg = -40.0f;
+    }
+
+    // Launch
+    if (!rollLocked && !pendingReset &&
+        sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
+        float a = degToRad(aimDeg);
+        rollDir = sf::Vector2f(std::cos(a), std::sin(a));
+        ball.launch(rollDir, 900.0f);
+        rollLocked = true;
+    }
+
+    // Toggle bumpers
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::B)) {
+        lane.bumpersOn = true;
+    }
+
+    // Update physics
+    ball.update(dt);
+    for (auto& pin : pins) pin.update(dt);
+
+    if (rollLocked && ball.getSpeed() < minRollSpeed) {
+        ball.setVel(rollDir * minRollSpeed);
+    }
+
+    applyGuttersAndBumpers();
+    doCollisions();
+
+    // Start reset if ball hits back
+    if (!pendingReset && ball.getPos().y < lane.top + ball.getRadius()) {
+        ball.stop();
+        rollLocked = false;
+        startPendingReset();
+    }
+
+    finishPendingResetIfReady(dt);
+
+    updateHud();
+}
+
+void Game::draw() {
+    window.clear(sf::Color(20, 20, 20));
+
+    lane.draw(window);
+
+    for (const auto& pin : pins) pin.draw(window);
+
+    if (!rollLocked && !pendingReset) {
+        float a = degToRad(aimDeg);
+        sf::Vector2f dir(std::cos(a), std::sin(a));
+
+        sf::Vertex line[2];
+        line[0].position = ball.getPos();
+        line[0].color = sf::Color::Yellow;
+        line[1].position = ball.getPos() + dir * 100.0f;
+        line[1].color = sf::Color::Yellow;
+
+        window.draw(line, 2, sf::PrimitiveType::Lines);
+    }
+
+    ball.draw(window);
+
+    if (fontOk) window.draw(hud);
+
+    window.display();
+}
