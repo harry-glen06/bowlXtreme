@@ -12,6 +12,10 @@ private:
     float frictionStrength;
     float restitution;
 
+    float angle;
+    float angularVel;
+    bool fallen;
+
     bool active;
 
 public:
@@ -30,4 +34,13 @@ public:
     void setPos(sf::Vector2f p);
     void setVel(sf::Vector2f v);
     void setActive(bool a);
+
+    // Pin behaviour
+    bool isFallen() const;
+    void setFallen(bool f);      
+    float getAngle() const;
+
+    // Optional but useful for spin
+    float getAngularVel() const;
+    void setAngularVel(float w);
 };
