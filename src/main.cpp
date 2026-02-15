@@ -151,7 +151,7 @@ int main() {
 
     // Scoreboard 
     sf::Font font;
-    bool fontOk = font.openFromFile("assets/arial.ttf");
+    bool fontOk = font.openFromFile("/Users/harryglen/Desktop/game/src/assets/arial.ttf");
 
     sf::Text hud(font, "", 20);
     hud.setFillColor(sf::Color::White);
