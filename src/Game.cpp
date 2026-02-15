@@ -149,17 +149,35 @@ void Game::applyGuttersAndBumpers() {
             float minSide = 80.0f;
             float bounce = 0.75f;
 
-            if (p.x < playL + r) {
+            // Left bumper: only bounce if moving left into it
+            if (p.x < playL + r && v.x < 0.0f) {
                 p.x = playL + r;
-                if (v.x < 0.0f) v.x = -v.x * bounce;
-                if (std::abs(v.x) < minSide) v.x = minSide;
+
+                float speed = length(v);
+
+                sf::Vector2f n(1.0f, 0.0f);   // bumper normal pointing right
+                v = v - 2.0f * dot(v, n) * n; // reflect direction
+
+                v *= 1.03f; // tiny boost (real bumpers feel springy)
+
+                ball.setVel(v);
             }
-            if (p.x > playR - r) {
+
+            // Right bumper: only bounce if moving right into it
+            if (p.x > playR - r && v.x > 0.0f) {
                 p.x = playR - r;
-                if (v.x > 0.0f) v.x = -v.x * bounce;
-                if (std::abs(v.x) < minSide) v.x = -minSide;
+
+                float speed = length(v);
+
+                sf::Vector2f n(-1.0f, 0.0f);  // bumper normal pointing left
+                v = v - 2.0f * dot(v, n) * n;
+
+                v *= 1.03f;
+
+                ball.setVel(v);
             }
         } else {
+            // bumpers OFF: enter gutter and lock slide mode
             if (p.x < playL + r) { inGutter = true; gutterSide = -1; }
             if (p.x > playR - r) { inGutter = true; gutterSide =  1; }
         }
@@ -296,17 +314,42 @@ void Game::update(float dt) {
         rollLocked = true;
     }
 
-    // Toggle bumpers
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::B)) {
-        lane.bumpersOn = true;
+    // One press toggles (edge detect)
+    static bool prevB = false;
+    static bool prevR = false;
+
+    bool nowB = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::B);
+    bool nowR = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
+
+    if (nowB && !prevB) {
+        lane.bumpersOn = !lane.bumpersOn;
     }
+
+    if (nowR && !prevR) {
+        totalScore = 0;
+        frame = 1;
+        shot = 1;
+        pendingReset = false;
+        resetPins();
+        resetBall();
+    }
+
+    prevB = nowB;
+    prevR = nowR;
 
     // Update physics
     ball.update(dt);
     for (auto& pin : pins) pin.update(dt);
 
-    if (rollLocked && ball.getSpeed() < minRollSpeed) {
-        ball.setVel(rollDir * minRollSpeed);
+    // Keep ball moving forward without changing its direction
+    if (rollLocked) {
+        sf::Vector2f v = ball.getVel();
+        float s = length(v);
+
+        if (s > 0.0f && s < minRollSpeed) {
+            sf::Vector2f dir = v / s;     // use current direction
+            ball.setVel(dir * minRollSpeed);
+        }
     }
 
     applyGuttersAndBumpers();
