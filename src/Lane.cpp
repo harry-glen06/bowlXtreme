@@ -1,5 +1,4 @@
 #include "Lane.h"
-
 void Lane::init(float windowW) {
     left = (windowW - width) / 2.0f;
     right = left + width;
@@ -37,18 +36,58 @@ void Lane::init(float windowW) {
 }
 
 void Lane::draw(sf::RenderWindow& window) const {
+    // Frame ends (black like your screenshot)
     window.draw(topEnd);
     window.draw(bottomEnd);
 
+    // Dark outer border behind everything
+    sf::RectangleShape border(sf::Vector2f(width + 24.0f, height + 40.0f));
+    border.setPosition(sf::Vector2f(left - 12.0f, top - 20.0f));
+    border.setFillColor(sf::Color(30, 30, 30));
+    window.draw(border);
+
+    // Lane body
     window.draw(laneRect);
+
+    // Wood stripes (simple planks)
+    for (int i = 0; i < 9; i++) {
+        float stripeW = width / 9.0f;
+        sf::RectangleShape plank(sf::Vector2f(stripeW, height));
+        plank.setPosition(sf::Vector2f(left + i * stripeW, top));
+
+        // alternate slightly different wood colors
+        if (i % 2 == 0) plank.setFillColor(sf::Color(170, 130, 80));
+        else            plank.setFillColor(sf::Color(160, 120, 70));
+
+        window.draw(plank);
+    }
+
+    // Gutters
     window.draw(leftGutter);
     window.draw(rightGutter);
 
+    // Bumpers (only if on)
     if (bumpersOn) {
         window.draw(leftBumper);
         window.draw(rightBumper);
     }
+
+    // Pin deck zone (light area at the top)
+    sf::RectangleShape pinDeck(sf::Vector2f(width, 70.0f));
+    pinDeck.setPosition(sf::Vector2f(left, top));
+    pinDeck.setFillColor(sf::Color(190, 160, 110));
+    window.draw(pinDeck);
+
+
+    // Thin inner border line (gives it that “lane frame” look)
+    sf::RectangleShape inner(sf::Vector2f(width, height));
+    inner.setPosition(sf::Vector2f(left, top));
+    inner.setFillColor(sf::Color::Transparent);
+    inner.setOutlineThickness(3.0f);
+    inner.setOutlineColor(sf::Color(90, 90, 90));
+    window.draw(inner);
 }
+
 
 float Lane::playLeft() const {
     return left + gutterWidth + bumperThickness;

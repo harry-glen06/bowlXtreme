@@ -16,7 +16,7 @@ Ball::Ball(float radius)
     : pos(0.0f, 0.0f),
       vel(0.0f, 0.0f),
       radius(radius),
-      frictionStrength(1.9f),
+      frictionStrength(1.2f),
       spin(0.0f) {}
 
 void Ball::reset(sf::Vector2f startPos) {
@@ -43,7 +43,7 @@ void Ball::update(float dt) {
     float newSpeed = speed * std::exp(-frictionStrength * dt);
 
     // Stop threshold
-    if (newSpeed < 20.0f) {
+    if (newSpeed < 0.8f) {
         stop();
         return;
     }

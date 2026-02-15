@@ -189,53 +189,81 @@ void Game::applyGuttersAndBumpers() {
 
 void Game::doCollisions() {
     // Ball -> pin
-    {
-        sf::Vector2f bp = ball.getPos();
-        sf::Vector2f bv = ball.getVel();
-        float br = ball.getRadius();
-        float bm = 4.0f;
+{
+    sf::Vector2f bp = ball.getPos();
+    sf::Vector2f bv = ball.getVel();
+    sf::Vector2f bvStart = bv;           // for limiting pin-caused sideways change
+    float br = ball.getRadius();
+    float bm = 4.0f;                     // ball heavier
 
-        for (auto& pin : pins) {
-            if (!pin.isActive()) continue;
+    bool slowedThisFrame = false;
+    bool hitAnyPin = false;
 
-            sf::Vector2f pp = pin.getPos();
-            sf::Vector2f pv = pin.getVel();
+    for (auto& pin : pins) {
+        if (!pin.isActive()) continue;
 
-            sf::Vector2f pvBefore = pv;
-            sf::Vector2f bvBefore = bv;
+        sf::Vector2f pp = pin.getPos();
+        sf::Vector2f pv = pin.getVel();
 
-            resolveCircleCollision(
-                bp, bv, bm, br,
-                pp, pv, pin.getMass(), pin.getRadius(),
-                0.55f
-            );
+        sf::Vector2f pvBefore = pv;
+        sf::Vector2f bvBefore = bv;
 
-            pin.setPos(pp);
-            pin.setVel(pv);
+        // Much lower restitution = less bouncy pin hits
+        resolveCircleCollision(
+            bp, bv, bm, br,
+            pp, pv, pin.getMass(), pin.getRadius(),
+            0.12f
+        );
 
-            float impact = length(pv - pvBefore);
+        pin.setPos(pp);
+        pin.setVel(pv);
 
-            if (impact > 5.0f) {
-                bv *= 0.92f;
-            }
+        float impact = length(pv - pvBefore);
 
-            float fallThreshold = 80.0f;
-            float spinScale = 0.01f;
+        if (impact > 5.0f) hitAnyPin = true;
 
-            if (!pin.isFallen() && impact > fallThreshold) {
-                pin.setFallen(true);
-
-                float spin = (bvBefore.x - pvBefore.x) * spinScale;
-                if (spin > 6.0f) spin = 6.0f;
-                if (spin < -6.0f) spin = -6.0f;
-
-                pin.setAngularVel(spin);
-            }
+        // Tiny slowdown, only once per frame
+        if (!slowedThisFrame && impact > 5.0f) {
+            bv *= 0.99f;                 // very gentle slowdown
+            slowedThisFrame = true;
         }
 
-        ball.setPos(bp);
-        ball.setVel(bv);
+        // Fall + spin
+        float fallThreshold = 80.0f;
+        float spinScale = 0.01f;
+
+        if (!pin.isFallen() && impact > fallThreshold) {
+            pin.setFallen(true);
+
+            float spin = (bvBefore.x - pvBefore.x) * spinScale;
+            if (spin > 6.0f) spin = 6.0f;
+            if (spin < -6.0f) spin = -6.0f;
+
+            pin.setAngularVel(spin);
+        }
     }
+
+    // Limit how much pins can redirect the ball (bowling feel)
+    if (hitAnyPin && rollLocked) {
+        // Clamp sideways change caused by pins
+        float maxDeltaSide = 120.0f;
+        float dx = bv.x - bvStart.x;
+        if (dx >  maxDeltaSide) bv.x = bvStart.x + maxDeltaSide;
+        if (dx < -maxDeltaSide) bv.x = bvStart.x - maxDeltaSide;
+
+        // Also clamp absolute sideways speed
+        float maxSide = 180.0f;
+        if (bv.x >  maxSide) bv.x =  maxSide;
+        if (bv.x < -maxSide) bv.x = -maxSide;
+
+        // Never allow pins to remove forward motion or send it backwards
+        float minForward = 260.0f;
+        if (bv.y > -minForward) bv.y = -minForward;
+    }
+
+    ball.setPos(bp);
+    ball.setVel(bv);
+}
 
     // Pin -> pin
     {
@@ -283,9 +311,9 @@ void Game::update(float dt) {
         sf::Vector2f p = ball.getPos();
         float r = ball.getRadius();
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
             p.x -= moveSpeed * dt;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
             p.x += moveSpeed * dt;
 
         float playL = lane.playLeft();
@@ -296,9 +324,9 @@ void Game::update(float dt) {
 
         ball.setPos(p);
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
             aimDeg -= aimTurnSpeed * dt;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
             aimDeg += aimTurnSpeed * dt;
 
         if (aimDeg < -140.0f) aimDeg = -140.0f;
