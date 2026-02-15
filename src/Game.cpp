@@ -10,6 +10,15 @@ Game::Game()
 {
     window.setFramerateLimit(60);
 
+    // Fixed world camera
+    view = sf::View(sf::FloatRect(sf::Vector2f(0.0f, 0.0f), sf::Vector2f(windowW, lane.height + 50)));
+    window.setView(view);
+
+    // Apply letterbox once at startup using current window size
+    auto s = window.getSize();
+    applyLetterbox(s.x, s.y);
+
+
     lane.init(windowW);
 
     ball.reset(sf::Vector2f(windowW / 2.0f, lane.bottom - 30.0f));
@@ -57,9 +66,16 @@ void Game::handleEvents() {
     while (true) {
         auto ev = window.pollEvent();
         if (!ev.has_value()) break;
+
         if (ev->is<sf::Event::Closed>()) window.close();
+
+        if (ev->is<sf::Event::Resized>()) {
+            auto r = ev->getIf<sf::Event::Resized>();
+            applyLetterbox(r->size.x, r->size.y);
+        }
     }
 }
+
 
 void Game::resetPins() {
     pins = createPins(lane.centerX(), 220.0f);
@@ -211,7 +227,7 @@ void Game::doCollisions() {
         // Much lower restitution = less bouncy pin hits
         resolveCircleCollision(
             bp, bv, bm, br,
-            pp, pv, pin.getMass(), pin.getRadius(),
+            pp, pv, (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f), pin.getRadius(),
             0.12f
         );
 
@@ -292,6 +308,51 @@ void Game::doCollisions() {
             }
         }
     }
+
+    // Pin -> lane walls / gutters / back
+    {
+        float leftWall  = lane.playLeft();   // inside area between bumpers
+        float rightWall = lane.playRight();
+
+        float sideRest = 0.25f;  // tiny bounce
+        float backRest = 0.15f;  // even smaller bounce
+
+        for (auto& pin : pins) {
+            if (!pin.isActive()) continue;
+
+            sf::Vector2f p = pin.getPos();
+            sf::Vector2f v = pin.getVel();
+            float r = pin.getRadius();
+
+            // If a pin hits the gutter zones or back end, force it to fall
+            bool hitGutter = (p.x < leftWall + r) || (p.x > rightWall - r);
+            bool hitBack   = (p.y < lane.top + r);
+
+            if (hitGutter || hitBack) {
+                if (!pin.isFallen()) pin.setFallen(true);
+            }
+
+            // Bounce off left/right walls (only if moving into the wall)
+            if (p.x < leftWall + r && v.x < 0.0f) {
+                p.x = leftWall + r;
+                v.x = -v.x * sideRest;
+            }
+            if (p.x > rightWall - r && v.x > 0.0f) {
+                p.x = rightWall - r;
+                v.x = -v.x * sideRest;
+            }
+
+            // Bounce off the back (top of lane)
+            if (p.y < lane.top + r && v.y < 0.0f) {
+                p.y = lane.top + r;
+                v.y = -v.y * backRest;
+            }
+
+            pin.setPos(p);
+            pin.setVel(v);
+        }
+    }
+
 }
 
 void Game::updateHud() {
@@ -338,7 +399,7 @@ void Game::update(float dt) {
         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
         float a = degToRad(aimDeg);
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
-        ball.launch(rollDir, 900.0f);
+        ball.launch(rollDir, 1200.0f);
         rollLocked = true;
     }
 
@@ -420,4 +481,25 @@ void Game::draw() {
     if (fontOk) window.draw(hud);
 
     window.display();
+}
+
+void Game::applyLetterbox(unsigned winW, unsigned winH) {
+    float windowRatio = (float)winW / (float)winH;
+    float viewRatio = windowW / windowH;
+
+    float sizeX = 1.0f;
+    float sizeY = 1.0f;
+    float posX  = 0.0f;
+    float posY  = 0.0f;
+
+    if (windowRatio > viewRatio) {
+        sizeX = viewRatio / windowRatio;
+        posX = (1.0f - sizeX) * 0.5f;
+    } else {
+        sizeY = windowRatio / viewRatio;
+        posY = (1.0f - sizeY) * 0.5f;
+    }
+
+    view.setViewport(sf::FloatRect(sf::Vector2f(posX, posY), sf::Vector2f(sizeX, sizeY)));
+    window.setView(view);
 }

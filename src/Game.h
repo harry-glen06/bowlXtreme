@@ -29,8 +29,12 @@ private:
 
     std::vector<Pin> createPins(float centerX, float startY);
 
+    sf::View view;
+
+    void applyLetterbox(unsigned winW, unsigned winH);
+
 private:
-    const float windowW = 900.0f;
+    const float windowW = 1000.0f;
     const float windowH = 800.0f;
 
     sf::RenderWindow window;

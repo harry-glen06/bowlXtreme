@@ -76,56 +76,101 @@ void Pin::update(float dt) {
 
 void Pin::draw(sf::RenderWindow& window) const {
     if (!active) return;
-    // Draw pin as a simple capsule (rectangle + 2 circles), rotated by angle
-    // If standing: draw tall. If fallen: draw sideways (90 degrees)
-    float bodyW = radius * 1.2f;
-    float bodyH = radius * 3.2f;
 
-    float drawAngle = angle;
+    // Shadow
+    float shadowR = radius * 0.9f;
+    sf::CircleShape shadow(shadowR);
+    shadow.setOrigin(sf::Vector2f(shadowR, shadowR));
+    shadow.setPosition(sf::Vector2f(pos.x + radius * 0.15f, pos.y + radius * 0.18f));
+    shadow.setFillColor(sf::Color(0, 0, 0, 70));
+    window.draw(shadow);
+
+    // Angle handling
+    float drawAngle = 0.0f;
     if (fallen) {
-        drawAngle += 90.0f; // sideways look
+        drawAngle = angle;
+        if (std::abs(drawAngle) < 10.0f) drawAngle = 75.0f;
     }
 
-    // Body
-    sf::RectangleShape body(sf::Vector2f(bodyW, bodyH));
-    body.setOrigin(sf::Vector2f(bodyW * 0.5f, bodyH * 0.5f));
-    body.setPosition(pos);
-    body.setRotation(sf::degrees(drawAngle));
-    body.setFillColor(sf::Color::White);
-
-    // End caps
-    sf::CircleShape cap(radius * 0.6f);
-    cap.setOrigin(sf::Vector2f(radius * 0.6f, radius * 0.6f));
-    cap.setFillColor(sf::Color::White);
-
-    // Place caps along the long axis (up/down before rotation)
+    // One transform for the whole pin
     sf::Transform t;
     t.translate(pos);
     t.rotate(sf::degrees(drawAngle));
 
-    sf::Vector2f topLocal(0.0f, -bodyH * 0.5f);
-    sf::Vector2f botLocal(0.0f,  bodyH * 0.5f);
+    sf::RenderStates st;
+    st.transform = t;
 
-    sf::Vector2f top = t.transformPoint(topLocal);
-    sf::Vector2f bot = t.transformPoint(botLocal);
+    // Shape sizing
+    float H = radius * 4.2f;   // total height
+    float maxW = radius * 2.1f; // belly width
 
-    sf::CircleShape topCap = cap;
-    topCap.setPosition(top);
+    // --- Pin silhouette (convex shape) ---
+    // We build half-widths at different heights and mirror them.
+    // Local space: y goes up negative, down positive.
+    struct Slice { float y; float halfW; };
 
-    sf::CircleShape botCap = cap;
-    botCap.setPosition(bot);
+    // More flared base + classic belly + neck
+    Slice slices[] = {
+        { -H * 0.52f, maxW * 0.30f }, // top cap
+        { -H * 0.45f, maxW * 0.34f }, // neck
+        { -H * 0.35f, maxW * 0.55f }, // shoulder
+        { -H * 0.18f, maxW * 0.72f }, // upper belly
+        {  0.00f,     maxW * 0.78f }, // widest belly
+        {  H * 0.20f, maxW * 0.66f }, // lower belly
+        {  H * 0.36f, maxW * 0.62f }, // taper to base
+        {  H * 0.48f, maxW * 0.78f }, // flared base (wider)
+        {  H * 0.54f, maxW * 0.86f }, // flare lip
+        {  H * 0.58f, maxW * 0.80f }  // bottom edge
+    };
 
-    // Add a tiny red stripe so it looks like a bowling pin
-    sf::RectangleShape stripe(sf::Vector2f(bodyW, radius * 0.35f));
-    stripe.setOrigin(sf::Vector2f(bodyW * 0.5f, (radius * 0.35f) * 0.5f));
-    stripe.setPosition(pos);
-    stripe.setRotation(sf::degrees(drawAngle));
-    stripe.setFillColor(sf::Color(200, 40, 40));
+    const int n = (int)(sizeof(slices) / sizeof(slices[0]));
+    sf::ConvexShape body;
+    body.setPointCount((size_t)(n * 2));
 
-    window.draw(body);
-    window.draw(topCap);
-    window.draw(botCap);
-    window.draw(stripe);
+    // Left side top->bottom
+    for (int i = 0; i < n; i++) {
+        body.setPoint((size_t)i, sf::Vector2f(-slices[i].halfW, slices[i].y));
+    }
+    // Right side bottom->top
+    for (int i = 0; i < n; i++) {
+        int src = n - 1 - i;
+        body.setPoint((size_t)(n + i), sf::Vector2f(slices[src].halfW, slices[src].y));
+    }
+
+    body.setFillColor(sf::Color(245, 245, 245));
+    window.draw(body, st);
+
+    // Subtle highlight to make it feel glossy
+    sf::ConvexShape highlight = body;
+    highlight.setFillColor(sf::Color(255, 255, 255, 45));
+    // Nudge highlight slightly left/up in local space by editing points
+    for (size_t i = 0; i < highlight.getPointCount(); i++) {
+        sf::Vector2f p = highlight.getPoint(i);
+        p.x -= radius * 0.10f;
+        p.y -= radius * 0.18f;
+        highlight.setPoint(i, p);
+    }
+    window.draw(highlight, st);
+
+    // --- Two red stripes ---
+    auto drawStripe = [&](float yLocal, float thickness) {
+        sf::RectangleShape stripe(sf::Vector2f(maxW * 1.10f, thickness));
+        stripe.setOrigin(sf::Vector2f(stripe.getSize().x * 0.5f, stripe.getSize().y * 0.5f));
+        stripe.setPosition(sf::Vector2f(0.0f, yLocal));
+        stripe.setFillColor(sf::Color(190, 30, 30));
+        window.draw(stripe, st);
+    };
+
+    float stripeThick = radius * 0.30f;
+    drawStripe(-H * 0.28f, stripeThick); // top stripe
+    drawStripe(-H * 0.20f, stripeThick); // bottom stripe
+
+    // Small base ring (tiny yellow-ish like real pins)
+    sf::RectangleShape baseRing(sf::Vector2f(maxW * 0.9f, radius * 0.12f));
+    baseRing.setOrigin(sf::Vector2f(baseRing.getSize().x * 0.5f, baseRing.getSize().y * 0.5f));
+    baseRing.setPosition(sf::Vector2f(0.0f, H * 0.56f));
+    baseRing.setFillColor(sf::Color(200, 185, 120));
+    window.draw(baseRing, st);
 }
 
 // Getters

@@ -16,7 +16,7 @@ Ball::Ball(float radius)
     : pos(0.0f, 0.0f),
       vel(0.0f, 0.0f),
       radius(radius),
-      frictionStrength(1.2f),
+      frictionStrength(1.05f),
       spin(0.0f) {}
 
 void Ball::reset(sf::Vector2f startPos) {
