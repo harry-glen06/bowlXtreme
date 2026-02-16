@@ -268,7 +268,7 @@ void Game::drawScorecard(sf::RenderWindow& window) {
         
         // Frame box
         sf::RectangleShape box(sf::Vector2f(frameWidth - 2, frameHeight));
-        box.setPosition(x, startY);
+        box.setPosition(sf::Vector2f(x, startY));  // ← FIXED
         box.setFillColor(sf::Color(40, 40, 40));
         box.setOutlineColor(sf::Color::White);
         box.setOutlineThickness(1.0f);
@@ -276,11 +276,11 @@ void Game::drawScorecard(sf::RenderWindow& window) {
         
         // Frame number
         sf::Text frameNum(font, std::to_string(i + 1), 14);
-        frameNum.setPosition(x + 5, startY + 2);
+        frameNum.setPosition(sf::Vector2f(x + 5, startY + 2));  // ← FIXED
         frameNum.setFillColor(sf::Color(150, 150, 150));
         window.draw(frameNum);
         
-        // Ball scores (top right)
+        // Ball scores
         std::string ball1Str = frames[i].ball1 > 0 ? std::to_string(frames[i].ball1) : "";
         std::string ball2Str = frames[i].ball2 > 0 ? std::to_string(frames[i].ball2) : "";
         
@@ -293,25 +293,25 @@ void Game::drawScorecard(sf::RenderWindow& window) {
         }
         
         sf::Text ball1Text(font, ball1Str, 16);
-        ball1Text.setPosition(x + frameWidth - 45, startY + 18);
+        ball1Text.setPosition(sf::Vector2f(x + frameWidth - 45, startY + 18));  // ← FIXED
         window.draw(ball1Text);
         
         sf::Text ball2Text(font, ball2Str, 16);
-        ball2Text.setPosition(x + frameWidth - 25, startY + 18);
+        ball2Text.setPosition(sf::Vector2f(x + frameWidth - 25, startY + 18));  // ← FIXED
         window.draw(ball2Text);
         
         // 10th frame has 3 balls
         if (i == 9 && frames[i].ball3 > 0) {
             std::string ball3Str = frames[i].ball3 == 10 ? "X" : std::to_string(frames[i].ball3);
             sf::Text ball3Text(font, ball3Str, 16);
-            ball3Text.setPosition(x + frameWidth - 15, startY + 5);
+            ball3Text.setPosition(sf::Vector2f(x + frameWidth - 15, startY + 5));  // ← FIXED
             window.draw(ball3Text);
         }
         
-        // Frame total (bottom)
+        // Frame total
         if (frames[i].isComplete || i < currentFrame) {
             sf::Text scoreText(font, std::to_string(frames[i].score), 20);
-            scoreText.setPosition(x + frameWidth / 2 - 15, startY + 35);
+            scoreText.setPosition(sf::Vector2f(x + frameWidth / 2 - 15, startY + 35));  // ← FIXED
             scoreText.setFillColor(sf::Color::Yellow);
             window.draw(scoreText);
         }
@@ -320,7 +320,7 @@ void Game::drawScorecard(sf::RenderWindow& window) {
     // Current frame indicator
     float indicatorX = startX + currentFrame * frameWidth;
     sf::RectangleShape indicator(sf::Vector2f(frameWidth - 2, 3));
-    indicator.setPosition(indicatorX, startY + frameHeight + 2);
+    indicator.setPosition(sf::Vector2f(indicatorX, startY + frameHeight + 2));  // ← FIXED
     indicator.setFillColor(sf::Color::Green);
     window.draw(indicator);
 }
@@ -634,6 +634,7 @@ void Game::doCollisions() {
     }
 }
 
+/*
 void Game::updateHud() {
     if (!fontOk) return;
 
@@ -648,6 +649,7 @@ void Game::updateHud() {
         "   Music: " + musicStatus
     );
 }
+*/
 
 void Game::update(float dt) {
     // Aiming and Movement logic
@@ -766,7 +768,6 @@ void Game::update(float dt) {
     }
 
     finishPendingResetIfReady(dt);
-    updateHud();
 }
 
 void Game::draw() {
