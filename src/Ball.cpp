@@ -17,7 +17,8 @@ Ball::Ball(float radius)
       vel(0.0f, 0.0f),
       radius(radius),
       frictionStrength(1.05f),
-      spin(0.0f) {}
+      spin(0.0f),
+      ballColor(25, 55, 140) {}  // Default blue color
 
 void Ball::reset(sf::Vector2f startPos) {
     pos = startPos;
@@ -79,6 +80,10 @@ void Ball::setVel(sf::Vector2f v) {
     vel = v;
 }
 
+void Ball::setColor(sf::Color color) {
+    ballColor = color;
+}
+
 void Ball::draw(sf::RenderWindow& window) const {
     // Shadow (soft)
     float shadowR = radius * 1.10f;
@@ -88,14 +93,11 @@ void Ball::draw(sf::RenderWindow& window) const {
     shadow.setFillColor(sf::Color(0, 0, 0, 70));
     window.draw(shadow);
 
-    // Ball base
+    // Ball base - NOW USES ballColor instead of hardcoded blue!
     sf::CircleShape ball(radius);
     ball.setOrigin(sf::Vector2f(radius, radius));
     ball.setPosition(pos);
-
-    // Pick your ball colour here
-    sf::Color base(25, 55, 140);
-    ball.setFillColor(base);
+    ball.setFillColor(ballColor);  // Use stored color
     window.draw(ball);
 
     // Dark rim (gives depth)
@@ -107,11 +109,16 @@ void Ball::draw(sf::RenderWindow& window) const {
     rim.setOutlineColor(sf::Color(0, 0, 0, 45));
     window.draw(rim);
 
-    // Inner gradient-ish layers (fake lighting)
+    // Inner gradient-ish layers (fake lighting) - adjusted to work with any color
     sf::CircleShape layer1(radius * 0.92f);
     layer1.setOrigin(sf::Vector2f(radius * 0.92f, radius * 0.92f));
     layer1.setPosition(sf::Vector2f(pos.x - radius * 0.06f, pos.y - radius * 0.08f));
-    layer1.setFillColor(sf::Color(base.r + 20, base.g + 20, base.b + 20, 90));
+    layer1.setFillColor(sf::Color(
+        std::min(255, ballColor.r + 20), 
+        std::min(255, ballColor.g + 20), 
+        std::min(255, ballColor.b + 20), 
+        90
+    ));
     window.draw(layer1);
 
     sf::CircleShape layer2(radius * 0.78f);
@@ -128,7 +135,6 @@ void Ball::draw(sf::RenderWindow& window) const {
     window.draw(highlight);
 
     // Finger holes (3 holes in a triangle)
-    // We rotate them slightly using spin, but if spin is 0 it still looks fine.
     float holeR = radius * 0.15f;
     sf::CircleShape hole(holeR);
     hole.setOrigin(sf::Vector2f(holeR, holeR));
@@ -139,8 +145,8 @@ void Ball::draw(sf::RenderWindow& window) const {
     sf::Vector2f h2( radius * 0.18f, -radius * 0.10f);
     sf::Vector2f h3( 0.0f,            radius * 0.15f);
 
-    // Rotate offsets by spin (spin is in your Ball class already)
-    float a = spin; // small values look best (0 to maybe 2)
+    // Rotate offsets by spin
+    float a = spin;
     float c = std::cos(a);
     float s = std::sin(a);
 

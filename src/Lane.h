@@ -5,7 +5,7 @@
 struct Lane {
     float width = 300.0f;
     float top = 40.0f;
-    float height = 1500.0f;
+    float height = 940.0f;
 
     float gutterWidth = 28.0f;
     float bumperThickness = 6.0f;

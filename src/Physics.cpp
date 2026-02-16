@@ -51,3 +51,20 @@ void resolveCircleCollision(
     v1 -= impulse * invM1;
     v2 += impulse * invM2;
 }
+
+void applyOilEffect(sf::Vector2f& velocity, int pinsStanding) {
+    // No oil effect if 0 or 1 pin left
+    if (pinsStanding <= 1) return;
+    
+    // Random oil effect: 1-2 units of sideways drift
+    float baseOilDrift = 1.0f + (rand() % 100) / 100.0f;  // 1.0 to 2.0
+    
+    // Scale by number of pins (more pins = more unpredictable)
+    float oilMultiplier = pinsStanding / 10.0f;  // 0.1 to 1.0
+    
+    // Random direction (left or right)
+    float direction = (rand() % 2 == 0) ? 1.0f : -1.0f;
+    
+    // Apply oil drift
+    velocity.x += baseOilDrift * oilMultiplier * direction;
+}

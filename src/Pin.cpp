@@ -5,32 +5,36 @@ static float length(sf::Vector2f v) {
     return std::sqrt(v.x * v.x + v.y * v.y);
 }
 
-Pin::Pin(sf::Vector2f startPos, float r) {
-    pos = startPos;
-    vel = sf::Vector2f(0.0f, 0.0f);
-
-    radius = r;
-
-    mass = 2.8f;
-    restitution = 0.55f;
-
-    // Standing vs fallen behaviour
-    fallen = false;
-    frictionStrength = 5.0f; // standing is sticky by default
-
-    angle = 0.0f;
-    angularVel = 0.0f;
-
-    active = true;
+Pin::Pin(sf::Vector2f startPosition, float radius)
+    : pos(startPosition),
+      startPos(startPosition),  //Save the original position
+      vel(0.0f, 0.0f),
+      radius(radius),
+      mass(2.8f),
+      restitution(0.55f),
+      frictionStrength(5.0f),
+      angularVel(0.0f),
+      angle(0.0f),
+      fallen(false),
+      active(true)
+{
 }
 
+void Pin::resetToOriginalPosition() {
+    pos = startPos;                    // Move back to original triangle spot
+    vel = sf::Vector2f(0.0f, 0.0f);    // Stop moving
+    angularVel = 0.0f;                 // Stop spinning
+    angle = 0.0f;                      // Stand upright
+    fallen = false;                    // Mark as standing
+    // NOTE: Don't change 'active' - that's handled by Game logic
+}
 void Pin::update(float dt) {
     if (!active) return;
     // Move
     pos += vel * dt;
 
     // Different friction for standing vs fallen
-    float fric = fallen ? 17.0f : 28.0f;
+    float fric = fallen ? 19.0f : 28.0f;
 
     float speed = length(vel);
     if (speed > 0.0f) {

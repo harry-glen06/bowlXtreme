@@ -73,14 +73,14 @@ void Lane::draw(sf::RenderWindow& window) const {
         window.draw(rightBumper);
     }
 
-    // Pin deck zone (light area at the top)
-    sf::RectangleShape pinDeck(sf::Vector2f(width, 70.0f));
-    pinDeck.setPosition(sf::Vector2f(left, top));
-    pinDeck.setFillColor(sf::Color(190, 160, 110));
-    window.draw(pinDeck);
+    // REMOVED: Pin deck zone (brown section at top)
+    // sf::RectangleShape pinDeck(sf::Vector2f(width, 70.0f));
+    // pinDeck.setPosition(sf::Vector2f(left, top));
+    // pinDeck.setFillColor(sf::Color(190, 160, 110));
+    // window.draw(pinDeck);
 
 
-    // Thin inner border line (gives it that “lane frame” look)
+    // Thin inner border line (gives it that "lane frame" look)
     sf::RectangleShape inner(sf::Vector2f(width, height));
     inner.setPosition(sf::Vector2f(left, top));
     inner.setFillColor(sf::Color::Transparent);

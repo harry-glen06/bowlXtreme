@@ -39,8 +39,8 @@ private:
     void applyLetterbox(unsigned winW, unsigned winH);
 
 private:
-    const float windowW = 1800.0f;
-    const float windowH = 900.0f;
+    const float windowW = 1024.0f;
+    const float windowH = 1024.0f;
 
     sf::RenderWindow window;
     sf::Clock clock;
@@ -70,10 +70,24 @@ private:
     float pinsStillSpeed = 25.0f;
     float endBuffer = 0.25f;
 
-    // Bowling state
+    // Bowling scoring (proper 10-frame system)
+    struct FrameScore {
+        int ball1 = 0;        // Pins knocked on first ball
+        int ball2 = 0;        // Pins knocked on second ball
+        int ball3 = 0;        // Only for 10th frame
+        int score = 0;        // Running total after this frame
+        bool isStrike = false;
+        bool isSpare = false;
+        bool isComplete = false;
+    };
+
+    std::array<FrameScore, 10> frames;  // 10 frames
+    int currentFrame = 0;  // 0-9 (frame 1-10)
+    int currentBall = 1;   // 1, 2, or 3 (ball within frame)
     int totalScore = 0;
-    int frame = 1;
-    int shot = 1;
+    void calculateScore();
+    void drawScorecard(sf::RenderWindow& window);
+    int getPinsKnocked();  // Count fallen pins this shot
 
     // HUD
     sf::Font font;

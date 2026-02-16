@@ -6,6 +6,7 @@ class Pin {
 private:
     sf::Vector2f pos;
     sf::Vector2f vel;
+    sf::Vector2f startPos; 
 
     float radius;
     float mass;
@@ -20,11 +21,11 @@ private:
     bool active;
 
 public:
-    Pin(sf::Vector2f startPos, float r);
+    Pin(sf::Vector2f startPosition, float radius);
 
     void update(float dt);
     void draw(sf::RenderWindow& window) const;
-
+    void resetToOriginalPosition();             // Reset to starting spot
     sf::Vector2f getPos() const;
     sf::Vector2f getVel() const;
     float getRadius() const;

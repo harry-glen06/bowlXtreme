@@ -11,3 +11,5 @@ void resolveCircleCollision(
     sf::Vector2f& p2, sf::Vector2f& v2, float m2, float r2,
     float restitution
 );
+
+void applyOilEffect(sf::Vector2f& velocity, int pinsStanding);

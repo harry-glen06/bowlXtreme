@@ -1,6 +1,5 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
 
 class Ball {
 private:
@@ -11,6 +10,8 @@ private:
     float frictionStrength;   // how fast it slows down
 
     float spin;               // default 0, used later
+    
+    sf::Color ballColor;      // NEW: Store ball color
 
 public:
     Ball(float radius);
@@ -27,6 +28,7 @@ public:
 
     void setPos(sf::Vector2f p);
     void setVel(sf::Vector2f v);
+    void setColor(sf::Color color);  // NEW: Set ball color
 
     void draw(sf::RenderWindow& window) const;
 };
