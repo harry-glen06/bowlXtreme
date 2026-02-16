@@ -39,8 +39,8 @@ private:
     void applyLetterbox(unsigned winW, unsigned winH);
 
 private:
-    const float windowW = 1000.0f;
-    const float windowH = 800.0f;
+    const float windowW = 1800.0f;
+    const float windowH = 900.0f;
 
     sf::RenderWindow window;
     sf::Clock clock;
