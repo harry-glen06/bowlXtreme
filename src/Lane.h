@@ -2,7 +2,7 @@
 #include <SFML/Graphics.hpp>
 
 struct Lane {
-    float width = 250.0f;
+    float width = 300.0f;
     float top = 40.0f;
     float height = 900.0f;
 

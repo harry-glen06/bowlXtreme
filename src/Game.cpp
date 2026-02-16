@@ -33,7 +33,7 @@ Game::Game()
 std::vector<Pin> Game::createPins(float centerX, float startY) {
     std::vector<Pin> out;
 
-    float spacing = 35.0f; // keep
+    float spacing = 45.0f; // keep
     float radius  = 12.0f; // keep
 
     for (int row = 0; row < 4; row++) {
