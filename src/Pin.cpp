@@ -11,12 +11,12 @@ Pin::Pin(sf::Vector2f startPos, float r) {
 
     radius = r;
 
-    mass = 6.5f;
-    restitution = 0.35f;
+    mass = 2.8f;
+    restitution = 0.55f;
 
     // Standing vs fallen behaviour
     fallen = false;
-    frictionStrength = 8.0f; // standing is sticky by default
+    frictionStrength = 5.0f; // standing is sticky by default
 
     angle = 0.0f;
     angularVel = 0.0f;
@@ -106,44 +106,83 @@ void Pin::draw(sf::RenderWindow& window) const {
     float H = radius * 5.0f;   // total height
     float maxW = radius * 2.0f; // belly width
 
-    // --- Improved bowling pin silhouette ---
-    // Proper bowling pin shape: small round head, thin neck, wide belly, flared base
+    // --- Official USBC Bowling Pin Specifications ---
+    // Total height: 15" (measuring from bottom)
+    // All measurements are diameter readings at specific heights from bottom
+    // Converting diameter to radius (halfW) as percentage of max diameter (4.766" at 6.5")
+    
     struct Slice { float y; float halfW; };
-
+    
+    // Note: y-coordinates are inverted (negative = top, positive = bottom)
+    // Converting bottom-up measurements to top-down coordinates
+    
     Slice slices[] = {
-        { -H * 0.56f, maxW * 0.20f },  // very top (round cap)
-        { -H * 0.54f, maxW * 0.24f },  
-        { -H * 0.52f, maxW * 0.27f },  // head
-        { -H * 0.49f, maxW * 0.29f },  
-        { -H * 0.46f, maxW * 0.30f },  // start of neck
-        { -H * 0.43f, maxW * 0.31f },  // narrow neck
-        { -H * 0.40f, maxW * 0.31f },  // narrowest part
-        { -H * 0.37f, maxW * 0.32f },  
-        { -H * 0.34f, maxW * 0.34f },  // neck widening
-        { -H * 0.30f, maxW * 0.38f },  // shoulder starts
-        { -H * 0.26f, maxW * 0.45f },  
-        { -H * 0.22f, maxW * 0.53f },  // upper body
-        { -H * 0.18f, maxW * 0.61f },  
-        { -H * 0.14f, maxW * 0.68f },  
-        { -H * 0.10f, maxW * 0.74f },  // approaching widest
-        { -H * 0.06f, maxW * 0.78f },  
-        { -H * 0.02f, maxW * 0.80f },  
-        {  H * 0.02f, maxW * 0.80f },  // widest belly point
-        {  H * 0.06f, maxW * 0.79f },  
-        {  H * 0.10f, maxW * 0.77f },  
-        {  H * 0.14f, maxW * 0.74f },  // belly curves in
-        {  H * 0.18f, maxW * 0.70f },  
-        {  H * 0.22f, maxW * 0.66f },  
-        {  H * 0.26f, maxW * 0.62f },  
-        {  H * 0.30f, maxW * 0.59f },  // lower taper
-        {  H * 0.34f, maxW * 0.57f },  
-        {  H * 0.38f, maxW * 0.56f },  // narrowest before base
-        {  H * 0.42f, maxW * 0.60f },  // base starts to flare
-        {  H * 0.45f, maxW * 0.68f },  
-        {  H * 0.48f, maxW * 0.76f },  // base flare
-        {  H * 0.51f, maxW * 0.82f },  
-        {  H * 0.53f, maxW * 0.84f },  // widest base
-        {  H * 0.55f, maxW * 0.78f }   // bottom edge
+        // Top of pin (15" from bottom = -H * 0.58)
+        { -H * 0.58f, maxW * 0.127f },  // 1.212" dia at 15" = 25.4% of max
+        
+        // Head section
+        { -H * 0.56f, maxW * 0.165f },  // ~1.57" dia at 14.5"
+        { -H * 0.54f, maxW * 0.200f },  // ~1.9" dia at 14"
+        { -H * 0.52f, maxW * 0.235f },  // 2.24" dia at 13.5"
+        { -H * 0.50f, maxW * 0.270f },  // 2.57" dia at 13"
+        
+        // Upper neck
+        { -H * 0.48f, maxW * 0.295f },  // 2.81" dia at 12.5"
+        { -H * 0.46f, maxW * 0.315f },  // 3.0" dia at 12"
+        { -H * 0.44f, maxW * 0.330f },  // 3.14" dia at 11.5"
+        { -H * 0.42f, maxW * 0.340f },  // 3.237" dia at 11" (neck area)
+        
+        // Neck to shoulder transition
+        { -H * 0.40f, maxW * 0.345f },  // 3.288" dia at 10.5"
+        { -H * 0.38f, maxW * 0.360f },  // 3.426" dia at 10"
+        { -H * 0.36f, maxW * 0.385f },  // 3.664" dia at 9.5"
+        { -H * 0.34f, maxW * 0.420f },  // 4.0" dia at 9"
+        
+        // Shoulder expansion
+        { -H * 0.32f, maxW * 0.470f },  // 4.47" dia at 8.5"
+        { -H * 0.30f, maxW * 0.535f },  // ~5.09" dia at 8"
+        { -H * 0.28f, maxW * 0.610f },  // ~5.8" dia at 7.5"
+        { -H * 0.26f, maxW * 0.690f },  // ~6.56" dia at 7"
+        
+        // Approaching widest point (belly)
+        { -H * 0.24f, maxW * 0.780f },  // ~7.42" dia at 6.5" (widest point: 4.766" radius)
+        { -H * 0.22f, maxW * 0.870f },  // approaching max
+        { -H * 0.20f, maxW * 0.950f },  // 
+        { -H * 0.18f, maxW * 0.990f },  // near widest
+        { -H * 0.16f, maxW * 1.000f },  // 4.766" dia at ~6.5" HEIGHT (WIDEST)
+        { -H * 0.14f, maxW * 1.000f },  
+        { -H * 0.12f, maxW * 0.995f },  
+        
+        // Starting to taper
+        { -H * 0.10f, maxW * 0.980f },  // 4.667" dia at 6"
+        { -H * 0.08f, maxW * 0.960f },  
+        { -H * 0.06f, maxW * 0.935f },  // 4.457" dia at 5.5"
+        { -H * 0.04f, maxW * 0.905f },  
+        { -H * 0.02f, maxW * 0.875f },  // 4.17" dia at 5"
+        {  H * 0.00f, maxW * 0.850f },  
+        
+        // Lower body taper
+        {  H * 0.02f, maxW * 0.825f },  // 3.933" dia at 4.5"
+        {  H * 0.04f, maxW * 0.800f },  
+        {  H * 0.06f, maxW * 0.780f },  // 3.719" dia at 4"
+        {  H * 0.08f, maxW * 0.765f },  
+        {  H * 0.10f, maxW * 0.755f },  // 3.6" dia at 3.5"
+        {  H * 0.12f, maxW * 0.750f },  
+        {  H * 0.14f, maxW * 0.750f },  // 3.576" dia at 3"
+        
+        // Base begins to flare (around 2.5" from bottom)
+        {  H * 0.16f, maxW * 0.755f },  
+        {  H * 0.20f, maxW * 0.770f },  // 3.671" dia at 2.5"
+        {  H * 0.24f, maxW * 0.795f },  
+        {  H * 0.28f, maxW * 0.825f },  // 3.933" dia at 2"
+        {  H * 0.32f, maxW * 0.855f },  
+        {  H * 0.36f, maxW * 0.880f },  // 4.195" dia at 1.5"
+        {  H * 0.40f, maxW * 0.900f },  
+        {  H * 0.44f, maxW * 0.915f },  // 4.362" dia at 1"
+        {  H * 0.48f, maxW * 0.925f },  
+        {  H * 0.52f, maxW * 0.930f },  // 4.433" dia at 0.5"
+        {  H * 0.56f, maxW * 0.930f },  
+        {  H * 0.58f, maxW * 0.925f }   // bottom edge
     };
 
     const int n = (int)(sizeof(slices) / sizeof(slices[0]));
@@ -152,7 +191,7 @@ void Pin::draw(sf::RenderWindow& window) const {
     sf::VertexArray pinGradient(sf::PrimitiveType::TriangleStrip);
     
     for (int i = 0; i < n; i++) {
-        float normalizedY = (slices[i].y + H * 0.56f) / (H * 1.11f); // 0 at top, 1 at bottom
+        float normalizedY = (slices[i].y + H * 0.58f) / (H * 1.16f); // 0 at top, 1 at bottom
         
         // Left side - darker (shadow side)
         sf::Vertex leftVert;
@@ -176,7 +215,7 @@ void Pin::draw(sf::RenderWindow& window) const {
     // Left highlight (bright edge)
     sf::VertexArray leftHighlight(sf::PrimitiveType::TriangleStrip);
     for (int i = 0; i < n; i++) {
-        float normalizedY = (slices[i].y + H * 0.56f) / (H * 1.11f);
+        float normalizedY = (slices[i].y + H * 0.58f) / (H * 1.16f);
         
         // Inner edge
         sf::Vertex v1;
@@ -212,7 +251,7 @@ void Pin::draw(sf::RenderWindow& window) const {
     // Specular highlight stripe (glossy reflection)
     sf::VertexArray specular(sf::PrimitiveType::TriangleStrip);
     for (int i = 0; i < n; i++) {
-        float normalizedY = (slices[i].y + H * 0.56f) / (H * 1.11f);
+        float normalizedY = (slices[i].y + H * 0.58f) / (H * 1.16f);
         
         // Narrow vertical highlight
         sf::Vertex v1;

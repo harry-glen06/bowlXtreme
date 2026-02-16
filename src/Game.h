@@ -1,7 +1,9 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <SFML/Audio.hpp>
 #include <optional>
 #include <vector>
+#include <memory>
 
 #include "Lane.h"
 #include "Ball.h"
@@ -26,6 +28,9 @@ private:
     void applyGuttersAndBumpers();
     void doCollisions();
     void updateHud();
+    
+    void loadSounds();
+    void playRandomPinHit(float volume = 70.0f);
 
     std::vector<Pin> createPins(float centerX, float startY);
 
@@ -74,4 +79,24 @@ private:
     sf::Font font;
     bool fontOk = false;
     sf::Text hud;
+    
+    // Sound effects
+    sf::SoundBuffer ballRollBuffer;
+    sf::SoundBuffer pinHitBuffer1;
+    sf::SoundBuffer pinHitBuffer2;
+    sf::SoundBuffer pinHitBuffer3;
+    sf::SoundBuffer pinHitBuffer4;
+    sf::SoundBuffer pinHitBuffer5;
+    sf::SoundBuffer pinCollisionBuffer;
+    
+    std::unique_ptr<sf::Sound> ballRollSound;
+    std::unique_ptr<sf::Sound> pinHitSound1;
+    std::unique_ptr<sf::Sound> pinHitSound2;
+    std::unique_ptr<sf::Sound> pinHitSound3;
+    std::unique_ptr<sf::Sound> pinHitSound4;
+    std::unique_ptr<sf::Sound> pinHitSound5;
+    std::unique_ptr<sf::Sound> pinCollisionSound;
+    
+    bool soundsLoaded = false;
+    bool isBallRolling = false;
 };

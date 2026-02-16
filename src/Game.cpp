@@ -2,6 +2,8 @@
 #include "Physics.h"
 #include <string>
 #include <cmath>
+#include <ctime>
+#include <cstdlib>
 
 Game::Game()
 : window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
@@ -9,6 +11,9 @@ Game::Game()
 , hud(font, "", 20)
 {
     window.setFramerateLimit(60);
+    
+    // Seed random number generator for random sounds
+    srand(static_cast<unsigned>(time(nullptr)));
 
     // Fixed world camera
     view = sf::View(sf::FloatRect(sf::Vector2f(0.0f, 0.0f), sf::Vector2f(windowW, lane.height + 50)));
@@ -28,6 +33,78 @@ Game::Game()
     hud = sf::Text(font, "", 20);
     hud.setFillColor(sf::Color::White);
     hud.setPosition(sf::Vector2f(20.0f, 15.0f));
+    
+    // Load sound effects
+    loadSounds();
+}
+
+void Game::loadSounds() {
+    // Try to load sound files - if they don't exist, the game will still work
+    if (ballRollBuffer.loadFromFile("assets/ball_roll.wav")) {
+        ballRollSound.setBuffer(ballRollBuffer);
+        ballRollSound.setLooping(true);  // SFML 3: setLooping instead of setLoop
+        ballRollSound.setVolume(30.0f);
+    }
+    
+    // Load 5 different pin hit sounds
+    if (pinHitBuffer1.loadFromFile("assets/pin_hit1.wav")) {
+        pinHitSound1.setBuffer(pinHitBuffer1);
+        pinHitSound1.setVolume(70.0f);
+    }
+    
+    if (pinHitBuffer2.loadFromFile("assets/pin_hit2.wav")) {
+        pinHitSound2.setBuffer(pinHitBuffer2);
+        pinHitSound2.setVolume(70.0f);
+    }
+    
+    if (pinHitBuffer3.loadFromFile("assets/pin_hit3.wav")) {
+        pinHitSound3.setBuffer(pinHitBuffer3);
+        pinHitSound3.setVolume(70.0f);
+    }
+    
+    if (pinHitBuffer4.loadFromFile("assets/pin_hit4.wav")) {
+        pinHitSound4.setBuffer(pinHitBuffer4);
+        pinHitSound4.setVolume(70.0f);
+    }
+    
+    if (pinHitBuffer5.loadFromFile("assets/pin_hit5.wav")) {
+        pinHitSound5.setBuffer(pinHitBuffer5);
+        pinHitSound5.setVolume(70.0f);
+    }
+    
+    // Optional: try to load dedicated pin collision sound
+    // If it doesn't exist, we'll just reuse one of the pin hit sounds
+    if (pinCollisionBuffer.loadFromFile("assets/pin_collision.wav")) {
+        pinCollisionSound.setBuffer(pinCollisionBuffer);
+        pinCollisionSound.setVolume(50.0f);
+    } else {
+        // Reuse pin_hit1 for collision sound if no dedicated file exists
+        pinCollisionSound.setBuffer(pinHitBuffer1);
+        pinCollisionSound.setVolume(40.0f);
+    }
+    
+    soundsLoaded = true;
+}
+
+void Game::playRandomPinHit(float volume) {
+    if (!soundsLoaded) return;
+    
+    // Pick a random sound from 1-5
+    int randomSound = rand() % 5 + 1;
+    
+    sf::Sound* sound = nullptr;
+    switch(randomSound) {
+        case 1: sound = &pinHitSound1; break;
+        case 2: sound = &pinHitSound2; break;
+        case 3: sound = &pinHitSound3; break;
+        case 4: sound = &pinHitSound4; break;
+        case 5: sound = &pinHitSound5; break;
+    }
+    
+    if (sound && sound->getStatus() != sf::Sound::Playing) {
+        sound->setVolume(volume);
+        sound->play();
+    }
 }
 
 std::vector<Pin> Game::createPins(float centerX, float startY) {
@@ -88,6 +165,12 @@ void Game::resetBall() {
     aimDeg = -90.0f;
     inGutter = false;
     gutterSide = 0;
+    
+    // Stop rolling sound
+    if (isBallRolling) {
+        ballRollSound.stop();
+        isBallRolling = false;
+    }
 }
 
 void Game::startPendingReset() {
@@ -237,6 +320,12 @@ void Game::doCollisions() {
         float impact = length(pv - pvBefore);
 
         if (impact > 5.0f) hitAnyPin = true;
+        
+        // Play random pin hit sound based on impact strength
+        if (impact > 50.0f) {
+            float impactVolume = std::min(100.0f, 40.0f + impact * 0.5f);
+            playRandomPinHit(impactVolume);
+        }
 
         // Tiny slowdown, only once per frame
         if (!slowedThisFrame && impact > 5.0f) {
@@ -294,12 +383,23 @@ void Game::doCollisions() {
 
                 sf::Vector2f p2 = pins[j].getPos();
                 sf::Vector2f v2 = pins[j].getVel();
+                
+                sf::Vector2f v1Before = v1;
+                sf::Vector2f v2Before = v2;
 
                 resolveCircleCollision(
                     p1, v1, pins[i].getMass(), pins[i].getRadius(),
                     p2, v2, pins[j].getMass(), pins[j].getRadius(),
                     rest
                 );
+                
+                // Calculate collision impact for sound
+                float pinImpact = length(v1 - v1Before) + length(v2 - v2Before);
+                if (soundsLoaded && pinImpact > 30.0f && pinCollisionSound.getStatus() != sf::Sound::Playing) {
+                    float collisionVolume = std::min(80.0f, 30.0f + pinImpact * 0.3f);
+                    pinCollisionSound.setVolume(collisionVolume);
+                    pinCollisionSound.play();
+                }
 
                 pins[i].setPos(p1);
                 pins[i].setVel(v1);
@@ -401,6 +501,12 @@ void Game::update(float dt) {
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
         ball.launch(rollDir, 1200.0f);
         rollLocked = true;
+        
+        // Start rolling sound
+        if (soundsLoaded && ballRollSound.getStatus() != sf::Sound::Playing) {
+            ballRollSound.play();
+            isBallRolling = true;
+        }
     }
 
     // One press toggles (edge detect)
@@ -448,6 +554,13 @@ void Game::update(float dt) {
     if (!pendingReset && ball.getPos().y < lane.top + ball.getRadius()) {
         ball.stop();
         rollLocked = false;
+        
+        // Stop rolling sound
+        if (isBallRolling) {
+            ballRollSound.stop();
+            isBallRolling = false;
+        }
+        
         startPendingReset();
     }
 

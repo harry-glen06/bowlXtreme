@@ -1,4 +1,5 @@
 #include "Lane.h"
+
 void Lane::init(float windowW) {
     left = (windowW - width) / 2.0f;
     right = left + width;
