@@ -4,6 +4,7 @@
 #include <cmath>
 #include <ctime>
 #include <cstdlib>
+#include <algorithm>
 
 Game::Game()
 : window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
@@ -23,7 +24,6 @@ Game::Game()
     auto s = window.getSize();
     applyLetterbox(s.x, s.y);
 
-
     lane.init(windowW);
 
     ball.reset(sf::Vector2f(windowW / 2.0f, lane.bottom - 30.0f));
@@ -34,53 +34,61 @@ Game::Game()
     hud.setFillColor(sf::Color::White);
     hud.setPosition(sf::Vector2f(20.0f, 15.0f));
     
-    // Load sound effects
+    // Load sound effects and background music
     loadSounds();
 }
 
 void Game::loadSounds() {
-    // Try to load sound files - if they don't exist, the game will still work
+    // In SFML 3, we initialize the unique_ptr by passing the buffer into the constructor
+    // This solves the "no default constructor" error.
+    
     if (ballRollBuffer.loadFromFile("assets/ball_roll.wav")) {
-        ballRollSound.setBuffer(ballRollBuffer);
-        ballRollSound.setLooping(true);  // SFML 3: setLooping instead of setLoop
-        ballRollSound.setVolume(30.0f);
+        ballRollSound = std::make_unique<sf::Sound>(ballRollBuffer);
+        ballRollSound->setLooping(true);  // SFML 3: setLooping instead of setLoop
+        ballRollSound->setVolume(95.0f);
     }
     
     // Load 5 different pin hit sounds
     if (pinHitBuffer1.loadFromFile("assets/pin_hit1.wav")) {
-        pinHitSound1.setBuffer(pinHitBuffer1);
-        pinHitSound1.setVolume(70.0f);
+        pinHitSound1 = std::make_unique<sf::Sound>(pinHitBuffer1);
+        pinHitSound1->setVolume(15.0f);
     }
     
     if (pinHitBuffer2.loadFromFile("assets/pin_hit2.wav")) {
-        pinHitSound2.setBuffer(pinHitBuffer2);
-        pinHitSound2.setVolume(70.0f);
+        pinHitSound2 = std::make_unique<sf::Sound>(pinHitBuffer2);
+        pinHitSound2->setVolume(15.0f);
     }
     
     if (pinHitBuffer3.loadFromFile("assets/pin_hit3.wav")) {
-        pinHitSound3.setBuffer(pinHitBuffer3);
-        pinHitSound3.setVolume(70.0f);
+        pinHitSound3 = std::make_unique<sf::Sound>(pinHitBuffer3);
+        pinHitSound3->setVolume(15.0f);
     }
     
     if (pinHitBuffer4.loadFromFile("assets/pin_hit4.wav")) {
-        pinHitSound4.setBuffer(pinHitBuffer4);
-        pinHitSound4.setVolume(70.0f);
+        pinHitSound4 = std::make_unique<sf::Sound>(pinHitBuffer4);
+        pinHitSound4->setVolume(15.0f);
     }
     
     if (pinHitBuffer5.loadFromFile("assets/pin_hit5.wav")) {
-        pinHitSound5.setBuffer(pinHitBuffer5);
-        pinHitSound5.setVolume(70.0f);
+        pinHitSound5 = std::make_unique<sf::Sound>(pinHitBuffer5);
+        pinHitSound5->setVolume(15.0f);
     }
     
     // Optional: try to load dedicated pin collision sound
-    // If it doesn't exist, we'll just reuse one of the pin hit sounds
     if (pinCollisionBuffer.loadFromFile("assets/pin_collision.wav")) {
-        pinCollisionSound.setBuffer(pinCollisionBuffer);
-        pinCollisionSound.setVolume(50.0f);
-    } else {
+        pinCollisionSound = std::make_unique<sf::Sound>(pinCollisionBuffer);
+        pinCollisionSound->setVolume(13.0f);
+    } else if (pinHitSound1) {
         // Reuse pin_hit1 for collision sound if no dedicated file exists
-        pinCollisionSound.setBuffer(pinHitBuffer1);
-        pinCollisionSound.setVolume(40.0f);
+        pinCollisionSound = std::make_unique<sf::Sound>(pinHitBuffer1);
+        pinCollisionSound->setVolume(13.0f);
+    }
+
+    // Load Background Music
+    if (backgroundMusic.openFromFile("assets/background_music.flac")) {
+        backgroundMusic.setLooping(true);
+        backgroundMusic.setVolume(masterVolume * 0.9f); // Keep music quieter than effects
+        backgroundMusic.play();
     }
     
     soundsLoaded = true;
@@ -93,15 +101,17 @@ void Game::playRandomPinHit(float volume) {
     int randomSound = rand() % 5 + 1;
     
     sf::Sound* sound = nullptr;
+    // Use .get() to get the raw pointer address from the unique_ptr
     switch(randomSound) {
-        case 1: sound = &pinHitSound1; break;
-        case 2: sound = &pinHitSound2; break;
-        case 3: sound = &pinHitSound3; break;
-        case 4: sound = &pinHitSound4; break;
-        case 5: sound = &pinHitSound5; break;
+        case 1: sound = pinHitSound1.get(); break;
+        case 2: sound = pinHitSound2.get(); break;
+        case 3: sound = pinHitSound3.get(); break;
+        case 4: sound = pinHitSound4.get(); break;
+        case 5: sound = pinHitSound5.get(); break;
     }
     
-    if (sound && sound->getStatus() != sf::Sound::Playing) {
+    // Check if the sound exists (it might be null if the file failed to load)
+    if (sound && sound->getStatus() != sf::Sound::Status::Playing) {
         sound->setVolume(volume);
         sound->play();
     }
@@ -129,7 +139,6 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
     return out;
 }
 
-
 void Game::run() {
     while (window.isOpen()) {
         handleEvents();
@@ -153,7 +162,6 @@ void Game::handleEvents() {
     }
 }
 
-
 void Game::resetPins() {
     pins = createPins(lane.centerX(), 220.0f);
 }
@@ -166,9 +174,9 @@ void Game::resetBall() {
     inGutter = false;
     gutterSide = 0;
     
-    // Stop rolling sound
-    if (isBallRolling) {
-        ballRollSound.stop();
+    // Stop rolling sound - using arrow operator for unique_ptr
+    if (isBallRolling && ballRollSound) {
+        ballRollSound->stop();
         isBallRolling = false;
     }
 }
@@ -245,38 +253,25 @@ void Game::applyGuttersAndBumpers() {
         v.y = -420.0f;
     } else {
         if (lane.bumpersOn) {
-            float minSide = 80.0f;
-            float bounce = 0.75f;
-
-            // Left bumper: only bounce if moving left into it
+            // Left bumper bounce
             if (p.x < playL + r && v.x < 0.0f) {
                 p.x = playL + r;
-
-                float speed = length(v);
-
-                sf::Vector2f n(1.0f, 0.0f);   // bumper normal pointing right
-                v = v - 2.0f * dot(v, n) * n; // reflect direction
-
-                v *= 1.03f; // tiny boost (real bumpers feel springy)
-
+                sf::Vector2f n(1.0f, 0.0f);
+                v = v - 2.0f * dot(v, n) * n;
+                v *= 1.03f; // tiny boost
                 ball.setVel(v);
             }
 
-            // Right bumper: only bounce if moving right into it
+            // Right bumper bounce
             if (p.x > playR - r && v.x > 0.0f) {
                 p.x = playR - r;
-
-                float speed = length(v);
-
-                sf::Vector2f n(-1.0f, 0.0f);  // bumper normal pointing left
+                sf::Vector2f n(-1.0f, 0.0f);
                 v = v - 2.0f * dot(v, n) * n;
-
                 v *= 1.03f;
-
                 ball.setVel(v);
             }
         } else {
-            // bumpers OFF: enter gutter and lock slide mode
+            // bumpers OFF: enter gutter
             if (p.x < playL + r) { inGutter = true; gutterSide = -1; }
             if (p.x > playR - r) { inGutter = true; gutterSide =  1; }
         }
@@ -288,330 +283,221 @@ void Game::applyGuttersAndBumpers() {
 
 void Game::doCollisions() {
     // Ball -> pin
-{
-    sf::Vector2f bp = ball.getPos();
-    sf::Vector2f bv = ball.getVel();
-    sf::Vector2f bvStart = bv;           // for limiting pin-caused sideways change
-    float br = ball.getRadius();
-    float bm = 4.0f;                     // ball heavier
+    {
+        sf::Vector2f bp = ball.getPos();
+        sf::Vector2f bv = ball.getVel();
+        sf::Vector2f bvStart = bv;
+        float br = ball.getRadius();
+        float bm = 4.0f; 
 
-    bool slowedThisFrame = false;
-    bool hitAnyPin = false;
+        bool hitAnyPin = false;
 
-    for (auto& pin : pins) {
-        if (!pin.isActive()) continue;
+        for (auto& pin : pins) {
+            if (!pin.isActive()) continue;
 
-        sf::Vector2f pp = pin.getPos();
-        sf::Vector2f pv = pin.getVel();
+            sf::Vector2f pp = pin.getPos();
+            sf::Vector2f pv = pin.getVel();
+            sf::Vector2f pvBefore = pv;
 
-        sf::Vector2f pvBefore = pv;
-        sf::Vector2f bvBefore = bv;
+            resolveCircleCollision(
+                bp, bv, bm, br,
+                pp, pv, (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f), pin.getRadius(),
+                0.12f
+            );
 
-        // Much lower restitution = less bouncy pin hits
-        resolveCircleCollision(
-            bp, bv, bm, br,
-            pp, pv, (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f), pin.getRadius(),
-            0.12f
-        );
+            pin.setPos(pp);
+            pin.setVel(pv);
 
-        pin.setPos(pp);
-        pin.setVel(pv);
+            float impact = length(pv - pvBefore);
+            if (impact > 5.0f) hitAnyPin = true;
+            
+            if (impact > 50.0f) {
+                float impactVolume = std::min(100.0f, 40.0f + impact * 0.5f);
+                playRandomPinHit(impactVolume);
+            }
 
-        float impact = length(pv - pvBefore);
-
-        if (impact > 5.0f) hitAnyPin = true;
-        
-        // Play random pin hit sound based on impact strength
-        if (impact > 50.0f) {
-            float impactVolume = std::min(100.0f, 40.0f + impact * 0.5f);
-            playRandomPinHit(impactVolume);
+            if (!pin.isFallen() && impact > 80.0f) {
+                pin.setFallen(true);
+                float spin = (bv.x - pv.x) * 0.01f;
+                pin.setAngularVel(std::clamp(spin, -6.0f, 6.0f));
+            }
         }
 
-        // Tiny slowdown, only once per frame
-        if (!slowedThisFrame && impact > 5.0f) {
-            bv *= 0.99f;                 // very gentle slowdown
-            slowedThisFrame = true;
+        // Limit pin redirection for bowling feel
+        if (hitAnyPin && rollLocked) {
+            float maxDeltaSide = 120.0f;
+            float dx = bv.x - bvStart.x;
+            bv.x = bvStart.x + std::clamp(dx, -maxDeltaSide, maxDeltaSide);
+            bv.x = std::clamp(bv.x, -180.0f, 180.0f);
+            if (bv.y > -260.0f) bv.y = -260.0f;
         }
 
-        // Fall + spin
-        float fallThreshold = 80.0f;
-        float spinScale = 0.01f;
-
-        if (!pin.isFallen() && impact > fallThreshold) {
-            pin.setFallen(true);
-
-            float spin = (bvBefore.x - pvBefore.x) * spinScale;
-            if (spin > 6.0f) spin = 6.0f;
-            if (spin < -6.0f) spin = -6.0f;
-
-            pin.setAngularVel(spin);
-        }
+        ball.setPos(bp);
+        ball.setVel(bv);
     }
-
-    // Limit how much pins can redirect the ball (bowling feel)
-    if (hitAnyPin && rollLocked) {
-        // Clamp sideways change caused by pins
-        float maxDeltaSide = 120.0f;
-        float dx = bv.x - bvStart.x;
-        if (dx >  maxDeltaSide) bv.x = bvStart.x + maxDeltaSide;
-        if (dx < -maxDeltaSide) bv.x = bvStart.x - maxDeltaSide;
-
-        // Also clamp absolute sideways speed
-        float maxSide = 180.0f;
-        if (bv.x >  maxSide) bv.x =  maxSide;
-        if (bv.x < -maxSide) bv.x = -maxSide;
-
-        // Never allow pins to remove forward motion or send it backwards
-        float minForward = 260.0f;
-        if (bv.y > -minForward) bv.y = -minForward;
-    }
-
-    ball.setPos(bp);
-    ball.setVel(bv);
-}
 
     // Pin -> pin
     {
-        float rest = 0.20f;
         for (size_t i = 0; i < pins.size(); i++) {
             if (!pins[i].isActive()) continue;
             for (size_t j = i + 1; j < pins.size(); j++) {
                 if (!pins[j].isActive()) continue;
 
-                sf::Vector2f p1 = pins[i].getPos();
-                sf::Vector2f v1 = pins[i].getVel();
+                sf::Vector2f p1 = pins[i].getPos(), v1 = pins[i].getVel();
+                sf::Vector2f p2 = pins[j].getPos(), v2 = pins[j].getVel();
+                sf::Vector2f v1B = v1, v2B = v2;
 
-                sf::Vector2f p2 = pins[j].getPos();
-                sf::Vector2f v2 = pins[j].getVel();
+                resolveCircleCollision(p1, v1, pins[i].getMass(), pins[i].getRadius(),
+                                       p2, v2, pins[j].getMass(), pins[j].getRadius(), 0.20f);
                 
-                sf::Vector2f v1Before = v1;
-                sf::Vector2f v2Before = v2;
-
-                resolveCircleCollision(
-                    p1, v1, pins[i].getMass(), pins[i].getRadius(),
-                    p2, v2, pins[j].getMass(), pins[j].getRadius(),
-                    rest
-                );
-                
-                // Calculate collision impact for sound
-                float pinImpact = length(v1 - v1Before) + length(v2 - v2Before);
-                if (soundsLoaded && pinImpact > 30.0f && pinCollisionSound.getStatus() != sf::Sound::Playing) {
-                    float collisionVolume = std::min(80.0f, 30.0f + pinImpact * 0.3f);
-                    pinCollisionSound.setVolume(collisionVolume);
-                    pinCollisionSound.play();
+                float pinImpact = length(v1 - v1B) + length(v2 - v2B);
+                if (soundsLoaded && pinCollisionSound && pinImpact > 30.0f && pinCollisionSound->getStatus() != sf::Sound::Status::Playing) {
+                    pinCollisionSound->setVolume(std::min(80.0f, 30.0f + pinImpact * 0.3f));
+                    pinCollisionSound->play();
                 }
 
-                pins[i].setPos(p1);
-                pins[i].setVel(v1);
-                pins[j].setPos(p2);
-                pins[j].setVel(v2);
+                pins[i].setPos(p1); pins[i].setVel(v1);
+                pins[j].setPos(p2); pins[j].setVel(v2);
             }
         }
     }
 
-    // Pin -> lane walls / gutters / back
+    // Pin -> lane walls
     {
-        float leftWall  = lane.playLeft();   // inside area between bumpers
-        float rightWall = lane.playRight();
-
-        float sideRest = 0.25f;  // tiny bounce
-        float backRest = 0.15f;  // even smaller bounce
-
+        float leftW = lane.playLeft(), rightW = lane.playRight();
         for (auto& pin : pins) {
             if (!pin.isActive()) continue;
-
-            sf::Vector2f p = pin.getPos();
-            sf::Vector2f v = pin.getVel();
+            sf::Vector2f p = pin.getPos(), v = pin.getVel();
             float r = pin.getRadius();
 
-            // If a pin hits the gutter zones or back end, force it to fall
-            bool hitGutter = (p.x < leftWall + r) || (p.x > rightWall - r);
-            bool hitBack   = (p.y < lane.top + r);
-
-            if (hitGutter || hitBack) {
+            if (p.x < leftW + r || p.x > rightW - r || p.y < lane.top + r) {
                 if (!pin.isFallen()) pin.setFallen(true);
             }
 
-            // Bounce off left/right walls (only if moving into the wall)
-            if (p.x < leftWall + r && v.x < 0.0f) {
-                p.x = leftWall + r;
-                v.x = -v.x * sideRest;
-            }
-            if (p.x > rightWall - r && v.x > 0.0f) {
-                p.x = rightWall - r;
-                v.x = -v.x * sideRest;
-            }
+            if (p.x < leftW + r && v.x < 0.0f) { p.x = leftW + r; v.x = -v.x * 0.25f; }
+            if (p.x > rightW - r && v.x > 0.0f) { p.x = rightW - r; v.x = -v.x * 0.25f; }
+            if (p.y < lane.top + r && v.y < 0.0f) { p.y = lane.top + r; v.y = -v.y * 0.15f; }
 
-            // Bounce off the back (top of lane)
-            if (p.y < lane.top + r && v.y < 0.0f) {
-                p.y = lane.top + r;
-                v.y = -v.y * backRest;
-            }
-
-            pin.setPos(p);
-            pin.setVel(v);
+            pin.setPos(p); pin.setVel(v);
         }
     }
-
 }
 
 void Game::updateHud() {
     if (!fontOk) return;
 
+    // Correctly check music status for HUD
+    std::string musicStatus = (backgroundMusic.getStatus() == sf::SoundSource::Status::Playing) ? "ON" : "OFF";
+
     hud.setString(
         "Frame: " + std::to_string(frame) +
         "   Shot: " + std::to_string(shot) +
         "   Score: " + std::to_string(totalScore) +
-        "   Bumpers: " + std::string(lane.bumpersOn ? "ON" : "OFF")
+        "   Bumpers: " + std::string(lane.bumpersOn ? "ON" : "OFF") +
+        "   Music: " + musicStatus
     );
 }
 
 void Game::update(float dt) {
-    // Move/aim before roll
+    // Aiming and Movement logic
     if (!rollLocked && !pendingReset) {
         sf::Vector2f p = ball.getPos();
-        float r = ball.getRadius();
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A)) p.x -= moveSpeed * dt;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D)) p.x += moveSpeed * dt;
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::A))
-            p.x -= moveSpeed * dt;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::D))
-            p.x += moveSpeed * dt;
-
-        float playL = lane.playLeft();
-        float playR = lane.playRight();
-
-        if (p.x < playL + r) p.x = playL + r;
-        if (p.x > playR - r) p.x = playR - r;
-
+        float playL = lane.playLeft(), playR = lane.playRight();
+        p.x = std::clamp(p.x, playL + ball.getRadius(), playR - ball.getRadius());
         ball.setPos(p);
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left))
-            aimDeg -= aimTurnSpeed * dt;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right))
-            aimDeg += aimTurnSpeed * dt;
-
-        if (aimDeg < -140.0f) aimDeg = -140.0f;
-        if (aimDeg > -40.0f) aimDeg = -40.0f;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Left)) aimDeg -= aimTurnSpeed * dt;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Right)) aimDeg += aimTurnSpeed * dt;
+        aimDeg = std::clamp(aimDeg, -140.0f, -40.0f);
     }
 
-    // Launch
-    if (!rollLocked && !pendingReset &&
-        sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
+    // Launch Logic
+    if (!rollLocked && !pendingReset && sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
         float a = degToRad(aimDeg);
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
         ball.launch(rollDir, 1200.0f);
         rollLocked = true;
-        
-        // Start rolling sound
-        if (soundsLoaded && ballRollSound.getStatus() != sf::Sound::Playing) {
-            ballRollSound.play();
+        if (soundsLoaded && ballRollSound) {
+            ballRollSound->play();
             isBallRolling = true;
         }
     }
 
-    // One press toggles (edge detect)
-    static bool prevB = false;
-    static bool prevR = false;
-
+    // Toggle logic (Edge detection)
+    static bool prevB = false, prevR = false, prevM = false;
     bool nowB = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::B);
     bool nowR = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
+    bool nowM = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::M);
 
-    if (nowB && !prevB) {
-        lane.bumpersOn = !lane.bumpersOn;
+    if (nowB && !prevB) lane.bumpersOn = !lane.bumpersOn;
+    
+    // Music Toggle logic
+    if (nowM && !prevM) {
+        if (backgroundMusic.getStatus() == sf::SoundSource::Status::Playing)
+            backgroundMusic.pause();
+        else
+            backgroundMusic.play();
     }
 
     if (nowR && !prevR) {
-        totalScore = 0;
-        frame = 1;
-        shot = 1;
-        pendingReset = false;
-        resetPins();
-        resetBall();
+        totalScore = 0; frame = 1; shot = 1;
+        pendingReset = false; resetPins(); resetBall();
     }
 
-    prevB = nowB;
-    prevR = nowR;
+    prevB = nowB; prevR = nowR; prevM = nowM;
 
-    // Update physics
+    // Physics updates
     ball.update(dt);
     for (auto& pin : pins) pin.update(dt);
 
-    // Keep ball moving forward without changing its direction
     if (rollLocked) {
         sf::Vector2f v = ball.getVel();
         float s = length(v);
-
-        if (s > 0.0f && s < minRollSpeed) {
-            sf::Vector2f dir = v / s;     // use current direction
-            ball.setVel(dir * minRollSpeed);
-        }
+        if (s > 0.0f && s < minRollSpeed) ball.setVel((v / s) * minRollSpeed);
     }
 
     applyGuttersAndBumpers();
     doCollisions();
 
-    // Start reset if ball hits back
+    // Reset check
     if (!pendingReset && ball.getPos().y < lane.top + ball.getRadius()) {
         ball.stop();
         rollLocked = false;
-        
-        // Stop rolling sound
-        if (isBallRolling) {
-            ballRollSound.stop();
-            isBallRolling = false;
-        }
-        
+        if (isBallRolling && ballRollSound) { ballRollSound->stop(); isBallRolling = false; }
         startPendingReset();
     }
 
     finishPendingResetIfReady(dt);
-
     updateHud();
 }
 
 void Game::draw() {
     window.clear(sf::Color(20, 20, 20));
-
     lane.draw(window);
-
     for (const auto& pin : pins) pin.draw(window);
 
     if (!rollLocked && !pendingReset) {
         float a = degToRad(aimDeg);
         sf::Vector2f dir(std::cos(a), std::sin(a));
-
-        sf::Vertex line[2];
-        line[0].position = ball.getPos();
-        line[0].color = sf::Color::Yellow;
-        line[1].position = ball.getPos() + dir * 100.0f;
-        line[1].color = sf::Color::Yellow;
-
+        sf::Vertex line[2] = { {ball.getPos(), sf::Color::Yellow}, {ball.getPos() + dir * 100.0f, sf::Color::Yellow} };
         window.draw(line, 2, sf::PrimitiveType::Lines);
     }
 
     ball.draw(window);
-
     if (fontOk) window.draw(hud);
-
     window.display();
 }
 
 void Game::applyLetterbox(unsigned winW, unsigned winH) {
     float windowRatio = (float)winW / (float)winH;
     float viewRatio = windowW / windowH;
+    float sizeX = 1.0f, sizeY = 1.0f, posX = 0.0f, posY = 0.0f;
 
-    float sizeX = 1.0f;
-    float sizeY = 1.0f;
-    float posX  = 0.0f;
-    float posY  = 0.0f;
-
-    if (windowRatio > viewRatio) {
-        sizeX = viewRatio / windowRatio;
-        posX = (1.0f - sizeX) * 0.5f;
-    } else {
-        sizeY = windowRatio / viewRatio;
-        posY = (1.0f - sizeY) * 0.5f;
-    }
+    if (windowRatio > viewRatio) { sizeX = viewRatio / windowRatio; posX = (1.0f - sizeX) * 0.5f; }
+    else { sizeY = windowRatio / viewRatio; posY = (1.0f - sizeY) * 0.5f; }
 
     view.setViewport(sf::FloatRect(sf::Vector2f(posX, posY), sf::Vector2f(sizeX, sizeY)));
     window.setView(view);

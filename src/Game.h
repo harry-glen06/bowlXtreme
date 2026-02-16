@@ -96,7 +96,11 @@ private:
     std::unique_ptr<sf::Sound> pinHitSound4;
     std::unique_ptr<sf::Sound> pinHitSound5;
     std::unique_ptr<sf::Sound> pinCollisionSound;
-    
+
+    private:
+    sf::Music backgroundMusic;  // sf::Music streams from disk, saving memory
+    float masterVolume = 50.0f; // Global volume control
+
     bool soundsLoaded = false;
     bool isBallRolling = false;
 };
