@@ -38,10 +38,13 @@ void AudioManager::loadSounds() {
     
     if (menuMusic1.openFromFile("assets/music1.wav")) {
         menuMusic1.setLooping(false); 
+        menuMusic1.setVolume(30.0f); // Set to 30% volume
+
     }
     
     if (menuMusic2.openFromFile("assets/music2.wav")) {
         menuMusic2.setLooping(false);
+        menuMusic1.setVolume(30.0f); // Set to 30% volume
     }
 
     if (gameMusic.openFromFile("assets/background_music.flac")) {
