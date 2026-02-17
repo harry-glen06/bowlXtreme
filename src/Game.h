@@ -87,6 +87,7 @@ private:
     int totalScore = 0;
     void calculateScore();
     void drawScorecard(sf::RenderWindow& window);
+    void drawGameOverScreen(sf::RenderWindow& window);
     int getPinsKnocked();  // Count fallen pins this shot
 
     // HUD
@@ -117,4 +118,8 @@ private:
 
     bool soundsLoaded = false;
     bool isBallRolling = false;
+
+    // Game over state
+    bool gameOver = false;
+    int finalScore = 0;
 };

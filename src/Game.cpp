@@ -104,7 +104,7 @@ void Game::loadSounds() {
     // Load Background Music
     if (backgroundMusic.openFromFile("assets/background_music.flac")) {
         backgroundMusic.setLooping(true);
-        backgroundMusic.setVolume(masterVolume * 0.9f); // Keep music quieter than effects
+        backgroundMusic.setVolume(100.0f); // Keep music quieter than effects
         backgroundMusic.play();
     }
     
@@ -258,17 +258,18 @@ void Game::calculateScore() {
 void Game::drawScorecard(sf::RenderWindow& window) {
     if (!fontOk) return;
     
-    float startX = 50.0f;
-    float startY = 20.0f;
-    float frameWidth = 90.0f;
+    float startX = 10.0f;   // Left edge
+    float startY = 100.0f;  // Start below top
+    float frameWidth = 70.0f;
     float frameHeight = 60.0f;
     
     for (int i = 0; i < 10; i++) {
-        float x = startX + i * frameWidth;
+        float x = startX;
+        float y = startY + i * frameHeight;  // ← Stack vertically instead of horizontally
         
         // Frame box
-        sf::RectangleShape box(sf::Vector2f(frameWidth - 2, frameHeight));
-        box.setPosition(sf::Vector2f(x, startY));  // ← FIXED
+        sf::RectangleShape box(sf::Vector2f(frameWidth - 2, frameHeight - 2));
+        box.setPosition(sf::Vector2f(x, y));  // Use y instead of startY
         box.setFillColor(sf::Color(40, 40, 40));
         box.setOutlineColor(sf::Color::White);
         box.setOutlineThickness(1.0f);
@@ -276,16 +277,38 @@ void Game::drawScorecard(sf::RenderWindow& window) {
         
         // Frame number
         sf::Text frameNum(font, std::to_string(i + 1), 14);
-        frameNum.setPosition(sf::Vector2f(x + 5, startY + 2));  // ← FIXED
+        frameNum.setPosition(sf::Vector2f(x + 5, y + 2));  
         frameNum.setFillColor(sf::Color(150, 150, 150));
         window.draw(frameNum);
         
-        // Ball scores
-        std::string ball1Str = frames[i].ball1 > 0 ? std::to_string(frames[i].ball1) : "";
-        std::string ball2Str = frames[i].ball2 > 0 ? std::to_string(frames[i].ball2) : "";
-        
+        // Ball scores (top right)
+        std::string ball1Str = "";
+        std::string ball2Str = "";
+
+        // Ball 1 - only show if shot has been taken
+        if (currentFrame > i || (currentFrame == i && currentBall > 1)) {
+            // Shot 1 has been taken
+            if (frames[i].ball1 == 0) {
+                ball1Str = "-";  // Miss
+            } else {
+                ball1Str = std::to_string(frames[i].ball1);
+            }
+        }
+
+        // Ball 2 - only show if shot has been taken
+        if (currentFrame > i || (currentFrame == i && currentBall > 2)) {
+            // Shot 2 has been taken
+            if (frames[i].ball2 == 0) {
+                ball2Str = "-";  // Miss
+            } else {
+                ball2Str = std::to_string(frames[i].ball2);
+            }
+        }
+
+        // Then apply strike/spare symbols
         if (frames[i].isStrike && i < 9) {
             ball1Str = "X";
+            ball2Str = "";  // No second ball on strike
         } else if (frames[i].isSpare) {
             ball2Str = "/";
         } else if (frames[i].ball2 == 10) {
@@ -293,34 +316,34 @@ void Game::drawScorecard(sf::RenderWindow& window) {
         }
         
         sf::Text ball1Text(font, ball1Str, 16);
-        ball1Text.setPosition(sf::Vector2f(x + frameWidth - 45, startY + 18));  // ← FIXED
+        ball1Text.setPosition(sf::Vector2f(x + frameWidth - 45, y + 18));  
         window.draw(ball1Text);
         
         sf::Text ball2Text(font, ball2Str, 16);
-        ball2Text.setPosition(sf::Vector2f(x + frameWidth - 25, startY + 18));  // ← FIXED
+        ball2Text.setPosition(sf::Vector2f(x + frameWidth - 25, y + 18));  
         window.draw(ball2Text);
         
         // 10th frame has 3 balls
         if (i == 9 && frames[i].ball3 > 0) {
             std::string ball3Str = frames[i].ball3 == 10 ? "X" : std::to_string(frames[i].ball3);
             sf::Text ball3Text(font, ball3Str, 16);
-            ball3Text.setPosition(sf::Vector2f(x + frameWidth - 15, startY + 5));  // ← FIXED
+            ball3Text.setPosition(sf::Vector2f(x + frameWidth - 15, y + 5));  
             window.draw(ball3Text);
         }
         
         // Frame total
         if (frames[i].isComplete || i < currentFrame) {
             sf::Text scoreText(font, std::to_string(frames[i].score), 20);
-            scoreText.setPosition(sf::Vector2f(x + frameWidth / 2 - 15, startY + 35));  // ← FIXED
+            scoreText.setPosition(sf::Vector2f(x + frameWidth / 2 - 15, y + 35));  
             scoreText.setFillColor(sf::Color::Yellow);
             window.draw(scoreText);
         }
     }
     
-    // Current frame indicator
-    float indicatorX = startX + currentFrame * frameWidth;
-    sf::RectangleShape indicator(sf::Vector2f(frameWidth - 2, 3));
-    indicator.setPosition(sf::Vector2f(indicatorX, startY + frameHeight + 2));  // ← FIXED
+    // Current frame indicator (vertical - goes down)
+    float indicatorY = startY + currentFrame * frameHeight;  // ← Calculate Y, not X
+    sf::RectangleShape indicator(sf::Vector2f(3, frameHeight - 2));  // ← Vertical bar (width 3, height full)
+    indicator.setPosition(sf::Vector2f(startX + frameWidth, indicatorY));  // ← Position to the right of the frame
     indicator.setFillColor(sf::Color::Green);
     window.draw(indicator);
 }
@@ -356,8 +379,14 @@ void Game::finishPendingResetIfReady(float dt) {
         frames[currentFrame].ball1 = knockedThisBall;
     } else if (currentBall == 2) {
         frames[currentFrame].ball2 = knockedThisBall;
-    } else if (currentBall == 3) {  // Only 10th frame
-        frames[currentFrame].ball3 = knockedThisBall;
+    } else if (currentBall == 3) {
+        // 10th frame complete - game finished
+        frames[currentFrame].isComplete = true;
+        calculateScore();
+        
+        // Set game over
+        gameOver = true;
+        finalScore = totalScore;
     }
 
     // Handle different frame scenarios
@@ -472,23 +501,27 @@ void Game::finishPendingResetIfReady(float dt) {
                 
                 currentBall = 3;
                 
-            } else {
-                // No strike or spare - game over
-                frames[currentFrame].isComplete = true;
-                calculateScore();
-            }
+                } else {
+                    // No strike or spare - game over
+                    frames[currentFrame].isComplete = true;
+                    calculateScore();
+                    
+                    // Set game over
+                    gameOver = true;
+                    finalScore = totalScore;
+                }
             
         } else if (currentBall == 3) {
-            // 10th frame complete
+            // 10th frame complete - game finished
             frames[currentFrame].isComplete = true;
             calculateScore();
+            // Game finished - player can press R to restart
         }
     }
 
     resetBall();
     pendingReset = false;
 }
-
 void Game::applyGuttersAndBumpers() {
     sf::Vector2f p = ball.getPos();
     sf::Vector2f v = ball.getVel();
@@ -652,6 +685,35 @@ void Game::updateHud() {
 */
 
 void Game::update(float dt) {
+    // Don't allow gameplay when game is over
+    if (gameOver) {
+        // Only allow R key to restart
+        static bool prevR = false;
+        bool nowR = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
+        
+        if (nowR && !prevR) {
+            // Reset entire game
+            for (auto& frame : frames) {
+                frame = FrameScore();
+            }
+            currentFrame = 0;
+            currentBall = 1;
+            totalScore = 0;
+            gameOver = false;
+            finalScore = 0;
+            pendingReset = false;
+            
+            for (auto& pin : pins) {
+                pin.setActive(true);
+                pin.resetToOriginalPosition();
+            }
+            
+            resetBall();
+        }
+        
+        prevR = nowR;
+        return;  // Don't process rest of update
+    }
     // Aiming and Movement logic
     if (!rollLocked && !pendingReset) {
         sf::Vector2f p = ball.getPos();
@@ -770,6 +832,46 @@ void Game::update(float dt) {
     finishPendingResetIfReady(dt);
 }
 
+void Game::drawGameOverScreen(sf::RenderWindow& window) {
+    if (!fontOk) return;
+    
+    // Semi-transparent overlay
+    sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
+    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    window.draw(overlay);
+    
+    // Game Over text
+    sf::Text gameOverText(font, "GAME FINISHED!", 80);
+    gameOverText.setFillColor(sf::Color::Green);
+    gameOverText.setStyle(sf::Text::Bold);
+    sf::FloatRect bounds = gameOverText.getLocalBounds();
+    gameOverText.setPosition(sf::Vector2f(
+        windowW / 2 - bounds.size.x / 2,
+        windowH / 2 - 150
+    ));
+    window.draw(gameOverText);
+    
+    // Final score
+    sf::Text scoreText(font, "Your Score: " + std::to_string(finalScore), 50);
+    scoreText.setFillColor(sf::Color::Yellow);
+    bounds = scoreText.getLocalBounds();
+    scoreText.setPosition(sf::Vector2f(
+        windowW / 2 -bounds.size.x / 2,
+        windowH / 2 - 50
+    ));
+    window.draw(scoreText);
+    
+    // Restart instruction
+    sf::Text restartText(font, "Press R to Restart", 30);
+    restartText.setFillColor(sf::Color::White);
+    bounds = restartText.getLocalBounds();
+    restartText.setPosition(sf::Vector2f(
+        windowW / 2 - bounds.size.x / 2,
+        windowH / 2 + 50
+    ));
+    window.draw(restartText);
+}
+
 void Game::draw() {
     window.clear(sf::Color(20, 20, 20));
 
@@ -791,6 +893,10 @@ void Game::draw() {
     // Draw scorecard instead of old HUD
     drawScorecard(window);
 
+    // Draw game over screen if game is over
+    if (gameOver) {
+        drawGameOverScreen(window);
+    }
     window.display();
 }
 
