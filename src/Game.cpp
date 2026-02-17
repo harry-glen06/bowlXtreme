@@ -859,7 +859,7 @@ void Game::drawGameOverScreen(sf::RenderWindow& window) {
     sf::FloatRect bounds = gameOverText.getLocalBounds();
     gameOverText.setPosition(sf::Vector2f(
         windowW / 2 - bounds.size.x / 2,
-        windowH / 2 - 150
+        windowH / 2 - 220
     ));
     window.draw(gameOverText);
     
@@ -869,7 +869,7 @@ void Game::drawGameOverScreen(sf::RenderWindow& window) {
     bounds = scoreText.getLocalBounds();
     scoreText.setPosition(sf::Vector2f(
         windowW / 2 -bounds.size.x / 2,
-        windowH / 2 - 50
+        windowH / 2 - 100
     ));
     window.draw(scoreText);
 
@@ -894,7 +894,7 @@ void Game::drawGameOverScreen(sf::RenderWindow& window) {
     bounds = restartText.getLocalBounds();
     restartText.setPosition(sf::Vector2f(
         windowW / 2 - bounds.size.x / 2,
-        windowH / 2 + 50
+        windowH / 2 + 100
     ));
     window.draw(restartText);
 }
