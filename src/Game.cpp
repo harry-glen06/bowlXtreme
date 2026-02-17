@@ -5,6 +5,7 @@
 #include <ctime>
 #include <cstdlib>
 #include <algorithm>
+#include <fstream>
 
 Game::Game()
 : window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
@@ -43,6 +44,9 @@ Game::Game()
     
     // Load sound effects and background music
     loadSounds();
+
+    // Load high score
+    loadHighScore();
 }
 
 int Game::getPinsKnocked() {
@@ -346,6 +350,12 @@ void Game::drawScorecard(sf::RenderWindow& window) {
     indicator.setPosition(sf::Vector2f(startX + frameWidth, indicatorY));  // ← Position to the right of the frame
     indicator.setFillColor(sf::Color::Green);
     window.draw(indicator);
+        
+    // Show high score at bottom of scorecard
+    sf::Text highScoreDisplay(font, "High Score: " + std::to_string(highScore), 16);
+    highScoreDisplay.setPosition(sf::Vector2f(startX + 5, startY + (10 * frameHeight) + 10));
+    highScoreDisplay.setFillColor(sf::Color::Cyan);
+    window.draw(highScoreDisplay);
 }
 
 void Game::finishPendingResetIfReady(float dt) {
@@ -387,6 +397,7 @@ void Game::finishPendingResetIfReady(float dt) {
         // Set game over
         gameOver = true;
         finalScore = totalScore;
+        saveHighScore();
     }
 
     // Handle different frame scenarios
@@ -509,6 +520,7 @@ void Game::finishPendingResetIfReady(float dt) {
                     // Set game over
                     gameOver = true;
                     finalScore = totalScore;
+                    saveHighScore();
                 }
             
         } else if (currentBall == 3) {
@@ -860,6 +872,21 @@ void Game::drawGameOverScreen(sf::RenderWindow& window) {
         windowH / 2 - 50
     ));
     window.draw(scoreText);
+
+    // NEW: High score
+    sf::Text highScoreText(font, "High Score: " + std::to_string(highScore), 40);
+    if (finalScore >= highScore && finalScore > 0) {
+        highScoreText.setString("NEW HIGH SCORE!");
+        highScoreText.setFillColor(sf::Color::Green);
+    } else {
+        highScoreText.setFillColor(sf::Color::Red);
+    }
+    bounds = highScoreText.getLocalBounds();
+    highScoreText.setPosition(sf::Vector2f(
+        windowW / 2 - bounds.size.x / 2,
+        windowH / 2 - 20
+    ));
+    window.draw(highScoreText);
     
     // Restart instruction
     sf::Text restartText(font, "Press R to Restart", 30);
@@ -910,4 +937,25 @@ void Game::applyLetterbox(unsigned winW, unsigned winH) {
 
     view.setViewport(sf::FloatRect(sf::Vector2f(posX, posY), sf::Vector2f(sizeX, sizeY)));
     window.setView(view);
+}
+
+void Game::loadHighScore() {
+    std::ifstream file("highscore.txt");
+    if (file.is_open()) {
+        file >> highScore;
+        file.close();
+    } else {
+        highScore = 0;  // No file yet, start at 0
+    }
+}
+
+void Game::saveHighScore() {
+    if (finalScore > highScore) {
+        highScore = finalScore;
+        std::ofstream file("highscore.txt");
+        if (file.is_open()) {
+            file << highScore;
+            file.close();
+        }
+    }
 }

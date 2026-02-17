@@ -122,4 +122,9 @@ private:
     // Game over state
     bool gameOver = false;
     int finalScore = 0;
+    
+    // High score tracking
+    int highScore = 0;
+    void loadHighScore();
+    void saveHighScore();
 };
