@@ -29,11 +29,14 @@ Game::Game()
     ball.reset(sf::Vector2f(windowW / 2.0f, lane.bottom - 30.0f));
     pins = createPins(lane.centerX(), 240.0f);
     
-    // Audio and UI automatically initialize themselves
-    audio.playBackgroundMusic();
+    // Audio automatically initializes itself
+    // Start on menu, so no game music yet
     
     // Load high score
     loadHighScore();
+    
+    // Start in menu state
+    ui.setState(GameState::Menu);
 }
 
 std::vector<Pin> Game::createPins(float centerX, float startY) {
@@ -99,6 +102,47 @@ void Game::handleEvents() {
             auto r = ev->getIf<sf::Event::Resized>();
             applyLetterbox(r->size.x, r->size.y);
         }
+        
+        // Handle mouse clicks for menu
+        if (ev->is<sf::Event::MouseButtonPressed>()) {
+            auto mouseEv = ev->getIf<sf::Event::MouseButtonPressed>();
+            if (mouseEv->button == sf::Mouse::Button::Left) {
+                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                
+                // Convert to world coordinates
+                sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+                
+                if (ui.getState() == GameState::Menu) {
+                    MenuButton clicked = ui.handleMenuClick(window, sf::Vector2i(worldPos.x, worldPos.y));
+                    
+                    if (clicked == MenuButton::Normal) {
+                        // Start normal game
+                        ui.setState(GameState::Playing);
+                        scorer.resetGame();
+                        gameOver = false;
+                        
+                        // Apply settings
+                        lane.bumpersOn = ui.getBumpersDefault();
+                        
+                        // Reset everything
+                        for (auto& pin : pins) {
+                            pin.setActive(true);
+                            pin.resetToOriginalPosition();
+                        }
+                        resetBall();
+                        
+                        // Start game music
+                        audio.playBackgroundMusic();
+                        
+                    } else if (clicked == MenuButton::Xtreme) {
+                        // TODO: Xtreme mode - coming later!
+                        
+                    } else if (clicked == MenuButton::Settings) {
+                        // Show settings (we'll implement this next)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -145,10 +189,11 @@ void Game::finishPendingResetIfReady(float dt) {
         }
     }
 
-    // Handle gutter ball
-    if (inGutter) {
-        knockedThisBall = 0;
+    // FIXED: Gutter ball only if ball went in gutter AND didn't knock down any pins
+    if (inGutter && knockedThisBall == 0) {
+        knockedThisBall = 0;  // Confirm it's a gutter ball (0 pins)
     }
+    // If ball hit pins THEN went in gutter, still count the pins!
 
     // Record score in bowling scorer
     scorer.recordBall(knockedThisBall);
@@ -386,6 +431,11 @@ void Game::doCollisions() {
 }
 
 void Game::update(float dt) {
+    // If in menu, don't update game logic
+    if (ui.getState() == GameState::Menu) {
+        return;
+    }
+    
     // Handle game over state
     if (gameOver) {
         static bool prevR = false;
@@ -532,6 +582,15 @@ void Game::update(float dt) {
 void Game::draw() {
     window.clear(sf::Color(20, 20, 20));
 
+    // Draw menu if in menu state
+    if (ui.getState() == GameState::Menu) {
+        float dt = clock.getElapsedTime().asSeconds();
+        ui.drawMenu(window, windowW, windowH, dt);
+        window.display();
+        return;
+    }
+
+    // Draw game
     lane.draw(window);
     for (const auto& pin : pins) pin.draw(window);
 
