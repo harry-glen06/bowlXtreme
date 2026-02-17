@@ -2,6 +2,42 @@
 #include <cmath>
 #include <cstdlib>
 
+// Helper functions
+sf::ConvexShape createRoundedRect(sf::Vector2f size, float radius, sf::Color color, int pointsPerCorner = 10) {
+    sf::ConvexShape shape;
+    shape.setPointCount(pointsPerCorner * 4);
+    shape.setFillColor(color);
+
+    float width = size.x;
+    float height = size.y;
+
+    for (int i = 0; i < pointsPerCorner; i++) {
+        float angle = i * 1.5708f / (pointsPerCorner - 1); // 0 to 90 degrees
+        float x = width - radius + std::cos(angle) * radius;
+        float y = height - radius + std::sin(angle) * radius;
+        shape.setPoint(i, sf::Vector2f(x, y));
+    }
+    for (int i = 0; i < pointsPerCorner; i++) {
+        float angle = 1.5708f + i * 1.5708f / (pointsPerCorner - 1); // 90 to 180
+        float x = radius + std::cos(angle) * radius;
+        float y = height - radius + std::sin(angle) * radius;
+        shape.setPoint(pointsPerCorner + i, sf::Vector2f(x, y));
+    }
+    for (int i = 0; i < pointsPerCorner; i++) {
+        float angle = 3.14159f + i * 1.5708f / (pointsPerCorner - 1); // 180 to 270
+        float x = radius + std::cos(angle) * radius;
+        float y = radius + std::sin(angle) * radius;
+        shape.setPoint(pointsPerCorner * 2 + i, sf::Vector2f(x, y));
+    }
+    for (int i = 0; i < pointsPerCorner; i++) {
+        float angle = 4.71239f + i * 1.5708f / (pointsPerCorner - 1); // 270 to 360
+        float x = width - radius + std::cos(angle) * radius;
+        float y = radius + std::sin(angle) * radius;
+        shape.setPoint(pointsPerCorner * 3 + i, sf::Vector2f(x, y));
+    }
+    return shape;
+}
+
 UI::UI() {
     loadFont();
 }
@@ -110,14 +146,14 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     
     // O - Cyan
     sf::RectangleShape blockO(sf::Vector2f(blockWidth, blockHeight));
-    blockO.setPosition(sf::Vector2f(logoX + blockWidth, logoY));
+    blockO.setPosition(sf::Vector2f(logoX + blockWidth, logoY - 10));
     blockO.setFillColor(sf::Color(80, 200, 220));
     blockO.setOutlineColor(sf::Color::Black);
     blockO.setOutlineThickness(3.0f);
     window.draw(blockO);
     
     sf::Text letterO(font, "O", 90);
-    letterO.setPosition(sf::Vector2f(logoX + blockWidth + 20, logoY + 15));
+    letterO.setPosition(sf::Vector2f(logoX + blockWidth + 20, logoY + 5));
     letterO.setFillColor(sf::Color::White);
     letterO.setOutlineColor(sf::Color::Black);
     letterO.setOutlineThickness(3.0f);
@@ -125,14 +161,14 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     
     // W - Yellow
     sf::RectangleShape blockW(sf::Vector2f(blockWidth, blockHeight));
-    blockW.setPosition(sf::Vector2f(logoX + blockWidth * 2, logoY));
+    blockW.setPosition(sf::Vector2f(logoX + blockWidth * 2, logoY + 8));
     blockW.setFillColor(sf::Color(240, 220, 50));
     blockW.setOutlineColor(sf::Color::Black);
     blockW.setOutlineThickness(3.0f);
     window.draw(blockW);
     
     sf::Text letterW(font, "W", 90);
-    letterW.setPosition(sf::Vector2f(logoX + blockWidth * 2 + 10, logoY + 15));
+    letterW.setPosition(sf::Vector2f(logoX + blockWidth * 2 + 10, logoY + 23));
     letterW.setFillColor(sf::Color::Black);
     letterW.setOutlineColor(sf::Color::White);
     letterW.setOutlineThickness(2.0f);
@@ -140,14 +176,14 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     
     // L - Light Blue
     sf::RectangleShape blockL(sf::Vector2f(blockWidth, blockHeight));
-    blockL.setPosition(sf::Vector2f(logoX + blockWidth * 3, logoY));
+    blockL.setPosition(sf::Vector2f(logoX + blockWidth * 3, logoY + 3));
     blockL.setFillColor(sf::Color(120, 190, 230));
     blockL.setOutlineColor(sf::Color::Black);
     blockL.setOutlineThickness(3.0f);
     window.draw(blockL);
     
     sf::Text letterL(font, "L", 90);
-    letterL.setPosition(sf::Vector2f(logoX + blockWidth * 3 + 30, logoY + 15));
+    letterL.setPosition(sf::Vector2f(logoX + blockWidth * 3 + 30, logoY + 18));
     letterL.setFillColor(sf::Color::White);
     letterL.setOutlineColor(sf::Color::Black);
     letterL.setOutlineThickness(3.0f);
@@ -162,7 +198,7 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     window.draw(xtremeBox);
     
     sf::Text xtremeText(font, "Xtreme", 60);
-    xtremeText.setPosition(sf::Vector2f(windowW / 2 - 140, logoY + blockHeight + 28));
+    xtremeText.setPosition(sf::Vector2f(windowW / 2 - 140, logoY + blockHeight + 20));
     xtremeText.setFillColor(sf::Color(220, 50, 50));
     xtremeText.setStyle(sf::Text::Bold);
     window.draw(xtremeText);
@@ -174,13 +210,21 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     float buttonHeight = 60.0f;
     
     // Button container background
-    sf::RectangleShape buttonContainer(sf::Vector2f(buttonWidth * 3 + buttonSpacing * 4, buttonHeight + 40));
+    sf::ConvexShape buttonContainer = createRoundedRect(
+        sf::Vector2f(buttonWidth * 3 + buttonSpacing * 4, buttonHeight + 40), 
+        20.0f, 
+        sf::Color(100, 100, 100, 200)
+    );    
     buttonContainer.setPosition(sf::Vector2f(windowW / 2 - (buttonWidth * 3 + buttonSpacing * 4) / 2, buttonY - 20));
     buttonContainer.setFillColor(sf::Color(100, 100, 100, 200));
     window.draw(buttonContainer);
     
     // Normal button (Red)
-    sf::RectangleShape normalButton(sf::Vector2f(buttonWidth, buttonHeight));
+    sf::ConvexShape normalButton = createRoundedRect(
+    sf::Vector2f(buttonWidth, buttonHeight), 
+    15.0f, 
+    sf::Color(220, 50, 50)
+    );
     normalButton.setPosition(sf::Vector2f(windowW / 2 - buttonWidth * 1.5f - buttonSpacing, buttonY));
     normalButton.setFillColor(sf::Color(220, 50, 50));
     window.draw(normalButton);
@@ -191,7 +235,11 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     window.draw(normalText);
     
     // Xtreme button (Cyan)
-    sf::RectangleShape xtremeButton(sf::Vector2f(buttonWidth, buttonHeight));
+    sf::ConvexShape xtremeButton = createRoundedRect(
+    sf::Vector2f(buttonWidth, buttonHeight), 
+    15.0f, 
+    sf::Color(80, 200, 220)
+    );
     xtremeButton.setPosition(sf::Vector2f(windowW / 2 - buttonWidth / 2, buttonY));
     xtremeButton.setFillColor(sf::Color(80, 200, 220));
     window.draw(xtremeButton);
@@ -202,7 +250,11 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     window.draw(xtremeButtonText);
     
     // Settings button (Yellow)
-    sf::RectangleShape settingsButton(sf::Vector2f(buttonWidth, buttonHeight));
+    sf::ConvexShape settingsButton = createRoundedRect(
+    sf::Vector2f(buttonWidth, buttonHeight), 
+    15.0f, 
+    sf::Color(240, 220, 50)
+    );
     settingsButton.setPosition(sf::Vector2f(windowW / 2 + buttonWidth / 2 + buttonSpacing, buttonY));
     settingsButton.setFillColor(sf::Color(240, 220, 50));
     window.draw(settingsButton);
@@ -214,8 +266,8 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
 }
 
 MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
-    float windowW = window.getSize().x;
-    float windowH = window.getSize().y;
+    float windowW = 1024.0f; //window.getSize().x;
+    float windowH = 1024.0f; //window.getSize().y;
     
     float buttonY = windowH - 200;
     float buttonSpacing = 20.0f;
@@ -373,14 +425,14 @@ void UI::handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
     // TODO: Handle slider dragging (implement in next version if needed)
 }
 
-void UI::drawScorecard(sf::RenderWindow& window, 
+GameAction UI::drawScorecard(sf::RenderWindow& window, 
                        const std::array<FrameScore, 10>& frames,
                        int currentFrame, 
                        int currentBall, 
                        int highScore,
                        float windowW, 
                        float windowH) {
-    if (!fontLoaded) return;
+    if (!fontLoaded) return GameAction::None;
     
     float startX = 10.0f;
     float startY = 100.0f;
@@ -457,6 +509,7 @@ void UI::drawScorecard(sf::RenderWindow& window,
             scoreText.setFillColor(sf::Color::Yellow);
             window.draw(scoreText);
         }
+        
     }
     
     // Current frame indicator
@@ -471,6 +524,29 @@ void UI::drawScorecard(sf::RenderWindow& window,
     highScoreDisplay.setPosition(sf::Vector2f(startX + 5, startY + (10 * frameHeight) + 10));
     highScoreDisplay.setFillColor(sf::Color::Cyan);
     window.draw(highScoreDisplay);
+
+    // Define the Exit Button area
+    sf::RectangleShape exitBtn(sf::Vector2f(120, 40));
+    exitBtn.setPosition(sf::Vector2f(windowW - 140, 20)); // Top right corner
+    exitBtn.setFillColor(sf::Color(100, 100, 100, 200));
+    exitBtn.setOutlineThickness(2);
+    exitBtn.setOutlineColor(sf::Color::White);
+    // Draw the Button
+    window.draw(exitBtn);
+    sf::Text exitText(font, "MENU", 20);
+    exitText.setPosition(sf::Vector2f(windowW - 110, 27));
+    exitText.setFillColor(sf::Color::White);
+    window.draw(exitText);
+    // Handle Click Detection
+    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+        sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+
+        if (exitBtn.getGlobalBounds().contains(worldPos)) {
+            return GameAction::ExitToMenu;
+        }
+    }
+    return GameAction::None;
 }
 
 void UI::drawGameOverScreen(sf::RenderWindow& window, 

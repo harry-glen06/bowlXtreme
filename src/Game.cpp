@@ -37,6 +37,7 @@ Game::Game()
     
     // Start in menu state
     ui.setState(GameState::Menu);
+    audio.playMenuMusic();
 }
 
 std::vector<Pin> Game::createPins(float centerX, float startY) {
@@ -132,7 +133,8 @@ void Game::handleEvents() {
                         resetBall();
                         
                         // Start game music
-                        audio.playBackgroundMusic();
+                        // SWITCH MUSIC:
+                        audio.playBackgroundMusic(); // This will stop menu music and start .flac
                         
                     } else if (clicked == MenuButton::Xtreme) {
                         // TODO: Xtreme mode - coming later!
@@ -433,6 +435,7 @@ void Game::doCollisions() {
 void Game::update(float dt) {
     // If in menu, don't update game logic
     if (ui.getState() == GameState::Menu) {
+        audio.playMenuMusic();
         return;
     }
     
@@ -607,12 +610,23 @@ void Game::draw() {
 
     ball.draw(window);
     
-    // Draw UI
-    ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(), 
+    // Draw UI and check for actions (like exiting to menu)
+    GameAction action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(), 
                      scorer.getCurrentBall(), highScore, windowW, windowH);
     
     if (gameOver) {
         ui.drawGameOverScreen(window, finalScore, highScore, windowW, windowH);
+    }
+
+    // Now handle the action returned from the scorecard UI
+    if (action == GameAction::ExitToMenu) {
+        ui.setState(GameState::Menu);
+        scorer.resetGame();
+        resetBall();
+        pins = createPins(lane.centerX(), 240.0f);
+        audio.stopBackgroundMusic();
+        audio.stopBallRoll();
+        audio.playMenuMusic();
     }
 
     window.display();

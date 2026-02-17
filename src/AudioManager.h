@@ -9,23 +9,24 @@ public:
     // Initialization
     void loadSounds();
     
-    // Sound playback
+    // Sound playback (SFX)
     void playRandomPinHit(float volume = 70.0f);
     void playPinCollision(float volume = 50.0f);
     void startBallRoll();
     void stopBallRoll();
     
     // Music control
-    void playBackgroundMusic();
-    void stopBackgroundMusic();
+    void playMenuMusic();          // Cycles music1.wav and music2.wav
+    void playBackgroundMusic();    // Plays background_music.flac for gameplay
+    void stopBackgroundMusic();    // Stops all music (Menu and Game)
     void setMusicVolume(float volume);
     
-    // State
+    // State Getters
     bool areSoundsLoaded() const { return soundsLoaded; }
     bool isBallRolling() const { return ballRolling; }
-    
+
 private:
-    // Sound buffers
+    // Sound buffers (Stored in RAM)
     sf::SoundBuffer ballRollBuffer;
     sf::SoundBuffer pinHitBuffer1;
     sf::SoundBuffer pinHitBuffer2;
@@ -34,7 +35,7 @@ private:
     sf::SoundBuffer pinHitBuffer5;
     sf::SoundBuffer pinCollisionBuffer;
     
-    // Sound objects
+    // Sound objects (Using unique_ptr for safe memory management)
     std::unique_ptr<sf::Sound> ballRollSound;
     std::unique_ptr<sf::Sound> pinHitSound1;
     std::unique_ptr<sf::Sound> pinHitSound2;
@@ -43,11 +44,14 @@ private:
     std::unique_ptr<sf::Sound> pinHitSound5;
     std::unique_ptr<sf::Sound> pinCollisionSound;
     
-    // Background music
-    sf::Music backgroundMusic;
+    // Music objects (Streamed from disk to save memory)
+    sf::Music menuMusic1;   // For assets/music1.wav
+    sf::Music menuMusic2;   // For assets/music2.wav
+    sf::Music gameMusic;    // For assets/background_music.flac
     
-    // State
+    // Internal State
+    int currentTrack = 0;   // Tracks which menu track to play next
     bool soundsLoaded = false;
     bool ballRolling = false;
-    float masterVolume = 1.0f;
+    float masterVolume = 0.5f; // Default volume (50%)
 };

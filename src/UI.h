@@ -14,7 +14,12 @@ enum class MenuButton {
     None,
     Normal,
     Xtreme,
-    Settings
+    Settings,
+};
+
+enum class GameAction {
+    None,
+    ExitToMenu
 };
 
 class UI {
@@ -32,7 +37,7 @@ public:
     void handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos);
     
     // Game UI
-    void drawScorecard(sf::RenderWindow& window, 
+    GameAction drawScorecard(sf::RenderWindow& window, 
                        const std::array<FrameScore, 10>& frames, 
                        int currentFrame, 
                        int currentBall, 

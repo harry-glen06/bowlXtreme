@@ -6,64 +6,103 @@ AudioManager::AudioManager() {
 }
 
 void AudioManager::loadSounds() {
-    // Load ball roll sound
+    // --- Sound Effects (.wav) ---
     if (ballRollBuffer.loadFromFile("assets/ball_roll.wav")) {
         ballRollSound = std::make_unique<sf::Sound>(ballRollBuffer);
         ballRollSound->setLooping(true);
         ballRollSound->setVolume(95.0f);
     }
     
-    // Load 5 different pin hit sounds
     if (pinHitBuffer1.loadFromFile("assets/pin_hit1.wav")) {
         pinHitSound1 = std::make_unique<sf::Sound>(pinHitBuffer1);
-        pinHitSound1->setVolume(70.0f);
     }
-    
     if (pinHitBuffer2.loadFromFile("assets/pin_hit2.wav")) {
         pinHitSound2 = std::make_unique<sf::Sound>(pinHitBuffer2);
-        pinHitSound2->setVolume(70.0f);
     }
-    
     if (pinHitBuffer3.loadFromFile("assets/pin_hit3.wav")) {
         pinHitSound3 = std::make_unique<sf::Sound>(pinHitBuffer3);
-        pinHitSound3->setVolume(70.0f);
     }
-    
     if (pinHitBuffer4.loadFromFile("assets/pin_hit4.wav")) {
         pinHitSound4 = std::make_unique<sf::Sound>(pinHitBuffer4);
-        pinHitSound4->setVolume(70.0f);
     }
-    
     if (pinHitBuffer5.loadFromFile("assets/pin_hit5.wav")) {
         pinHitSound5 = std::make_unique<sf::Sound>(pinHitBuffer5);
-        pinHitSound5->setVolume(70.0f);
     }
     
-    // Load pin collision sound
     if (pinCollisionBuffer.loadFromFile("assets/pin_collision.wav")) {
         pinCollisionSound = std::make_unique<sf::Sound>(pinCollisionBuffer);
         pinCollisionSound->setVolume(50.0f);
-    } else if (pinHitBuffer1.getDuration().asSeconds() > 0) {
-        // Reuse pin_hit1 if no dedicated collision sound
-        pinCollisionSound = std::make_unique<sf::Sound>(pinHitBuffer1);
-        pinCollisionSound->setVolume(40.0f);
     }
     
-    // Load background music
-    if (backgroundMusic.openFromFile("assets/background_music.flac")) {
-        backgroundMusic.setLooping(true);
-        backgroundMusic.setVolume(masterVolume * 100.0f);
+    // --- Music Files (Using if checks to silence [[nodiscard]] warnings) ---
+    
+    if (menuMusic1.openFromFile("assets/music1.wav")) {
+        menuMusic1.setLooping(false); 
+    }
+    
+    if (menuMusic2.openFromFile("assets/music2.wav")) {
+        menuMusic2.setLooping(false);
+    }
+
+    if (gameMusic.openFromFile("assets/background_music.flac")) {
+        gameMusic.setLooping(true);
     }
     
     soundsLoaded = true;
 }
 
+void AudioManager::playMenuMusic() {
+    // Stop game music if transitioning from game to menu
+    if (gameMusic.getStatus() == sf::Music::Status::Playing) {
+        gameMusic.stop();
+    }
+
+    // If a menu track is already playing, just let it finish
+    if (menuMusic1.getStatus() == sf::Music::Status::Playing || 
+        menuMusic2.getStatus() == sf::Music::Status::Playing) {
+        return;
+    }
+
+    // Cycle between the two menu tracks
+    if (currentTrack != 1) {
+        menuMusic1.play();
+        currentTrack = 1;
+    } else {
+        menuMusic2.play();
+        currentTrack = 2;
+    }
+}
+
+void AudioManager::playBackgroundMusic() {
+    // Stop menu music
+    menuMusic1.stop();
+    menuMusic2.stop();
+
+    // Play the main game music (.flac)
+    if (gameMusic.getStatus() != sf::Music::Status::Playing) {
+        gameMusic.play();
+    }
+}
+
+void AudioManager::stopBackgroundMusic() {
+    menuMusic1.stop();
+    menuMusic2.stop();
+    gameMusic.stop();
+    currentTrack = 0;
+}
+
+void AudioManager::setMusicVolume(float volume) {
+    // SFML volume is 0 to 100
+    menuMusic1.setVolume(volume);
+    menuMusic2.setVolume(volume);
+    gameMusic.setVolume(volume);
+}
+
+// --- Sound Effect Logic ---
+
 void AudioManager::playRandomPinHit(float volume) {
     if (!soundsLoaded) return;
-    
-    // Pick a random sound from 1-5
     int randomSound = rand() % 5 + 1;
-    
     sf::Sound* sound = nullptr;
     switch(randomSound) {
         case 1: sound = pinHitSound1.get(); break;
@@ -72,7 +111,6 @@ void AudioManager::playRandomPinHit(float volume) {
         case 4: sound = pinHitSound4.get(); break;
         case 5: sound = pinHitSound5.get(); break;
     }
-    
     if (sound && sound->getStatus() != sf::SoundSource::Status::Playing) {
         sound->setVolume(volume);
         sound->play();
@@ -81,7 +119,6 @@ void AudioManager::playRandomPinHit(float volume) {
 
 void AudioManager::playPinCollision(float volume) {
     if (!soundsLoaded || !pinCollisionSound) return;
-    
     if (pinCollisionSound->getStatus() != sf::SoundSource::Status::Playing) {
         pinCollisionSound->setVolume(volume);
         pinCollisionSound->play();
@@ -90,7 +127,6 @@ void AudioManager::playPinCollision(float volume) {
 
 void AudioManager::startBallRoll() {
     if (!soundsLoaded || !ballRollSound) return;
-    
     if (ballRollSound->getStatus() != sf::SoundSource::Status::Playing) {
         ballRollSound->play();
         ballRolling = true;
@@ -102,19 +138,4 @@ void AudioManager::stopBallRoll() {
         ballRollSound->stop();
         ballRolling = false;
     }
-}
-
-void AudioManager::playBackgroundMusic() {
-    if (backgroundMusic.getStatus() != sf::Music::Status::Playing) {
-        backgroundMusic.play();
-    }
-}
-
-void AudioManager::stopBackgroundMusic() {
-    backgroundMusic.stop();
-}
-
-void AudioManager::setMusicVolume(float volume) {
-    masterVolume = volume;
-    backgroundMusic.setVolume(masterVolume * 100.0f);
 }
