@@ -7,8 +7,6 @@
 #include <algorithm>
 #include <fstream>
 
-static int bestRound = 0;
-
 Game::Game()
 : window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
 , ball(25.0f)
@@ -69,21 +67,20 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
 void Game::loadHighScore() {
     std::ifstream file("highscore.txt");
     if (file.is_open()) {
-        file >> highScore;
+        file >> normalHighScore >> xtremeBestRound;
         file.close();
     } else {
-        highScore = 0;
+        normalHighScore = 0;
+        xtremeBestRound = 0;
     }
 }
 
 void Game::saveHighScore() {
-    if (finalScore > highScore) {
-        highScore = finalScore;
-        std::ofstream file("highscore.txt");
-        if (file.is_open()) {
-            file << highScore;
-            file.close();
-        }
+    std::ofstream file("highscore.txt");
+    if (file.is_open()) {
+        file << normalHighScore << "\n";
+        file << xtremeBestRound << "\n";
+        file.close();
     }
 }
 
@@ -121,6 +118,7 @@ void Game::handleEvents() {
                     MenuButton clicked = ui.handleMenuClick(window, sf::Vector2i(worldPos.x, worldPos.y));
                     
                     if (clicked == MenuButton::Normal) {
+                        xtremeMode = false;
                         // Start normal game
                         ui.setState(GameState::Playing);
                         scorer.resetGame();
@@ -320,14 +318,24 @@ void Game::finishPendingResetIfReady(float dt) {
     if (ui.getState() == GameState::Xtreme) {
         if (xtreme.isGameOver()) {
             gameOver = true;
-            int finalRound = xtreme.getRoundScore();
-            saveHighScore();
+
+            finalXtremeRoundsCleared = std::max(0, xtreme.getRound() - 1);
+
+            if (finalXtremeRoundsCleared > xtremeBestRound) {
+                xtremeBestRound = finalXtremeRoundsCleared;
+                saveHighScore();
+            }
         }
     } else {
         if (scorer.isGameOver()) {
             gameOver = true;
-            finalScore = scorer.getTotalScore();
-            saveHighScore();
+
+            finalNormalScore = scorer.getTotalScore();
+
+            if (finalNormalScore > normalHighScore) {
+                normalHighScore = finalNormalScore;
+                saveHighScore();
+            }
         }
     }
 
@@ -702,30 +710,24 @@ void Game::draw() {
         );
     } else {
         action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),
-                         scorer.getCurrentBall(), highScore, windowW, windowH);
+                         scorer.getCurrentBall(), normalHighScore, windowW, windowH);
     }
     
     if (gameOver) {
         if (xtremeMode) {
-            int finalRound = xtreme.getRoundScore() - 1; // rounds cleared
-            bestRound = std::max(bestRound, finalRound);
-
             ui.drawGameOverScreen(window,
-                                GameOverMode::Xtreme,
-                                finalRound,
-                                bestRound,
-                                windowW,
-                                windowH);
+                GameOverMode::Xtreme,
+                finalXtremeRoundsCleared,
+                xtremeBestRound,
+                windowW,
+                windowH);
         } else {
-            int finalScore = scorer.getTotalScore();
-            highScore = std::max(highScore, finalScore);
-
             ui.drawGameOverScreen(window,
-                                GameOverMode::NormalBowling,
-                                finalScore,
-                                highScore,
-                                windowW,
-                                windowH);
+                GameOverMode::NormalBowling,
+                finalNormalScore,
+                normalHighScore,
+                windowW,
+                windowH);
         }
     }
 

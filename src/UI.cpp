@@ -429,7 +429,7 @@ GameAction UI::drawScorecard(sf::RenderWindow& window,
                        const std::array<FrameScore, 10>& frames,
                        int currentFrame, 
                        int currentBall, 
-                       int highScore,
+                       int normalHighScore,
                        float windowW, 
                        float windowH) {
     if (!fontLoaded) return GameAction::None;
@@ -520,7 +520,7 @@ GameAction UI::drawScorecard(sf::RenderWindow& window,
     window.draw(indicator);
         
     // Show high score at bottom
-    sf::Text highScoreDisplay(font, "High Score: " + std::to_string(highScore), 16);
+    sf::Text highScoreDisplay(font, "High Score: " + std::to_string(normalHighScore), 16);
     highScoreDisplay.setPosition(sf::Vector2f(startX + 5, startY + (10 * frameHeight) + 10));
     highScoreDisplay.setFillColor(sf::Color::Cyan);
     window.draw(highScoreDisplay);
@@ -717,7 +717,7 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     ? "Best Round: "
     : "High Score: ";
     sf::Text highScoreText(font, bestLabel + std::to_string(highScore), 40);
-    if (highScore >= finalScore && highScore > 0) {
+    if (finalScore == highScore && finalScore > 0) {
         highScoreText.setString((mode == GameOverMode::Xtreme) ? "NEW BEST ROUND!" : "NEW HIGH SCORE!");
         highScoreText.setFillColor(sf::Color::Green);
     } else {

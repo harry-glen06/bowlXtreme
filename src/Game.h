@@ -37,6 +37,10 @@ private:
     // High score tracking
     void loadHighScore();
     void saveHighScore();
+    int normalHighScore = 0;
+    int xtremeBestRound = 0;
+    int finalNormalScore = 0;
+    int finalXtremeRoundsCleared = 0;
 
 private:
     const float windowW = 1024.0f;
