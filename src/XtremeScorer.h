@@ -58,4 +58,6 @@ private:
     int lastShotScore = 10;
     int lastPinsHit = 0;
     int lastPinValueSum = 0;
+
+    bool roundPassed = false;
 };

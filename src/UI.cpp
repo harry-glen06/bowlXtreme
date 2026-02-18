@@ -618,7 +618,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     window.draw(shotScore);
     y += 34;
 
-    sf::Text roundScoreText(font, "round score: " + std::to_string(roundScore), 32);
+    sf::Text roundScoreText(font, "round score: " + std::to_string(roundScore), 28);
     roundScoreText.setPosition(sf::Vector2f(lx, y));
     roundScoreText.setFillColor(sf::Color::Black);
     window.draw(roundScoreText);

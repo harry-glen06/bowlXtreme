@@ -16,6 +16,7 @@ void XtremeScorer::reset() {
     lastShotScore = baseImpact * baseCombo;
     lastPinsHit = 0;
     lastPinValueSum = 0;
+    roundPassed = false;
 }
 
 void XtremeScorer::recordShot(int pinsHit, int pinValueSum) {
@@ -33,28 +34,51 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum) {
 
     roundScore += lastShotScore;
 
-    // Advance shot/frame/round
+    // If we ever hit the target, lock it in for this round
+    if (roundScore >= targetScore) {
+        roundPassed = true;
+    }
+
+    // Advance shot
     if (shotInFrame == 1) {
         shotInFrame = 2;
         return;
     }
 
-    // shot 2 completed
+    // Shot 2 completed, move to next frame or round
     shotInFrame = 1;
 
+    // Finished frame 1
     if (frameInRound == 1) {
+        // If we already passed, skip frame 2 and start next round
+        if (roundPassed) {
+            round++;
+            targetScore += targetIncrease;
+            roundScore = 0;
+            frameInRound = 1;
+            shotInFrame = 1;
+            roundPassed = false;
+            return;
+        }
+
+        // Otherwise go to frame 2
         frameInRound = 2;
         return;
     }
 
-    // Round complete (2 frames)
+    // Finished frame 2 => round complete
     frameInRound = 1;
 
-    // Lose condition: you must meet the target by the end of the round
-    if (roundScore < targetScore) lost = true;
+    // Only lose if we never passed
+    if (!roundPassed) {
+        lost = true;
+        return;
+    }
 
     // Passed the round
     round++;
     targetScore += targetIncrease;
     roundScore = 0;
+    roundPassed = false;
 }
+
