@@ -703,7 +703,7 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     std::string mainLabel = (mode == GameOverMode::Xtreme)
     ? "Rounds Cleared: "
     : "Final Score: ";
-    sf::Text scoreText(font, mainLabel + std::to_string(mainValue), 50);
+    sf::Text scoreText(font, mainLabel + std::to_string(finalScore), 50);
     scoreText.setFillColor(sf::Color::Yellow);
     bounds = scoreText.getLocalBounds();
     scoreText.setPosition(sf::Vector2f(
@@ -716,8 +716,8 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     std::string bestLabel = (mode == GameOverMode::Xtreme)
     ? "Best Round: "
     : "High Score: ";
-    sf::Text highScoreText(font, bestLabel + std::to_string(bestValue), 40);
-    if (mainValue >= bestValue && mainValue > 0) {
+    sf::Text highScoreText(font, bestLabel + std::to_string(highScore), 40);
+    if (highScore >= finalScore && highScore > 0) {
         highScoreText.setString((mode == GameOverMode::Xtreme) ? "NEW BEST ROUND!" : "NEW HIGH SCORE!");
         highScoreText.setFillColor(sf::Color::Green);
     } else {
