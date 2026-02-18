@@ -7,6 +7,7 @@
 #include "Ball.h"
 #include "Pin.h"
 #include "BowlingScorer.h"
+#include "XtremeScorer.h"
 #include "AudioManager.h"
 #include "UI.h"
 
@@ -50,6 +51,7 @@ private:
 
     // Subsystems
     BowlingScorer scorer;
+    XtremeScorer xtreme;
     AudioManager audio;
     UI ui;
 
@@ -77,6 +79,9 @@ private:
     // Game over state
     bool gameOver = false;
     int finalScore = 0;
+
+    bool xtremeMode = false;
+    int bestRound = 0;
     
     // High score
     int highScore = 0;

@@ -8,7 +8,13 @@
 enum class GameState {
     Menu,
     Playing,
+    Xtreme,
     GameOver
+};
+
+enum class GameOverMode {
+    NormalBowling,
+    Xtreme
 };
 
 enum class MenuButton {
@@ -45,8 +51,22 @@ public:
                        int highScore,
                        float windowW, 
                        float windowH);
+
+    // Xtreme HUD (new scoring)
+    GameAction drawXtremeHUD(sf::RenderWindow& window,
+                             int round,
+                             int frameInRound,
+                             int shotInFrame,
+                             int targetScore,
+                             int roundScore,
+                             int impact,
+                             int combo,
+                             int lastShotScore,
+                             float windowW,
+                             float windowH);
     
-    void drawGameOverScreen(sf::RenderWindow& window, 
+    void drawGameOverScreen(sf::RenderWindow& window,
+                           GameOverMode mode,
                            int finalScore, 
                            int highScore, 
                            float windowW, 

@@ -20,8 +20,11 @@ private:
 
     bool active;
 
+    // Xtreme mode: pins have values (1-10)
+    int value = 0;
+
 public:
-    Pin(sf::Vector2f startPosition, float radius);
+    Pin(sf::Vector2f startPosition, float radius, int value = 0);
 
     void update(float dt);
     void draw(sf::RenderWindow& window) const;
@@ -41,6 +44,9 @@ public:
     bool isFallen() const;
     void setFallen(bool f);      
     float getAngle() const;
+
+    int getValue() const { return value; }
+    void setValue(int v) { value = v; }
 
     // Optional but useful for spin
     float getAngularVel() const;

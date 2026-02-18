@@ -5,7 +5,7 @@ static float length(sf::Vector2f v) {
     return std::sqrt(v.x * v.x + v.y * v.y);
 }
 
-Pin::Pin(sf::Vector2f startPosition, float radius)
+Pin::Pin(sf::Vector2f startPosition, float radius, int value)
     : pos(startPosition),
       startPos(startPosition),  //Save the original position
       vel(0.0f, 0.0f),
@@ -16,7 +16,8 @@ Pin::Pin(sf::Vector2f startPosition, float radius)
       angularVel(0.0f),
       angle(0.0f),
       fallen(false),
-      active(true)
+      active(true),
+      value(value)
 {
 }
 

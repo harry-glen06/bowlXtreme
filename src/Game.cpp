@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <fstream>
 
+static int bestRound = 0;
+
 Game::Game()
 : window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
 , ball(25.0f)
@@ -46,6 +48,7 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
     float spacing = 55.0f;
     float radius  = 9.0f;
 
+    int pinValue = 1;
     for (int row = 0; row < 4; row++) {
         int count = row + 1;
         float y = startY - row * spacing;
@@ -55,7 +58,8 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
 
         for (int i = 0; i < count; i++) {
             float x = startX + i * spacing;
-            out.emplace_back(sf::Vector2f(x, y), radius);
+            out.emplace_back(sf::Vector2f(x, y), radius, pinValue);
+            pinValue++;
         }
     }
 
@@ -137,7 +141,23 @@ void Game::handleEvents() {
                         audio.playBackgroundMusic(); // This will stop menu music and start .flac
                         
                     } else if (clicked == MenuButton::Xtreme) {
-                        // TODO: Xtreme mode - coming later!
+                        // Start Xtreme mode
+                        ui.setState(GameState::Xtreme);
+                        xtreme.reset();
+                        xtremeMode = true;
+                        gameOver = false;
+
+                        // Apply settings
+                        lane.bumpersOn = ui.getBumpersDefault();
+
+                        // Reset everything
+                        for (auto& pin : pins) {
+                            pin.setActive(true);
+                            pin.resetToOriginalPosition();
+                        }
+                        resetBall();
+
+                        audio.playBackgroundMusic();
                         
                     } else if (clicked == MenuButton::Settings) {
                         // Show settings (we'll implement this next)
@@ -184,10 +204,12 @@ void Game::finishPendingResetIfReady(float dt) {
 
     // Count pins knocked THIS ball
     int knockedThisBall = 0;
+    int pinValueSumThisBall = 0;
     for (auto& pin : pins) {
         if (!pin.isActive()) continue;
         if (pin.isFallen()) {
             knockedThisBall++;
+            pinValueSumThisBall += pin.getValue();
         }
     }
 
@@ -197,11 +219,35 @@ void Game::finishPendingResetIfReady(float dt) {
     }
     // If ball hit pins THEN went in gutter, still count the pins!
 
-    // Record score in bowling scorer
-    scorer.recordBall(knockedThisBall);
+    // Record score
+    if (ui.getState() == GameState::Xtreme) {
+        xtreme.recordShot(knockedThisBall, pinValueSumThisBall);
+    } else {
+        scorer.recordBall(knockedThisBall);
+    }
     
     // Handle pin resets based on game state
-    if (scorer.getCurrentFrame() < 10) {
+    if (ui.getState() == GameState::Xtreme) {
+        // Xtreme: 2 frames per round, 2 shots per frame
+        // After shot 1: remove fallen, reset standing
+        // After shot 2: reset all pins
+        if (xtreme.getShotInFrame() == 2) {
+            // We just advanced from shot 1 -> shot 2
+            for (auto& pin : pins) {
+                if (pin.isFallen()) {
+                    pin.setActive(false);
+                } else if (pin.isActive()) {
+                    pin.resetToOriginalPosition();
+                }
+            }
+        } else {
+            // We just finished shot 2 -> next frame, reset all pins
+            for (auto& pin : pins) {
+                pin.setActive(true);
+                pin.resetToOriginalPosition();
+            }
+        }
+    } else if (scorer.getCurrentFrame() < 10) {
         // Get the previous frame info to determine what to do
         int prevFrame = scorer.getCurrentFrame() > 0 ? scorer.getCurrentFrame() - 1 : 0;
         const auto& frames = scorer.getFrames();
@@ -271,10 +317,18 @@ void Game::finishPendingResetIfReady(float dt) {
     }
     
     // Check for game over
-    if (scorer.isGameOver()) {
-        gameOver = true;
-        finalScore = scorer.getTotalScore();
-        saveHighScore();
+    if (ui.getState() == GameState::Xtreme) {
+        if (xtreme.isGameOver()) {
+            gameOver = true;
+            int finalRound = xtreme.getRoundScore();
+            saveHighScore();
+        }
+    } else {
+        if (scorer.isGameOver()) {
+            gameOver = true;
+            finalScore = scorer.getTotalScore();
+            saveHighScore();
+        }
     }
 
     resetBall();
@@ -443,10 +497,25 @@ void Game::update(float dt) {
     if (gameOver) {
         static bool prevR = false;
         bool nowR = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
+
+        static bool prevM = false;
+        bool nowM = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::M);
+
+        if (nowM && !prevM) {
+            // Back to menu
+            ui.setState(GameState::Menu);
+            gameOver = false;
+            pendingReset = false;
+            audio.playMenuMusic();
+        }
         
         if (nowR && !prevR) {
             // Reset entire game
-            scorer.resetGame();
+            if (ui.getState() == GameState::Xtreme) {
+                xtreme.reset();
+            } else {
+                scorer.resetGame();
+            }
             gameOver = false;
             finalScore = 0;
             pendingReset = false;
@@ -460,6 +529,7 @@ void Game::update(float dt) {
         }
         
         prevR = nowR;
+        prevM = nowM;
         return;
     }
     
@@ -515,7 +585,11 @@ void Game::update(float dt) {
     }
 
     if (nowR && !prevR) {
-        scorer.resetGame();
+        if (ui.getState() == GameState::Xtreme) {
+            xtreme.reset();
+        } else {
+            scorer.resetGame();
+        }
         gameOver = false;
         finalScore = 0;
         pendingReset = false;
@@ -609,19 +683,58 @@ void Game::draw() {
     }
 
     ball.draw(window);
-    
+
     // Draw UI and check for actions (like exiting to menu)
-    GameAction action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(), 
-                     scorer.getCurrentBall(), highScore, windowW, windowH);
+    GameAction action = GameAction::None;
+    if (ui.getState() == GameState::Xtreme) {
+        action = ui.drawXtremeHUD(
+            window,
+            xtreme.getRound(),
+            xtreme.getFrameInRound(),
+            xtreme.getShotInFrame(),
+            xtreme.getTargetScore(),
+            xtreme.getRoundScore(),
+            xtreme.getLastImpact(),
+            xtreme.getLastCombo(),
+            xtreme.getLastShotScore(),
+            windowW,
+            windowH
+        );
+    } else {
+        action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),
+                         scorer.getCurrentBall(), highScore, windowW, windowH);
+    }
     
     if (gameOver) {
-        ui.drawGameOverScreen(window, finalScore, highScore, windowW, windowH);
+        if (xtremeMode) {
+            int finalRound = xtreme.getRoundScore() - 1; // rounds cleared
+            bestRound = std::max(bestRound, finalRound);
+
+            ui.drawGameOverScreen(window,
+                                GameOverMode::Xtreme,
+                                finalRound,
+                                bestRound,
+                                windowW,
+                                windowH);
+        } else {
+            int finalScore = scorer.getTotalScore();
+            highScore = std::max(highScore, finalScore);
+
+            ui.drawGameOverScreen(window,
+                                GameOverMode::NormalBowling,
+                                finalScore,
+                                highScore,
+                                windowW,
+                                windowH);
+        }
     }
 
     // Now handle the action returned from the scorecard UI
     if (action == GameAction::ExitToMenu) {
         ui.setState(GameState::Menu);
         scorer.resetGame();
+        xtreme.reset();
+        xtremeMode = false;
         resetBall();
         pins = createPins(lane.centerX(), 240.0f);
         audio.stopBackgroundMusic();

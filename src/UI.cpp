@@ -549,7 +549,134 @@ GameAction UI::drawScorecard(sf::RenderWindow& window,
     return GameAction::None;
 }
 
+GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
+                             int round,
+                             int frameInRound,
+                             int shotInFrame,
+                             int targetScore,
+                             int roundScore,
+                             int impact,
+                             int combo,
+                             int lastShotScore,
+                             float windowW,
+                             float windowH) {
+    if (!fontLoaded) return GameAction::None;
+
+    // Left info panel
+    sf::RectangleShape leftPanel(sf::Vector2f(250, windowH - 80));
+    leftPanel.setPosition(sf::Vector2f(40, 40));
+    leftPanel.setFillColor(sf::Color(70, 70, 70));
+    leftPanel.setOutlineColor(sf::Color::Black);
+    leftPanel.setOutlineThickness(3.0f);
+    window.draw(leftPanel);
+
+    float lx = 60.0f;
+    float y = 60.0f;
+
+    sf::Text t1(font, "round " + std::to_string(round), 36);
+    t1.setPosition(sf::Vector2f(lx, y));
+    t1.setFillColor(sf::Color::Black);
+    window.draw(t1);
+    y += 44;
+
+    sf::Text t2(font, "frame " + std::to_string(frameInRound), 30);
+    t2.setPosition(sf::Vector2f(lx, y));
+    t2.setFillColor(sf::Color::Black);
+    window.draw(t2);
+    y += 38;
+
+    sf::Text t3(font, "shot " + std::to_string(shotInFrame), 30);
+    t3.setPosition(sf::Vector2f(lx, y));
+    t3.setFillColor(sf::Color::Black);
+    window.draw(t3);
+    y += 60;
+
+    sf::Text target(font, "score at least " + std::to_string(targetScore), 22);
+    target.setPosition(sf::Vector2f(lx, y));
+    target.setFillColor(sf::Color::Black);
+    window.draw(target);
+    y += 70;
+
+    // Big impact x combo
+    sf::Text big(font, std::to_string(impact) + " X " + std::to_string(combo), 56);
+    big.setPosition(sf::Vector2f(lx, y));
+    big.setFillColor(sf::Color(120, 240, 255));
+    big.setOutlineColor(sf::Color::Black);
+    big.setOutlineThickness(3.0f);
+    window.draw(big);
+    y += 80;
+
+    sf::Text explain(font, "Impact x Pin Combo", 22);
+    explain.setPosition(sf::Vector2f(lx, y));
+    explain.setFillColor(sf::Color(255, 80, 80));
+    window.draw(explain);
+    y += 34;
+
+    sf::Text shotScore(font, "shot score: " + std::to_string(lastShotScore), 22);
+    shotScore.setPosition(sf::Vector2f(lx, y));
+    shotScore.setFillColor(sf::Color::Black);
+    window.draw(shotScore);
+    y += 34;
+
+    sf::Text roundScoreText(font, "round score: " + std::to_string(roundScore), 32);
+    roundScoreText.setPosition(sf::Vector2f(lx, y));
+    roundScoreText.setFillColor(sf::Color::Black);
+    window.draw(roundScoreText);
+
+    // Right items panel (placeholder categories)
+    sf::RectangleShape rightPanel(sf::Vector2f(300, windowH - 80));
+    rightPanel.setPosition(sf::Vector2f(windowW - 360, 40));
+    rightPanel.setFillColor(sf::Color(90, 90, 90));
+    rightPanel.setOutlineColor(sf::Color::Black);
+    rightPanel.setOutlineThickness(3.0f);
+    window.draw(rightPanel);
+
+    sf::Text shopTitle(font, "items", 72);
+    shopTitle.setPosition(sf::Vector2f(windowW - 330, 70));
+    shopTitle.setFillColor(sf::Color::Black);
+    window.draw(shopTitle);
+
+    sf::Text c1(font, "shoes", 52);
+    c1.setPosition(sf::Vector2f(windowW - 330, 170));
+    c1.setFillColor(sf::Color::Black);
+    window.draw(c1);
+
+    sf::Text c2(font, "balls", 52);
+    c2.setPosition(sf::Vector2f(windowW - 330, 320));
+    c2.setFillColor(sf::Color::Black);
+    window.draw(c2);
+
+    sf::Text c3(font, "powers", 52);
+    c3.setPosition(sf::Vector2f(windowW - 330, 540));
+    c3.setFillColor(sf::Color::Black);
+    window.draw(c3);
+
+    // Menu button (top-right)
+    sf::RectangleShape exitBtn(sf::Vector2f(120, 40));
+    exitBtn.setPosition(sf::Vector2f(windowW - 140, 20));
+    exitBtn.setFillColor(sf::Color(100, 100, 100, 200));
+    exitBtn.setOutlineThickness(2);
+    exitBtn.setOutlineColor(sf::Color::White);
+    window.draw(exitBtn);
+
+    sf::Text exitText(font, "MENU", 20);
+    exitText.setPosition(sf::Vector2f(windowW - 110, 27));
+    exitText.setFillColor(sf::Color::White);
+    window.draw(exitText);
+
+    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+        sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+        if (exitBtn.getGlobalBounds().contains(worldPos)) {
+            return GameAction::ExitToMenu;
+        }
+    }
+
+    return GameAction::None;
+}
+
 void UI::drawGameOverScreen(sf::RenderWindow& window, 
+                            GameOverMode mode,
                             int finalScore, 
                             int highScore,
                             float windowW, 
@@ -562,7 +689,7 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     window.draw(overlay);
     
     // Game Over text
-    sf::Text gameOverText(font, "GAME FINISHED!", 80);
+    sf::Text gameOverText(font, "GAME OVER!", 80);
     gameOverText.setFillColor(sf::Color::Green);
     gameOverText.setStyle(sf::Text::Bold);
     sf::FloatRect bounds = gameOverText.getLocalBounds();
@@ -573,7 +700,10 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     window.draw(gameOverText);
     
     // Final score
-    sf::Text scoreText(font, "Your Score: " + std::to_string(finalScore), 50);
+    std::string mainLabel = (mode == GameOverMode::Xtreme)
+    ? "Rounds Cleared: "
+    : "Final Score: ";
+    sf::Text scoreText(font, mainLabel + std::to_string(mainValue), 50);
     scoreText.setFillColor(sf::Color::Yellow);
     bounds = scoreText.getLocalBounds();
     scoreText.setPosition(sf::Vector2f(
@@ -583,9 +713,12 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     window.draw(scoreText);
 
     // High score
-    sf::Text highScoreText(font, "High Score: " + std::to_string(highScore), 40);
-    if (finalScore >= highScore && finalScore > 0) {
-        highScoreText.setString("NEW HIGH SCORE!");
+    std::string bestLabel = (mode == GameOverMode::Xtreme)
+    ? "Best Round: "
+    : "High Score: ";
+    sf::Text highScoreText(font, bestLabel + std::to_string(bestValue), 40);
+    if (mainValue >= bestValue && mainValue > 0) {
+        highScoreText.setString((mode == GameOverMode::Xtreme) ? "NEW BEST ROUND!" : "NEW HIGH SCORE!");
         highScoreText.setFillColor(sf::Color::Green);
     } else {
         highScoreText.setFillColor(sf::Color::Cyan);
@@ -606,4 +739,13 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
         windowH / 2 + 100
     ));
     window.draw(restartText);
+
+    sf::Text menuText(font, "Press M for Menu", 30);
+    menuText.setFillColor(sf::Color::White);
+    bounds = menuText.getLocalBounds();
+    menuText.setPosition(sf::Vector2f(
+        windowW / 2 - bounds.size.x / 2,
+        windowH / 2 + 140
+    ));
+    window.draw(menuText);
 }
