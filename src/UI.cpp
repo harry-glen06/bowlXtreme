@@ -1,4 +1,5 @@
 #include "UI.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 
@@ -563,6 +564,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              float windowH,
                              const ActiveItems& items) {
     if (!fontLoaded) return GameAction::None;
+    if (state != GameState::Xtreme) return GameAction::None;
 
     // Left info panel
     sf::RectangleShape leftPanel(sf::Vector2f(250, windowH - 80));
@@ -630,20 +632,21 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     tokenText.setFillColor(sf::Color(255, 215, 0));
     window.draw(tokenText);
 
-    // Right inventory panel
+    // Right inventory panel (moved further right)
+    const float inventoryOffsetX = 60.f;
     sf::RectangleShape rightPanel(sf::Vector2f(300, windowH - 80));
-    rightPanel.setPosition(sf::Vector2f(windowW - 360, 40));
+    rightPanel.setPosition(sf::Vector2f(windowW - 360 + inventoryOffsetX, 40));
     rightPanel.setFillColor(sf::Color(50, 50, 60));
     rightPanel.setOutlineColor(sf::Color::Black);
     rightPanel.setOutlineThickness(3.0f);
     window.draw(rightPanel);
 
     sf::Text invTitle(font, "inventory", 36);
-    invTitle.setPosition(sf::Vector2f(windowW - 345, 55));
+    invTitle.setPosition(sf::Vector2f(windowW - 345 + inventoryOffsetX, 55));
     invTitle.setFillColor(sf::Color(200, 200, 200));
     window.draw(invTitle);
 
-    drawInventoryPanel(window, items, windowW - 355, 110, 290);
+    drawInventoryPanel(window, items, windowW - 355 + inventoryOffsetX, 110, 290);
 
     // Menu button
     sf::RectangleShape exitBtn(sf::Vector2f(120, 40));
@@ -666,8 +669,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         }
     }
 
-    // Bottom inventory bar
-    drawInventoryBar(window, items, windowW, windowH);
+    // Bottom bar hidden in Xtreme to avoid duplicate inventory UI.
 
     return GameAction::None;
 }
@@ -777,6 +779,28 @@ static std::string ballShortName(BallType t) {
     }
 }
 
+static std::string shoeShortName(ShoeType t) {
+    switch (t) {
+        case ShoeType::Clown:   return "Clown Shoes";
+        case ShoeType::Running: return "Running Shoes";
+        case ShoeType::Moon:    return "Moon Boots";
+        case ShoeType::Slippers:return "Slippers";
+        case ShoeType::SteelCap:return "Steel Caps";
+        default:                return "Bowling Shoes";
+    }
+}
+
+static sf::Color shoePreviewColor(ShoeType t) {
+    switch (t) {
+        case ShoeType::Clown:   return {220, 40, 40};
+        case ShoeType::Running: return {255, 255, 255};
+        case ShoeType::Moon:    return {190, 210, 255};
+        case ShoeType::Slippers:return {230, 180, 140};
+        case ShoeType::SteelCap:return {120, 130, 145};
+        default:                return {120, 120, 120};
+    }
+}
+
 static sf::Color pinPreviewColor(int pt) {
     switch (static_cast<PinType>(pt)) {
         case PinType::Gold:        return {210, 175, 50};
@@ -804,6 +828,27 @@ static std::string pinShortName(int pt) {
         case PinType::LuckyDucky:  return "Lucky Ducky";
         case PinType::ThirdTime:   return "3rd Time";
         default:                   return "Normal";
+    }
+}
+
+static std::string powerShortName(PowerType t) {
+    switch (t) {
+        case PowerType::Greedy:              return "Greedy";
+        case PowerType::RandomUpgrade:       return "Random Upgrade";
+        case PowerType::ExtraPins:           return "Extra Pins";
+        case PowerType::ExtraBall:           return "Extra Ball";
+        case PowerType::Duplicate:           return "Duplicate";
+        case PowerType::Bumpers:             return "Bumpers";
+        case PowerType::SwapPins:            return "Swap Pins";
+        case PowerType::HomeBase:            return "Home Base";
+        case PowerType::Confusion:           return "Confusion";
+        case PowerType::Earthquake:          return "Earthquake";
+        case PowerType::Skip:                return "Skip";
+        case PowerType::UpgradesForEveryone: return "Upgrades+3";
+        case PowerType::Sales:               return "Sales";
+        case PowerType::PassedGo:            return "Passed Go";
+        case PowerType::MoMoney:             return "Mo Money";
+        default:                             return "Power";
     }
 }
 
@@ -852,65 +897,132 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
                              float x, float y, float width) {
     if (!fontLoaded) return;
 
-    float cx = x + width / 2.f;
     float iy = y;
 
-    // ── Ball section ──────────────────────────────────────────────────────────
-    sf::Text ballLabel(font, "BALL", 20);
+    // ── Ball section (2 slots: shot 1 + shot 2) ─────────────────────────────
+    sf::Text ballLabel(font, "BALLS", 20);
     ballLabel.setPosition({x + 10.f, iy});
     ballLabel.setFillColor({180, 180, 180});
     window.draw(ballLabel);
     iy += 28.f;
 
-    // Ball circle preview
-    float ballR = 28.f;
-    sf::CircleShape ballCircle(ballR);
-    ballCircle.setOrigin({ballR, ballR});
-    ballCircle.setPosition({cx, iy + ballR});
-    ballCircle.setFillColor(ballPreviewColor(items.ballType));
-    ballCircle.setOutlineColor({255,255,255,60});
-    ballCircle.setOutlineThickness(2.f);
-    window.draw(ballCircle);
+    float ballR = 22.f;
+    float slot1X = x + width * 0.28f;
+    float slot2X = x + width * 0.72f;
 
-    // Ball name
-    sf::Text ballName(font, ballShortName(items.ballType), 18);
-    sf::FloatRect nb = ballName.getLocalBounds();
-    ballName.setPosition({cx - nb.size.x/2.f, iy + ballR*2.f + 6.f});
-    ballName.setFillColor(sf::Color::White);
-    window.draw(ballName);
-    iy += ballR * 2.f + 34.f;
+    auto drawBallSlot = [&](int slot, float sx, BallType bt) {
+        sf::Text slotLabel(font, "S" + std::to_string(slot), 14);
+        sf::FloatRect slb = slotLabel.getLocalBounds();
+        slotLabel.setPosition({sx - slb.size.x * 0.5f, iy});
+        slotLabel.setFillColor({185, 185, 205});
+        window.draw(slotLabel);
 
-    if (items.purchasedPinTypes.empty()) return;
+        sf::CircleShape ballCircle(ballR);
+        ballCircle.setOrigin({ballR, ballR});
+        ballCircle.setPosition({sx, iy + 20.f + ballR});
+        ballCircle.setFillColor(ballPreviewColor(bt));
+        ballCircle.setOutlineColor({255,255,255,60});
+        ballCircle.setOutlineThickness(2.f);
+        window.draw(ballCircle);
 
-    // ── Pins section ──────────────────────────────────────────────────────────
-    sf::Text pinsLabel(font, "PINS", 20);
-    pinsLabel.setPosition({x + 10.f, iy});
-    pinsLabel.setFillColor({180, 180, 180});
-    window.draw(pinsLabel);
-    iy += 28.f;
+        sf::Text ballName(font, ballShortName(bt), 14);
+        sf::FloatRect nb = ballName.getLocalBounds();
+        ballName.setPosition({sx - nb.size.x * 0.5f, iy + 20.f + ballR * 2.f + 4.f});
+        ballName.setFillColor(sf::Color::White);
+        window.draw(ballName);
+    };
 
-    // Draw pins in a grid — up to 3 per row
-    float pinSize  = 18.f;
-    float cellW    = width / 3.f;
-    int   col      = 0;
-    float rowStartY = iy;
+    drawBallSlot(1, slot1X, items.getBallForShot(1));
+    drawBallSlot(2, slot2X, items.getBallForShot(2));
+    iy += ballR * 2.f + 52.f;
 
-    for (int pt : items.purchasedPinTypes) {
-        float pcx = x + col * cellW + cellW / 2.f;
-        float pcy = rowStartY + pinSize;
+    // ── Shoes section ────────────────────────────────────────────────────────
+    sf::Text shoeLabel(font, "SHOES", 20);
+    shoeLabel.setPosition({x + 10.f, iy});
+    shoeLabel.setFillColor({180, 180, 180});
+    window.draw(shoeLabel);
+    iy += 24.f;
 
-        drawMiniPin(window, pcx, pcy, pinSize, pinPreviewColor(pt));
+    sf::CircleShape shoeCircle(12.f);
+    shoeCircle.setOrigin({12.f, 12.f});
+    shoeCircle.setPosition({x + 26.f, iy + 12.f});
+    shoeCircle.setFillColor(shoePreviewColor(items.shoeType));
+    shoeCircle.setOutlineColor({255,255,255,80});
+    shoeCircle.setOutlineThickness(2.f);
+    window.draw(shoeCircle);
 
-        sf::Text pname(font, pinShortName(pt), 13);
-        sf::FloatRect pb = pname.getLocalBounds();
-        pname.setPosition({pcx - pb.size.x/2.f, pcy + pinSize + 4.f});
-        pname.setFillColor({210, 210, 210});
-        window.draw(pname);
+    sf::Text shoeName(font, shoeShortName(items.shoeType), 15);
+    shoeName.setPosition({x + 46.f, iy + 2.f});
+    shoeName.setFillColor(sf::Color::White);
+    window.draw(shoeName);
+    iy += 32.f;
 
-        col++;
-        if (col >= 3) {
-            col = 0;
-            rowStartY += pinSize * 3.f + 28.f;
+    if (!items.purchasedPinTypes.empty()) {
+        // ── Pins section ──────────────────────────────────────────────────────
+        sf::Text pinsLabel(font, "PINS", 20);
+        pinsLabel.setPosition({x + 10.f, iy});
+        pinsLabel.setFillColor({180, 180, 180});
+        window.draw(pinsLabel);
+        iy += 28.f;
+
+        // Draw pins in a grid — up to 3 per row
+        float pinSize  = 18.f;
+        float cellW    = width / 3.f;
+        int   col      = 0;
+        float rowStartY = iy;
+
+        for (int pt : items.purchasedPinTypes) {
+            float pcx = x + col * cellW + cellW / 2.f;
+            float pcy = rowStartY + pinSize;
+
+            drawMiniPin(window, pcx, pcy, pinSize, pinPreviewColor(pt));
+
+            sf::Text pname(font, pinShortName(pt), 13);
+            sf::FloatRect pb = pname.getLocalBounds();
+            pname.setPosition({pcx - pb.size.x/2.f, pcy + pinSize + 4.f});
+            pname.setFillColor({210, 210, 210});
+            window.draw(pname);
+
+            col++;
+            if (col >= 3) {
+                col = 0;
+                rowStartY += pinSize * 3.f + 28.f;
+            }
+        }
+
+        int pinRows = ((int)items.purchasedPinTypes.size() + 2) / 3;
+        iy += pinRows * (pinSize * 3.f + 28.f) + 8.f;
+    }
+
+    if (!items.purchasedPowers.empty()) {
+        // ── Powers section ────────────────────────────────────────────────────
+        sf::Text powersLabel(font, "POWERS", 20);
+        powersLabel.setPosition({x + 10.f, iy});
+        powersLabel.setFillColor({180, 180, 180});
+        window.draw(powersLabel);
+        iy += 26.f;
+
+        const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+        std::vector<int> counts(powerCount, 0);
+        for (int raw : items.purchasedPowers) {
+            if (raw >= 0 && raw < powerCount) counts[raw]++;
+        }
+
+        const float colW = width * 0.48f;
+        int shown = 0;
+        for (int p = 0; p < powerCount; p++) {
+            if (counts[p] <= 0) continue;
+            int row = shown / 2;
+            int col = shown % 2;
+
+            std::string label = powerShortName(static_cast<PowerType>(p));
+            if (counts[p] > 1) label += " x" + std::to_string(counts[p]);
+
+            sf::Text powerText(font, label, 14);
+            powerText.setPosition({x + 10.f + col * colW, iy + row * 18.f});
+            powerText.setFillColor({220, 220, 180});
+            window.draw(powerText);
+            shown++;
         }
     }
 }
@@ -919,10 +1031,13 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
 void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
                            float windowW, float windowH) {
     if (!fontLoaded) return;
+    if (state != GameState::Xtreme) return;
     // Only show if player has something non-default
-    bool hasBall = (items.ballType != BallType::Normal);
+    bool hasBall = (items.getBallForShot(1) != BallType::Normal) ||
+                   (items.getBallForShot(2) != BallType::Normal);
+    bool hasShoe = (items.shoeType != ShoeType::None);
     bool hasPins = !items.purchasedPinTypes.empty();
-    if (!hasBall && !hasPins) return;
+    if (!hasBall && !hasPins && !hasShoe) return;
 
     float barH   = 70.f;
     float barY   = windowH - barH;
@@ -942,24 +1057,66 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
     // Ball icon
     if (hasBall) {
         float br = iconSize;
-        sf::CircleShape ballCircle(br);
-        ballCircle.setOrigin({br, br});
-        ballCircle.setPosition({cx, barY + barH/2.f});
-        ballCircle.setFillColor(ballPreviewColor(items.ballType));
-        ballCircle.setOutlineColor({255,255,255,60});
-        ballCircle.setOutlineThickness(2.f);
-        window.draw(ballCircle);
+        sf::CircleShape ball1(br);
+        ball1.setOrigin({br, br});
+        ball1.setPosition({cx, barY + barH/2.f - 11.f});
+        ball1.setFillColor(ballPreviewColor(items.getBallForShot(1)));
+        ball1.setOutlineColor({255,255,255,60});
+        ball1.setOutlineThickness(2.f);
+        window.draw(ball1);
 
-        sf::Text bn(font, ballShortName(items.ballType), 14);
-        bn.setPosition({cx + br + 4.f, barY + barH/2.f - 10.f});
-        bn.setFillColor(sf::Color::White);
-        window.draw(bn);
+        sf::Text b1(font, "S1 " + ballShortName(items.getBallForShot(1)), 13);
+        b1.setPosition({cx + br + 4.f, barY + barH/2.f - 20.f});
+        b1.setFillColor(sf::Color::White);
+        window.draw(b1);
+
+        sf::CircleShape ball2(br);
+        ball2.setOrigin({br, br});
+        ball2.setPosition({cx, barY + barH/2.f + 11.f});
+        ball2.setFillColor(ballPreviewColor(items.getBallForShot(2)));
+        ball2.setOutlineColor({255,255,255,60});
+        ball2.setOutlineThickness(2.f);
+        window.draw(ball2);
+
+        sf::Text b2(font, "S2 " + ballShortName(items.getBallForShot(2)), 13);
+        b2.setPosition({cx + br + 4.f, barY + barH/2.f + 2.f});
+        b2.setFillColor(sf::Color::White);
+        window.draw(b2);
 
         // Measure text to advance cx
-        sf::FloatRect bnb = bn.getLocalBounds();
-        cx += br + bnb.size.x + padding * 2.f + 10.f;
+        sf::FloatRect b1b = b1.getLocalBounds();
+        sf::FloatRect b2b = b2.getLocalBounds();
+        float maxNameW = std::max(b1b.size.x, b2b.size.x);
+        cx += br + maxNameW + padding * 2.f + 10.f;
 
         // Divider
+        if (hasPins) {
+            sf::RectangleShape div({2.f, barH * 0.6f});
+            div.setPosition({cx, barY + barH * 0.2f});
+            div.setFillColor({100, 100, 120});
+            window.draw(div);
+            cx += padding;
+        }
+    }
+
+    if (hasShoe) {
+        float sr = iconSize * 0.9f;
+        sf::CircleShape shoe(sr);
+        shoe.setOrigin({sr, sr});
+        shoe.setPosition({cx, barY + barH/2.f});
+        shoe.setFillColor(shoePreviewColor(items.shoeType));
+        shoe.setOutlineColor({255,255,255,70});
+        shoe.setOutlineThickness(2.f);
+        window.draw(shoe);
+
+        sf::Text sn(font, shoeShortName(items.shoeType), 13);
+        sn.setPosition({cx + sr + 5.f, barY + barH/2.f - 9.f});
+        sn.setFillColor(sf::Color::White);
+        window.draw(sn);
+
+        sf::FloatRect snb = sn.getLocalBounds();
+        cx += sr + snb.size.x + padding * 2.f + 8.f;
+
         if (hasPins) {
             sf::RectangleShape div({2.f, barH * 0.6f});
             div.setPosition({cx, barY + barH * 0.2f});
@@ -987,11 +1144,13 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
 void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
                               float windowW, float windowH) {
     if (!fontLoaded) return;
+    if (state != GameState::Shop) return;
 
-    float panelW = 220.f;
-    float panelH = windowH - 160.f;
-    float panelX = windowW - panelW - 20.f;
-    float panelY = 140.f;
+    // Place shop-owned inventory below cards so it never overlaps offers.
+    float panelW = 280.f;
+    float panelH = 320.f;
+    float panelX = windowW - panelW - 24.f;
+    float panelY = windowH - panelH - 120.f;
 
     sf::RectangleShape panel({panelW, panelH});
     panel.setPosition({panelX, panelY});
@@ -1052,82 +1211,177 @@ static int ballTypeCost(BallType t) {
     }
 }
 
-void UI::generateShopOffers() {
+static bool powerIsStackable(PowerType t) {
+    switch (t) {
+        case PowerType::Duplicate:
+        case PowerType::SwapPins:
+        case PowerType::Skip:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static sf::Color powerPreviewColor(PowerType t) {
+    switch (t) {
+        case PowerType::Greedy:              return {240, 210, 70};
+        case PowerType::RandomUpgrade:       return {120, 220, 255};
+        case PowerType::ExtraPins:           return {255, 170, 70};
+        case PowerType::ExtraBall:           return {120, 170, 255};
+        case PowerType::Duplicate:           return {210, 150, 255};
+        case PowerType::Bumpers:             return {255, 120, 120};
+        case PowerType::SwapPins:            return {140, 255, 170};
+        case PowerType::HomeBase:            return {255, 220, 180};
+        case PowerType::Confusion:           return {200, 130, 255};
+        case PowerType::Earthquake:          return {255, 140, 80};
+        case PowerType::Skip:                return {255, 255, 255};
+        case PowerType::UpgradesForEveryone: return {130, 255, 210};
+        case PowerType::Sales:               return {120, 255, 120};
+        case PowerType::PassedGo:            return {255, 240, 120};
+        case PowerType::MoMoney:             return {255, 200, 70};
+        default:                             return {200, 200, 200};
+    }
+}
+
+void UI::generateShopOffers(const ActiveItems& items) {
     shopOffers.clear();
 
-    // Build a combined pool of balls and pins
+    // Build a combined pool of balls, pins, shoes and powers.
     struct RawOffer {
         ShopItemCategory category;
         BallType ballType = BallType::Normal;
         PinType  pinType  = PinType::Normal;
+        ShoeType shoeType = ShoeType::None;
+        PowerType powerType = PowerType::Greedy;
         std::string name, description;
         int cost;
     };
 
     std::vector<RawOffer> pool = {
         // Balls
-        {ShopItemCategory::Ball, BallType::BlackHole, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::BlackHole, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Black Hole",   "Pins drift toward ball.\n8% smaller.",               4},
-        {ShopItemCategory::Ball, BallType::Midas, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::Midas, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Midas Ball",   "Hit pins turn gold.\nEach = +1 token.",              5},
-        {ShopItemCategory::Ball, BallType::Upgrade, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::Upgrade, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Upgrade Ball", "Hit pins +1 value.\n10% lighter, 5% faster.",        3},
-        {ShopItemCategory::Ball, BallType::Heavy, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::Heavy, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Heavy Ball",   "15% heavier.\nKnocks pins easier.",                  2},
-        {ShopItemCategory::Ball, BallType::Fastball, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::Fastball, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Fastball",     "5% lighter.\n15% faster.",                           2},
-        {ShopItemCategory::Ball, BallType::OddBall, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::OddBall, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Odd Ball",     "Odd pins x2.\nEven pins x0.5.",                      3},
-        {ShopItemCategory::Ball, BallType::EightBall, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::EightBall, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "8-Ball",       "All pins worth 8.",                                   4},
-        {ShopItemCategory::Ball, BallType::Retrigger, PinType::Normal,
+        {ShopItemCategory::Ball, BallType::Retrigger, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Retrigger",    "2nd pin hit\nscores 3x.",                            4},
         // Pins
-        {ShopItemCategory::Pin, BallType::Normal, PinType::Gold,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::Gold, ShoeType::None, PowerType::Greedy,
          "Gold Pin",     "One pin turns gold.\nKnock it for +1 token.",        2},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::Mischievous,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::Mischievous, ShoeType::None, PowerType::Greedy,
          "Mischievous",  "One pin randomises\nvalue 1-15 each shot.",          2},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::Exploding,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::Exploding, ShoeType::None, PowerType::Greedy,
          "Exploding Pin","One pin explodes\n1s after being knocked.",           4},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::Light,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::Light, ShoeType::None, PowerType::Greedy,
          "Light Pin",    "One pin worth 2\nbut very easy to knock.",           2},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::Big,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::Big, ShoeType::None, PowerType::Greedy,
          "Big Pin",      "One pin worth 7\nbut hard to knock.",                3},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::Ice,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::Ice, ShoeType::None, PowerType::Greedy,
          "Ice Pin",      "One pin slides\n15% faster when fallen.",            2},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::CopyCat,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::CopyCat, ShoeType::None, PowerType::Greedy,
          "Copy Cat",     "Copies the type of\nthe first pin hit.",             3},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::LuckyDucky,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::LuckyDucky, ShoeType::None, PowerType::Greedy,
          "Lucky Ducky",  "Worth 20 pts.\n35% chance to score 0.",             4},
-        {ShopItemCategory::Pin, BallType::Normal, PinType::ThirdTime,
+        {ShopItemCategory::Pin, BallType::Normal, PinType::ThirdTime, ShoeType::None, PowerType::Greedy,
          "3rd Time",     "Every 3rd knock\ndoubles combo.",                    3},
+        // Shoes
+        {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Clown, PowerType::Greedy,
+         "Clown Shoes",  "Funny wobble:\nlaunch angle shifts a bit but gain 10 dollars.", 0},
+        {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Running, PowerType::Greedy,
+         "Running Shoes","Ball launches\n18% faster.",                         3},
+        {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Moon, PowerType::Greedy,
+         "Moon Boots",   "All pins are\n26% lighter.",                         4},
+        {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Slippers, PowerType::Greedy,
+         "Slippers",     "Everything slides\n18% more.",                       3},
+        {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::SteelCap, PowerType::Greedy,
+         "Steel Caps",   "Pins cannot change\nduring a round.",                4},
+        // Powers
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Greedy,
+         "Greedy",       "Every dollar adds\n+5 score each shot.",             4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::RandomUpgrade,
+         "Random Upgrade","After each frame,\na random pin gains +1 value.",    4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
+         "Extra Pins",   "Adds two extra pins\nto the rack.",                   5},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraBall,
+         "Extra Ball",   "Adds one extra shot\nper frame.",                     6},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Duplicate,
+         "Duplicate",    "Copy one pin type\nto another. 1 use.",               2},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Bumpers,
+         "Bumpers",      "No gutter balls\nfor the rest of run.",               4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::SwapPins,
+         "Swap Pins",    "Swap two pin spots.\n1 use.",                         2},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::HomeBase,
+         "Home Base",    "Each pin hit raises\nbase combo by 1.",               4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Confusion,
+         "Confusion",    "Spares score like\nstrikes.",                         3},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Earthquake,
+         "Earthquake",   "Every 10 shots,\na free strike.",                     5},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Skip,
+         "Skip",         "Gain two shop skips\nfor 1 dollar.",                  1},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::UpgradesForEveryone,
+         "Upgrades+3",   "Future shops show\nthree extra items.",               5},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Sales,
+         "Sales",        "Everything in shop\nis 20% cheaper.",                 4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::PassedGo,
+         "Passed Go",    "Round clears pay\n5 more dollars.",                   4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::MoMoney,
+         "Mo Money",     "Interest every 2\ndollars, not 3.",                   4},
     };
 
-    // Shuffle pool
-    for (int i = (int)pool.size()-1; i > 0; i--) {
-        int j = rand() % (i+1);
-        std::swap(pool[i], pool[j]);
+    std::vector<RawOffer> filtered;
+    filtered.reserve(pool.size());
+    for (const auto& offer : pool) {
+        if (offer.category == ShopItemCategory::Power &&
+            !powerIsStackable(offer.powerType) &&
+            items.hasPower(offer.powerType)) {
+            continue;
+        }
+
+        RawOffer adjusted = offer;
+        if (items.powerSales && adjusted.cost > 0) {
+            int discounted = static_cast<int>(std::lround(static_cast<float>(adjusted.cost) * 0.8f));
+            adjusted.cost = std::max(1, discounted);
+        }
+        filtered.push_back(adjusted);
     }
 
-    // Pick 3 offers, try to have at least 1 ball and 1 pin if possible
-    int count = std::min(3, (int)pool.size());
+    // Shuffle pool
+    for (int i = (int)filtered.size()-1; i > 0; i--) {
+        int j = rand() % (i+1);
+        std::swap(filtered[i], filtered[j]);
+    }
+
+    // Pick 4 offers
+    int count = std::min(4, (int)filtered.size());
     for (int i = 0; i < count; i++) {
         ShopOffer o;
-        o.category    = pool[i].category;
-        o.ballType    = pool[i].ballType;
-        o.pinType     = pool[i].pinType;
-        o.name        = pool[i].name;
-        o.description = pool[i].description;
-        o.cost        = pool[i].cost;
+        o.category    = filtered[i].category;
+        o.ballType    = filtered[i].ballType;
+        o.pinType     = filtered[i].pinType;
+        o.shoeType    = filtered[i].shoeType;
+        o.powerType   = filtered[i].powerType;
+        o.name        = filtered[i].name;
+        o.description = filtered[i].description;
+        o.cost        = filtered[i].cost;
         shopOffers.push_back(o);
     }
 }
 
 void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items) {
     if (!fontLoaded) return;
-    const ActiveItems& equippedItems = items;
+    if (state != GameState::Shop) return;
 
-    if (shopOffers.empty()) generateShopOffers();
+    if (shopOffers.empty()) generateShopOffers(items);
 
     // Background
     sf::RectangleShape bg(sf::Vector2f(windowW, windowH));
@@ -1150,27 +1404,75 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     tokenText.setOutlineThickness(2);
     window.draw(tokenText);
 
-    float cardW = 260.f, cardH = 340.f;
-    float totalW = 3 * cardW + 2 * 40.f;
+    // Ball slot selector (which slot a purchased ball should fill)
+    sf::Text slotTitle(font, "Ball Slot", 22);
+    slotTitle.setPosition({40.f, 38.f});
+    slotTitle.setFillColor({220, 220, 230});
+    window.draw(slotTitle);
+
+    const float slotY = 70.f;
+    const float slotW = 130.f;
+    const float slotH = 44.f;
+    const float slot1X = 40.f;
+    const float slot2X = slot1X + slotW + 12.f;
+
+    auto drawSlotButton = [&](int slot, float x) {
+        bool selected = (selectedBallSlot == slot);
+        sf::RectangleShape b({slotW, slotH});
+        b.setPosition({x, slotY});
+        b.setFillColor(selected ? sf::Color(70, 170, 120) : sf::Color(55, 55, 70));
+        b.setOutlineColor(selected ? sf::Color(200, 255, 220) : sf::Color(130, 130, 160));
+        b.setOutlineThickness(2.f);
+        window.draw(b);
+
+        sf::Text t(font, "SHOT " + std::to_string(slot), 20);
+        t.setPosition({x + 14.f, slotY + 10.f});
+        t.setFillColor(sf::Color::White);
+        window.draw(t);
+    };
+
+    drawSlotButton(1, slot1X);
+    drawSlotButton(2, slot2X);
+
+    sf::Text slotCurrent(font, "Current: " + ballShortName(items.getBallForSlot(selectedBallSlot)), 20);
+    slotCurrent.setPosition({40.f, 122.f});
+    slotCurrent.setFillColor({200, 200, 200});
+    window.draw(slotCurrent);
+
+    // 4-card layout
+    float cardW = 210.f, cardH = 340.f;
+    float cardGap = 20.f;
+    float totalW = 4 * cardW + 3 * cardGap;
     float startX = (windowW - totalW) / 2.f;
     float cardY  = 150.f;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         const auto& offer = shopOffers[i];
-        float cx = startX + i * (cardW + 40.f);
+        float cx = startX + i * (cardW + cardGap);
         bool canAfford = tokens >= offer.cost;
         bool isBall = (offer.category == ShopItemCategory::Ball);
-        bool isEquipped = isBall && (equippedBall == offer.ballType);
+        bool isPin  = (offer.category == ShopItemCategory::Pin);
+        bool isShoe = (offer.category == ShopItemCategory::Shoe);
+        bool isPower = (offer.category == ShopItemCategory::Power);
+        bool isStackablePower = isPower && powerIsStackable(offer.powerType);
+        bool isEquipped = false;
+        if (isBall) isEquipped = (items.getBallForSlot(selectedBallSlot) == offer.ballType);
+        if (isShoe) isEquipped = (items.shoeType == offer.shoeType);
+        if (isPower && !isStackablePower) isEquipped = items.hasPower(offer.powerType);
 
-        // Card background — blue tint for balls, green tint for pins
+        // Card background tint by category
         sf::Color cardColor = isEquipped      ? sf::Color(40, 100, 40)  :
                               !canAfford      ? sf::Color(40, 40, 40)   :
                               isBall          ? sf::Color(40, 50, 80)   :
-                                                sf::Color(40, 70, 50);
+                              isPin           ? sf::Color(40, 70, 50)   :
+                              isShoe          ? sf::Color(70, 45, 45)   :
+                                                sf::Color(65, 50, 35);
         sf::Color borderColor = isEquipped    ? sf::Color(80, 220, 80)  :
                                 !canAfford    ? sf::Color(80, 80, 80)   :
                                 isBall        ? sf::Color(140, 160, 255):
-                                                sf::Color(120, 220, 140);
+                                isPin         ? sf::Color(120, 220, 140):
+                                isShoe        ? sf::Color(240, 170, 130):
+                                                sf::Color(255, 210, 120);
 
         sf::RectangleShape card({cardW, cardH});
         card.setPosition({cx, cardY});
@@ -1182,10 +1484,13 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         // Category badge
         sf::RectangleShape badge({cardW, 28.f});
         badge.setPosition({cx, cardY});
-        badge.setFillColor(isBall ? sf::Color(60,80,150) : sf::Color(40,110,70));
+        badge.setFillColor(isBall ? sf::Color(60,80,150) :
+                          isPin  ? sf::Color(40,110,70) :
+                          isShoe ? sf::Color(120,70,60) :
+                                   sf::Color(120,95,35));
         window.draw(badge);
 
-        sf::Text catLabel(font, isBall ? "BALL" : "PIN", 20);
+        sf::Text catLabel(font, isBall ? "BALL" : (isPin ? "PIN" : (isShoe ? "SHOE" : "POWER")), 20);
         catLabel.setPosition({cx + 10.f, cardY + 4.f});
         catLabel.setFillColor(sf::Color::White);
         window.draw(catLabel);
@@ -1216,7 +1521,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
                 default:                   pc = {25,  55,  140}; break;
             }
             preview.setFillColor(pc);
-        } else {
+        } else if (isPin) {
             // Pin preview colour
             sf::Color pc;
             switch (offer.pinType) {
@@ -1233,6 +1538,10 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
             }
             preview.setFillColor(pc);
             // Small "PIN" indicator
+            preview.setOutlineThickness(3.f);
+            preview.setOutlineColor({255,255,255,100});
+        } else {
+            preview.setFillColor(isShoe ? shoePreviewColor(offer.shoeType) : powerPreviewColor(offer.powerType));
             preview.setOutlineThickness(3.f);
             preview.setOutlineColor({255,255,255,100});
         }
@@ -1270,7 +1579,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         btn.setOutlineThickness(2);
         window.draw(btn);
 
-        std::string btnLabel = isEquipped ? "EQUIPPED" :
+        std::string btnLabel = isEquipped ? (isPower ? "OWNED" : "EQUIPPED") :
                                canAfford  ? "BUY (" + std::to_string(offer.cost) + " tokens)" :
                                             "Need " + std::to_string(offer.cost) + " tokens";
         sf::Text btnText(font, btnLabel, 20);
@@ -1293,17 +1602,36 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     window.draw(contText);
 
     // Show what the player already owns
-    drawInventoryInShop(window, equippedItems, windowW, windowH);
+    drawInventoryInShop(window, items, windowW, windowH);
 }
 
-int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens) {
-    float cardW = 260.f, cardH = 340.f;
-    float totalW = 3 * cardW + 2 * 40.f;
+int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items) {
+    // Slot selector buttons
+    const float slotY = 70.f;
+    const float slotW = 130.f;
+    const float slotH = 44.f;
+    const float slot1X = 40.f;
+    const float slot2X = slot1X + slotW + 12.f;
+
+    if (mousePos.x >= slot1X && mousePos.x <= slot1X + slotW &&
+        mousePos.y >= slotY  && mousePos.y <= slotY + slotH) {
+        selectedBallSlot = 1;
+        return -1;
+    }
+    if (mousePos.x >= slot2X && mousePos.x <= slot2X + slotW &&
+        mousePos.y >= slotY  && mousePos.y <= slotY + slotH) {
+        selectedBallSlot = 2;
+        return -1;
+    }
+
+    float cardW = 210.f, cardH = 340.f;
+    float cardGap = 20.f;
+    float totalW = 4 * cardW + 3 * cardGap;
     float startX = (1024.f - totalW) / 2.f;
     float cardY  = 150.f;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
-        float cx  = startX + i * (cardW + 40.f);
+        float cx  = startX + i * (cardW + cardGap);
         float btnX = cx + 10.f;
         float btnY = cardY + cardH - 56.f;
         float btnW = cardW - 20.f;
@@ -1311,10 +1639,18 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
 
         if (mousePos.x >= btnX && mousePos.x <= btnX + btnW &&
             mousePos.y >= btnY && mousePos.y <= btnY + btnH) {
-            if (tokens >= shopOffers[i].cost) {
-                // Only track "equipped" badge for balls
-                if (shopOffers[i].category == ShopItemCategory::Ball)
-                    equippedBall = shopOffers[i].ballType;
+            const auto& offer = shopOffers[i];
+            bool isAlreadyOwned = false;
+            if (offer.category == ShopItemCategory::Ball) {
+                isAlreadyOwned = (items.getBallForSlot(selectedBallSlot) == offer.ballType);
+            } else if (offer.category == ShopItemCategory::Shoe) {
+                isAlreadyOwned = (items.shoeType == offer.shoeType);
+            } else if (offer.category == ShopItemCategory::Power &&
+                       !powerIsStackable(offer.powerType)) {
+                isAlreadyOwned = items.hasPower(offer.powerType);
+            }
+
+            if (!isAlreadyOwned && tokens >= offer.cost) {
                 return i;
             }
         }

@@ -34,7 +34,9 @@ void Ball::update(float dt) {
     float speed = getSpeed();
     if (speed <= 0.f) return;
 
-    float newSpeed = speed * std::exp(-frictionStrength * dt);
+    float frictionScale = 1.0f;
+    if (slideMultiplier > 0.001f) frictionScale = 1.0f / slideMultiplier;
+    float newSpeed = speed * std::exp(-(frictionStrength * frictionScale) * dt);
     if (newSpeed < 0.8f) { stop(); return; }
     vel = vecNormalize(vel) * newSpeed;
 
@@ -53,6 +55,10 @@ void Ball::setPos(sf::Vector2f p)  { pos = p; }
 void Ball::setVel(sf::Vector2f v)  { vel = v; }
 void Ball::setColor(sf::Color c)   { ballColor = c; }
 void Ball::setBallType(BallType t) { ballType = t; }
+void Ball::setSlideMultiplier(float mult) {
+    if (mult < 0.2f) mult = 0.2f;
+    slideMultiplier = mult;
+}
 
 void Ball::applyItemMultipliers(float radiusMult, float massMult) {
     radius = baseRadius * radiusMult;

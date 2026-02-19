@@ -12,6 +12,7 @@ public:
     // Sound playback (SFX)
     void playRandomPinHit(float volume = 70.0f);
     void playPinCollision(float volume = 50.0f);
+    void playExplodingPin(float volume = 75.0f);
     void startBallRoll();
     void stopBallRoll();
     
@@ -34,6 +35,7 @@ private:
     sf::SoundBuffer pinHitBuffer4;
     sf::SoundBuffer pinHitBuffer5;
     sf::SoundBuffer pinCollisionBuffer;
+    sf::SoundBuffer explodingPinBuffer;
     
     // Sound objects (Using unique_ptr for safe memory management)
     std::unique_ptr<sf::Sound> ballRollSound;
@@ -43,6 +45,7 @@ private:
     std::unique_ptr<sf::Sound> pinHitSound4;
     std::unique_ptr<sf::Sound> pinHitSound5;
     std::unique_ptr<sf::Sound> pinCollisionSound;
+    std::unique_ptr<sf::Sound> explodingPinSound;
     
     // Music objects (Streamed from disk to save memory)
     sf::Music menuMusic1;   // For assets/music1.wav

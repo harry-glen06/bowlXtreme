@@ -9,8 +9,9 @@ class XtremeScorer {
 public:
     void reset();
 
-    // Pass in how many pins were knocked this shot and the sum of their values
-    void recordShot(int pinsHit, int pinValueSum);
+    // Pass in how many pins were knocked this shot and the sum of their values.
+    // If strike is true on shot 1, this shot gains +30% bonus points.
+    void recordShot(int pinsHit, int pinValueSum, bool strike = false);
 
     // Progress
     int getRound() const { return round; }
@@ -57,9 +58,9 @@ private:
     int baseImpact = 10;
     int baseCombo = 1;
 
-    int targetStart = 450;
-    int targetIncrease = 150;
-    int targetScore = 450;
+    int targetStart = 425;
+    int targetIncrease = 125;
+    int targetScore = 425;
 
     // last shot
     int lastImpact = 10;

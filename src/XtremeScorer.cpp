@@ -21,7 +21,7 @@ void XtremeScorer::reset() {
     roundPassed = false;
 }
 
-void XtremeScorer::recordShot(int pinsHit, int pinValueSum) {
+void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
     if (lost) return;
 
     if (pinsHit < 0) pinsHit = 0;
@@ -33,6 +33,10 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum) {
     lastImpact = baseImpact + pinValueSum;
     lastCombo = pinsHit + baseCombo;
     lastShotScore = lastImpact * lastCombo;
+    if (strike && shotInFrame == 1) {
+        int strikeBonus = (lastShotScore * 30) / 100;
+        lastShotScore += strikeBonus;
+    }
 
     roundScore += lastShotScore;
 

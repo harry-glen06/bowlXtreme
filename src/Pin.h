@@ -48,6 +48,7 @@ private:
 
     // LuckyDucky
     bool luckyZero = false;        // set at shot-start if this shot scores 0
+    float slideMultiplier = 1.0f;
 
 public:
     Pin(sf::Vector2f startPosition, float radius, int value = 0);
@@ -55,6 +56,7 @@ public:
     void update(float dt);
     void draw(sf::RenderWindow& window) const;
     void resetToOriginalPosition();
+    void resetToOriginalPositionKeepType();
 
     // Type
     PinType getPinType() const { return pinType; }
@@ -71,6 +73,7 @@ public:
     void setPos(sf::Vector2f p);
     void setVel(sf::Vector2f v);
     void setActive(bool a);
+    void setSlideMultiplier(float mult);
 
     bool  isFallen()  const;
     void  setFallen(bool f);

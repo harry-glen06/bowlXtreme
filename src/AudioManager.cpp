@@ -33,6 +33,11 @@ void AudioManager::loadSounds() {
         pinCollisionSound = std::make_unique<sf::Sound>(pinCollisionBuffer);
         pinCollisionSound->setVolume(50.0f);
     }
+
+    if (explodingPinBuffer.loadFromFile("assets/exploding_pin.wav")) {
+        explodingPinSound = std::make_unique<sf::Sound>(explodingPinBuffer);
+        explodingPinSound->setVolume(75.0f);
+    }
     
     // --- Music Files (Using if checks to silence [[nodiscard]] warnings) ---
     
@@ -125,6 +130,14 @@ void AudioManager::playPinCollision(float volume) {
     if (pinCollisionSound->getStatus() != sf::SoundSource::Status::Playing) {
         pinCollisionSound->setVolume(volume);
         pinCollisionSound->play();
+    }
+}
+
+void AudioManager::playExplodingPin(float volume) {
+    if (!soundsLoaded || !explodingPinSound) return;
+    if (explodingPinSound->getStatus() != sf::SoundSource::Status::Playing) {
+        explodingPinSound->setVolume(volume);
+        explodingPinSound->play();
     }
 }
 

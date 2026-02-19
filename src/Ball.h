@@ -11,6 +11,7 @@ private:
     float radius;             // effective radius (modified by items)
     float mass;               // base mass, modified by items
     float frictionStrength;
+    float slideMultiplier = 1.0f;
 
     float spin;
 
@@ -35,6 +36,7 @@ public:
     void setVel(sf::Vector2f v);
     void setColor(sf::Color color);
     void setBallType(BallType type);
+    void setSlideMultiplier(float mult);
 
     // Apply item multipliers (called when equipping a ball)
     void applyItemMultipliers(float radiusMult, float massMult);

@@ -31,12 +31,14 @@ enum class GameAction {
     ExitToMenu
 };
 
-enum class ShopItemCategory { Ball, Pin };
+enum class ShopItemCategory { Ball, Pin, Shoe, Power };
 
 struct ShopOffer {
     ShopItemCategory category = ShopItemCategory::Ball;
     BallType ballType = BallType::Normal;
     PinType  pinType  = PinType::Normal;
+    ShoeType shoeType = ShoeType::None;
+    PowerType powerType = PowerType::Greedy;
     std::string name;
     std::string description;
     int cost;
@@ -59,9 +61,10 @@ public:
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
     // Returns the BallType purchased (-1 = none, index into offers)
-    int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens);
-    void generateShopOffers();
-    void resetEquippedBall() { equippedBall = BallType::Normal; }
+    int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
+    void generateShopOffers(const ActiveItems& items);
+    void resetEquippedBall() { selectedBallSlot = 1; }
+    int  getSelectedBallSlot() const { return selectedBallSlot; }
     const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
 
     // Shared inventory drawing
@@ -136,7 +139,7 @@ private:
     bool inSettings = false;
 
     std::vector<ShopOffer> shopOffers;
-    BallType equippedBall = BallType::Normal;
+    int selectedBallSlot = 1;
 
     // Shared inventory rendering core
     void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);

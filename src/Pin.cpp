@@ -71,6 +71,18 @@ void Pin::resetToOriginalPosition() {
     value   = baseValue;
 }
 
+void Pin::resetToOriginalPositionKeepType() {
+    pos         = startPos;
+    vel         = {0.f, 0.f};
+    angularVel  = 0.f;
+    angle       = 0.f;
+    fallen      = false;
+    explodeArmed  = false;
+    explodeTimer  = 0.f;
+    hasExploded   = false;
+    luckyZero     = false;
+}
+
 // ─── Update ──────────────────────────────────────────────────────────────────
 void Pin::update(float dt) {
     if (!active) return;
@@ -81,6 +93,7 @@ void Pin::update(float dt) {
     float fric = fallen
         ? (pinType == PinType::Ice ? 19.f * 0.85f : 19.f)
         : 28.f;
+    if (slideMultiplier > 0.001f) fric /= slideMultiplier;
 
     float speed = length(vel);
     if (speed > 0.f) {
@@ -124,6 +137,10 @@ float        Pin::getAngularVel() const { return angularVel; }
 void Pin::setPos(sf::Vector2f p) { pos = p; }
 void Pin::setVel(sf::Vector2f v) { vel = v; }
 void Pin::setActive(bool a)      { active = a; }
+void Pin::setSlideMultiplier(float mult) {
+    if (mult < 0.2f) mult = 0.2f;
+    slideMultiplier = mult;
+}
 void Pin::setAngularVel(float w) { angularVel = w; }
 
 void Pin::setFallen(bool f) {

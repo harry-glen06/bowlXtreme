@@ -74,9 +74,12 @@ void Game::applyPurchasedPinTypes(std::vector<Pin>& pinSet) {
         if (pinSet[i].isActive() && pinSet[i].getPinType() == PinType::Normal)
             available.push_back(i);
     }
-    for (int i = (int)available.size()-1; i > 0; i--) {
-        int j = rand() % (i+1);
-        std::swap(available[i], available[j]);
+    bool lockTypesThisRound = activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme;
+    if (!lockTypesThisRound) {
+        for (int i = (int)available.size()-1; i > 0; i--) {
+            int j = rand() % (i+1);
+            std::swap(available[i], available[j]);
+        }
     }
 
     // Assign one pin per purchased type
@@ -148,6 +151,7 @@ void Game::handleEvents() {
                         gameOver = false;
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
+                        ui.resetEquippedBall();
                         lane.bumpersOn = ui.getBumpersDefault();
                         pins = createPins(lane.centerX(), 240.0f);
                         resetBall();
@@ -160,7 +164,8 @@ void Game::handleEvents() {
                         gameOver = false;
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
-                        ui.generateShopOffers();
+                        ui.resetEquippedBall();
+                        ui.generateShopOffers(activeItems);
                         lane.bumpersOn = ui.getBumpersDefault();
                         pins = createPins(lane.centerX(), 240.0f);
                         resetBall();
@@ -172,18 +177,30 @@ void Game::handleEvents() {
                 }
                 if (ui.getState() == GameState::Shop) {
                     sf::Vector2i worldPosI((int)worldPos.x, (int)worldPos.y);
-                    int purchased = ui.handleShopClick(window, worldPosI, xtreme.getTokens());
+                    int purchased = ui.handleShopClick(window, worldPosI, xtreme.getTokens(), activeItems);
 
                     if (purchased >= 0) {
                         const auto& offers = ui.getShopOffers();
                         xtreme.addTokens(-offers[purchased].cost);
 
                         if (offers[purchased].category == ShopItemCategory::Ball) {
-                            equipBall(offers[purchased].ballType);
-                        } else {
+                            int slot = ui.getSelectedBallSlot();
+                            activeItems.setBallForSlot(slot, offers[purchased].ballType);
+                        } else if (offers[purchased].category == ShopItemCategory::Shoe) {
+                            bool changedShoes = (activeItems.shoeType != offers[purchased].shoeType);
+                            activeItems.applyShoeType(offers[purchased].shoeType);
+                            if (offers[purchased].shoeType == ShoeType::Clown && changedShoes) {
+                                xtreme.addTokens(10);
+                            }
+                        } else if (offers[purchased].category == ShopItemCategory::Pin) {
                             // Pin purchase: store type, will be applied next frame
                             activeItems.purchasedPinTypes.push_back(
                                 static_cast<int>(offers[purchased].pinType));
+                        } else {
+                            activeItems.applyPower(offers[purchased].powerType);
+                            if (offers[purchased].powerType == PowerType::Bumpers) {
+                                lane.bumpersOn = true;
+                            }
                         }
                     }
 
@@ -191,7 +208,7 @@ void Game::handleEvents() {
                     if (worldPos.x > windowW/2.f - 110.f && worldPos.x < windowW/2.f + 110.f &&
                         worldPos.y > windowH - 100.f    && worldPos.y < windowH - 40.f) {
                         ui.setState(GameState::Xtreme);
-                        ui.generateShopOffers();
+                        ui.generateShopOffers(activeItems);
                         // Fresh pins for the new round with purchased types applied
                         pins = createPins(lane.centerX(), 240.0f);
                         applyPurchasedPinTypes(pins);
@@ -214,6 +231,19 @@ void Game::resetBall() {
     // Reset per-shot item state
     activeItems.resetForNewShot();
 
+    // Pick the active ball based on mode + shot number.
+    // Xtreme has two shots per frame, so slot 1 -> shot 1 and slot 2 -> shot 2.
+    if (ui.getState() == GameState::Xtreme) {
+        int shot = xtreme.getShotInFrame();
+        equipBall(activeItems.getBallForShot(shot));
+    } else {
+        equipBall(activeItems.getBallForShot(1));
+    }
+    ball.setSlideMultiplier(activeItems.slideMultiplier);
+    for (auto& pin : pins) {
+        pin.setSlideMultiplier(activeItems.slideMultiplier);
+    }
+
     // Prepare pin special behaviours for the new shot
     prepareNewShot();
 
@@ -226,7 +256,6 @@ void Game::equipBall(BallType type) {
     activeItems.applyBallType(type);
     ball.setBallType(type);
     ball.applyItemMultipliers(activeItems.radiusMultiplier, activeItems.massMultiplier);
-    if (type == BallType::Normal) ui.resetEquippedBall();
     switch (type) {
         case BallType::BlackHole:  ball.setColor({10,  0,   20});  break;
         case BallType::Midas:      ball.setColor({210, 170, 20});  break;
@@ -274,7 +303,7 @@ int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
 
 void Game::processExplosions() {
     const float blastRadius = 120.f;
-    const float blastForce  = 900.f;
+    const float blastForce  = 900.f * 0.87f; // 13% weaker explosion effect
 
     for (auto& pin : pins) {
         if (!pin.isActive()) continue;
@@ -282,6 +311,7 @@ void Game::processExplosions() {
         if (!pin.shouldExplode()) continue;
 
         pin.markExploded();
+        audio.playExplodingPin(82.0f);
         sf::Vector2f ep = pin.getPos();
 
         // Knock over and push nearby pins
@@ -308,7 +338,8 @@ void Game::prepareNewShot() {
     for (auto& pin : pins) {
         if (!pin.isActive()) continue;
         pin.rollLuckyDucky();
-        pin.randomiseMischievous();
+        if (!(activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme))
+            pin.randomiseMischievous();
     }
 }
 
@@ -345,6 +376,7 @@ void Game::finishPendingResetIfReady(float dt) {
             hitPinIndices.push_back(i);
         }
     }
+    int physicalPinsDownThisShot = knockedThisBall;
 
     // ── Special pin effects at score time ────────────────────────────────────
 
@@ -402,7 +434,8 @@ void Game::finishPendingResetIfReady(float dt) {
 
     // Record score
     if (ui.getState() == GameState::Xtreme) {
-        xtreme.recordShot(knockedThisBall, pinValueSumThisBall);
+        bool strikeThisShot = (xtreme.getShotInFrame() == 1 && physicalPinsDownThisShot >= 10);
+        xtreme.recordShot(knockedThisBall, pinValueSumThisBall, strikeThisShot);
     } else {
         scorer.recordBall(knockedThisBall);
     }
@@ -415,11 +448,17 @@ void Game::finishPendingResetIfReady(float dt) {
                 if (pin.isFallen()) {
                     pin.setActive(false);
                 } else if (pin.isActive()) {
-                    pin.resetToOriginalPosition();
+                    if (activeItems.lockPinChangesMidRound) {
+                        pin.resetToOriginalPositionKeepType();
+                    } else {
+                        pin.resetToOriginalPosition();
+                    }
                 }
             }
-            // Re-apply purchased types to active pins
-            applyPurchasedPinTypes(pins);
+            // Re-apply purchased types to active pins unless shoes lock pin changes
+            if (!activeItems.lockPinChangesMidRound) {
+                applyPurchasedPinTypes(pins);
+            }
         } else {
             // Shot 2 done: fresh pins with purchased types
             pins = createPins(lane.centerX(), 240.0f);
@@ -588,7 +627,9 @@ void Game::doCollisions() {
 
             resolveCircleCollision(
                 bp, bv, bm, br,
-                pp, pv, (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f), pin.getRadius(),
+                pp, pv,
+                (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f) * activeItems.pinMassMultiplier,
+                pin.getRadius(),
                 0.12f
             );
 
@@ -629,13 +670,14 @@ void Game::doCollisions() {
                     activeItems.firstBallHitPinIndex != pi &&
                     activeItems.firstBallHitPinIndex >= 0) {
                     PinType copyFrom = pins[activeItems.firstBallHitPinIndex].getPinType();
-                    if (copyFrom != PinType::CopyCat) {
+                    if (!activeItems.lockPinChangesMidRound && copyFrom != PinType::CopyCat) {
                         pin.setPinType(copyFrom);
                     }
                 }
 
                 // Upgrade ball: each hit pin gains +1 value
-                if (activeItems.ballType == BallType::Upgrade) {
+                if (activeItems.ballType == BallType::Upgrade &&
+                    !activeItems.lockPinChangesMidRound) {
                     pin.setValue(pin.getValue() + 1);
                 }
 
@@ -681,8 +723,11 @@ void Game::doCollisions() {
                 sf::Vector2f p2 = pins[j].getPos(), v2 = pins[j].getVel();
                 sf::Vector2f v1B = v1, v2B = v2;
 
-                resolveCircleCollision(p1, v1, pins[i].getMass(), pins[i].getRadius(),
-                                       p2, v2, pins[j].getMass(), pins[j].getRadius(), 0.50f);
+                resolveCircleCollision(p1, v1,
+                                       pins[i].getMass() * activeItems.pinMassMultiplier, pins[i].getRadius(),
+                                       p2, v2,
+                                       pins[j].getMass() * activeItems.pinMassMultiplier, pins[j].getRadius(),
+                                       0.50f);
                 
                 // Play collision sound
                 float pinImpact = length(v1 - v1B) + length(v2 - v2B);
@@ -741,7 +786,8 @@ void Game::update(float dt) {
             gameOver = false;
             pendingReset = false;
             equipBall(BallType::Normal);
-        activeItems.resetAll();
+            activeItems.resetAll();
+            ui.resetEquippedBall();
             audio.playMenuMusic();
         }
         
@@ -756,6 +802,7 @@ void Game::update(float dt) {
             pendingReset = false;
             equipBall(BallType::Normal);
             activeItems.resetAll();
+            ui.resetEquippedBall();
             pins = createPins(lane.centerX(), 240.0f);
             resetBall();
         }
@@ -795,9 +842,14 @@ void Game::update(float dt) {
     // Launch
     if (!rollLocked && !pendingReset &&
         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
-        float a = degToRad(aimDeg);
+        float launchAim = aimDeg;
+        if (activeItems.shoeType == ShoeType::Clown) {
+            // Clown shoes add a tiny random wobble to the launch direction.
+            launchAim += static_cast<float>((rand() % 17) - 8);
+        }
+        float a = degToRad(launchAim);
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
-        float launchSpeed = 1600.0f * activeItems.speedMultiplier;
+        float launchSpeed = 1600.0f * activeItems.speedMultiplier * activeItems.launchSpeedMultiplier;
         ball.launch(rollDir, launchSpeed);
         rollLocked = true;
 
@@ -820,7 +872,6 @@ void Game::update(float dt) {
     if (nowR && !prevR) {
         if (ui.getState() == GameState::Xtreme) {
             xtreme.reset();
-            ui.generateShopOffers();
         } else {
             scorer.resetGame();
         }
@@ -829,6 +880,10 @@ void Game::update(float dt) {
         pendingReset = false;
         equipBall(BallType::Normal);
         activeItems.resetAll();
+        ui.resetEquippedBall();
+        if (ui.getState() == GameState::Xtreme) {
+            ui.generateShopOffers(activeItems);
+        }
         pins = createPins(lane.centerX(), 240.0f);
         resetBall();
     }
@@ -977,6 +1032,7 @@ void Game::draw() {
         xtremeMode = false;
         equipBall(BallType::Normal);
         activeItems.resetAll();
+        ui.resetEquippedBall();
         resetBall();
         pins = createPins(lane.centerX(), 240.0f);
         audio.stopBackgroundMusic();
