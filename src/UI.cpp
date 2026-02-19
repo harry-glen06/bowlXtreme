@@ -560,7 +560,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              int combo,
                              int lastShotScore,
                              float windowW,
-                             float windowH) {
+                             float windowH,
+                             const ActiveItems& items) {
     if (!fontLoaded) return GameAction::None;
 
     // Left info panel
@@ -598,7 +599,6 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     window.draw(target);
     y += 70;
 
-    // Big impact x combo
     sf::Text big(font, std::to_string(impact) + " X " + std::to_string(combo), 56);
     big.setPosition(sf::Vector2f(lx, y));
     big.setFillColor(sf::Color(120, 240, 255));
@@ -630,35 +630,22 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     tokenText.setFillColor(sf::Color(255, 215, 0));
     window.draw(tokenText);
 
-    // Right items panel (placeholder categories)
+    // Right inventory panel
     sf::RectangleShape rightPanel(sf::Vector2f(300, windowH - 80));
     rightPanel.setPosition(sf::Vector2f(windowW - 360, 40));
-    rightPanel.setFillColor(sf::Color(90, 90, 90));
+    rightPanel.setFillColor(sf::Color(50, 50, 60));
     rightPanel.setOutlineColor(sf::Color::Black);
     rightPanel.setOutlineThickness(3.0f);
     window.draw(rightPanel);
 
-    sf::Text shopTitle(font, "items", 72);
-    shopTitle.setPosition(sf::Vector2f(windowW - 330, 70));
-    shopTitle.setFillColor(sf::Color::Black);
-    window.draw(shopTitle);
+    sf::Text invTitle(font, "inventory", 36);
+    invTitle.setPosition(sf::Vector2f(windowW - 345, 55));
+    invTitle.setFillColor(sf::Color(200, 200, 200));
+    window.draw(invTitle);
 
-    sf::Text c1(font, "shoes", 52);
-    c1.setPosition(sf::Vector2f(windowW - 330, 170));
-    c1.setFillColor(sf::Color::Black);
-    window.draw(c1);
+    drawInventoryPanel(window, items, windowW - 355, 110, 290);
 
-    sf::Text c2(font, "balls", 52);
-    c2.setPosition(sf::Vector2f(windowW - 330, 320));
-    c2.setFillColor(sf::Color::Black);
-    window.draw(c2);
-
-    sf::Text c3(font, "powers", 52);
-    c3.setPosition(sf::Vector2f(windowW - 330, 540));
-    c3.setFillColor(sf::Color::Black);
-    window.draw(c3);
-
-    // Menu button (top-right)
+    // Menu button
     sf::RectangleShape exitBtn(sf::Vector2f(120, 40));
     exitBtn.setPosition(sf::Vector2f(windowW - 140, 20));
     exitBtn.setFillColor(sf::Color(100, 100, 100, 200));
@@ -678,6 +665,9 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
             return GameAction::ExitToMenu;
         }
     }
+
+    // Bottom inventory bar
+    drawInventoryBar(window, items, windowW, windowH);
 
     return GameAction::None;
 }
@@ -757,6 +747,267 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     window.draw(menuText);
 }
 
+// ─── Inventory helpers ────────────────────────────────────────────────────────
+
+static sf::Color ballPreviewColor(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return {10,  0,   20};
+        case BallType::Midas:      return {210, 170, 20};
+        case BallType::Upgrade:    return {30,  80,  200};
+        case BallType::Heavy:      return {60,  60,  65};
+        case BallType::Fastball:   return {240, 240, 240};
+        case BallType::OddBall:    return {60,  180, 60};
+        case BallType::EightBall:  return {10,  10,  10};
+        case BallType::Retrigger:  return {160, 170, 180};
+        default:                   return {25,  55,  140};
+    }
+}
+
+static std::string ballShortName(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return "Black Hole";
+        case BallType::Midas:      return "Midas";
+        case BallType::Upgrade:    return "Upgrade";
+        case BallType::Heavy:      return "Heavy";
+        case BallType::Fastball:   return "Fastball";
+        case BallType::OddBall:    return "Odd Ball";
+        case BallType::EightBall:  return "8-Ball";
+        case BallType::Retrigger:  return "Retrigger";
+        default:                   return "Normal";
+    }
+}
+
+static sf::Color pinPreviewColor(int pt) {
+    switch (static_cast<PinType>(pt)) {
+        case PinType::Gold:        return {210, 175, 50};
+        case PinType::Mischievous: return {140, 30,  180};
+        case PinType::Exploding:   return {220, 80,  20};
+        case PinType::Light:       return {140, 200, 240};
+        case PinType::Big:         return {160, 20,  20};
+        case PinType::Ice:         return {180, 230, 255};
+        case PinType::CopyCat:     return {150, 150, 155};
+        case PinType::LuckyDucky:  return {230, 200, 20};
+        case PinType::ThirdTime:   return {20,  160, 50};
+        default:                   return {220, 220, 220};
+    }
+}
+
+static std::string pinShortName(int pt) {
+    switch (static_cast<PinType>(pt)) {
+        case PinType::Gold:        return "Gold";
+        case PinType::Mischievous: return "Mischief";
+        case PinType::Exploding:   return "Exploding";
+        case PinType::Light:       return "Light";
+        case PinType::Big:         return "Big";
+        case PinType::Ice:         return "Ice";
+        case PinType::CopyCat:     return "Copy Cat";
+        case PinType::LuckyDucky:  return "Lucky Ducky";
+        case PinType::ThirdTime:   return "3rd Time";
+        default:                   return "Normal";
+    }
+}
+
+// Draws a mini pin silhouette icon at (cx, cy) with given colour
+static void drawMiniPin(sf::RenderWindow& window, float cx, float cy, float size, sf::Color color) {
+    // Simplified pin shape: small oval body + tiny head
+    float bodyH = size * 1.6f;
+    float bodyW = size * 0.55f;
+
+    // Body
+    sf::CircleShape body(bodyW);
+    body.setOrigin({bodyW, bodyW});
+    body.setPosition({cx, cy + size * 0.3f});
+    body.setFillColor(color);
+    body.setOutlineColor({0,0,0,120});
+    body.setOutlineThickness(1.5f);
+    window.draw(body);
+
+    // Neck (thin rectangle)
+    sf::RectangleShape neck({bodyW * 0.55f, size * 0.5f});
+    neck.setOrigin({bodyW * 0.275f, 0});
+    neck.setPosition({cx, cy - size * 0.3f});
+    neck.setFillColor(color);
+    window.draw(neck);
+
+    // Head
+    float headR = bodyW * 0.5f;
+    sf::CircleShape head(headR);
+    head.setOrigin({headR, headR});
+    head.setPosition({cx, cy - size * 0.7f});
+    head.setFillColor(color);
+    head.setOutlineColor({0,0,0,120});
+    head.setOutlineThickness(1.5f);
+    window.draw(head);
+
+    // Highlight
+    sf::CircleShape hl(headR * 0.4f);
+    hl.setOrigin({headR * 0.4f, headR * 0.4f});
+    hl.setPosition({cx - headR*0.2f, cy - size*0.8f});
+    hl.setFillColor({255,255,255,80});
+    window.draw(hl);
+}
+
+// Core inventory panel — draws ball + pins into a rect starting at (x,y) with given width
+void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
+                             float x, float y, float width) {
+    if (!fontLoaded) return;
+
+    float cx = x + width / 2.f;
+    float iy = y;
+
+    // ── Ball section ──────────────────────────────────────────────────────────
+    sf::Text ballLabel(font, "BALL", 20);
+    ballLabel.setPosition({x + 10.f, iy});
+    ballLabel.setFillColor({180, 180, 180});
+    window.draw(ballLabel);
+    iy += 28.f;
+
+    // Ball circle preview
+    float ballR = 28.f;
+    sf::CircleShape ballCircle(ballR);
+    ballCircle.setOrigin({ballR, ballR});
+    ballCircle.setPosition({cx, iy + ballR});
+    ballCircle.setFillColor(ballPreviewColor(items.ballType));
+    ballCircle.setOutlineColor({255,255,255,60});
+    ballCircle.setOutlineThickness(2.f);
+    window.draw(ballCircle);
+
+    // Ball name
+    sf::Text ballName(font, ballShortName(items.ballType), 18);
+    sf::FloatRect nb = ballName.getLocalBounds();
+    ballName.setPosition({cx - nb.size.x/2.f, iy + ballR*2.f + 6.f});
+    ballName.setFillColor(sf::Color::White);
+    window.draw(ballName);
+    iy += ballR * 2.f + 34.f;
+
+    if (items.purchasedPinTypes.empty()) return;
+
+    // ── Pins section ──────────────────────────────────────────────────────────
+    sf::Text pinsLabel(font, "PINS", 20);
+    pinsLabel.setPosition({x + 10.f, iy});
+    pinsLabel.setFillColor({180, 180, 180});
+    window.draw(pinsLabel);
+    iy += 28.f;
+
+    // Draw pins in a grid — up to 3 per row
+    float pinSize  = 18.f;
+    float cellW    = width / 3.f;
+    int   col      = 0;
+    float rowStartY = iy;
+
+    for (int pt : items.purchasedPinTypes) {
+        float pcx = x + col * cellW + cellW / 2.f;
+        float pcy = rowStartY + pinSize;
+
+        drawMiniPin(window, pcx, pcy, pinSize, pinPreviewColor(pt));
+
+        sf::Text pname(font, pinShortName(pt), 13);
+        sf::FloatRect pb = pname.getLocalBounds();
+        pname.setPosition({pcx - pb.size.x/2.f, pcy + pinSize + 4.f});
+        pname.setFillColor({210, 210, 210});
+        window.draw(pname);
+
+        col++;
+        if (col >= 3) {
+            col = 0;
+            rowStartY += pinSize * 3.f + 28.f;
+        }
+    }
+}
+
+// Bottom bar shown during gameplay
+void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
+                           float windowW, float windowH) {
+    if (!fontLoaded) return;
+    // Only show if player has something non-default
+    bool hasBall = (items.ballType != BallType::Normal);
+    bool hasPins = !items.purchasedPinTypes.empty();
+    if (!hasBall && !hasPins) return;
+
+    float barH   = 70.f;
+    float barY   = windowH - barH;
+    float iconSize = 20.f;
+    float padding  = 12.f;
+
+    // Semi-transparent bar background
+    sf::RectangleShape bar({windowW, barH});
+    bar.setPosition({0.f, barY});
+    bar.setFillColor({20, 20, 30, 200});
+    bar.setOutlineColor({80, 80, 100});
+    bar.setOutlineThickness(2.f);
+    window.draw(bar);
+
+    float cx = padding + iconSize;
+
+    // Ball icon
+    if (hasBall) {
+        float br = iconSize;
+        sf::CircleShape ballCircle(br);
+        ballCircle.setOrigin({br, br});
+        ballCircle.setPosition({cx, barY + barH/2.f});
+        ballCircle.setFillColor(ballPreviewColor(items.ballType));
+        ballCircle.setOutlineColor({255,255,255,60});
+        ballCircle.setOutlineThickness(2.f);
+        window.draw(ballCircle);
+
+        sf::Text bn(font, ballShortName(items.ballType), 14);
+        bn.setPosition({cx + br + 4.f, barY + barH/2.f - 10.f});
+        bn.setFillColor(sf::Color::White);
+        window.draw(bn);
+
+        // Measure text to advance cx
+        sf::FloatRect bnb = bn.getLocalBounds();
+        cx += br + bnb.size.x + padding * 2.f + 10.f;
+
+        // Divider
+        if (hasPins) {
+            sf::RectangleShape div({2.f, barH * 0.6f});
+            div.setPosition({cx, barY + barH * 0.2f});
+            div.setFillColor({100, 100, 120});
+            window.draw(div);
+            cx += padding;
+        }
+    }
+
+    // Pin icons
+    for (int pt : items.purchasedPinTypes) {
+        drawMiniPin(window, cx, barY + barH/2.f, iconSize * 0.85f, pinPreviewColor(pt));
+
+        sf::Text pn(font, pinShortName(pt), 13);
+        pn.setPosition({cx + iconSize + 2.f, barY + barH/2.f - 9.f});
+        pn.setFillColor({210, 210, 210});
+        window.draw(pn);
+
+        sf::FloatRect pnb = pn.getLocalBounds();
+        cx += iconSize + pnb.size.x + padding * 2.f;
+    }
+}
+
+// Inventory panel shown inside the shop screen
+void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
+                              float windowW, float windowH) {
+    if (!fontLoaded) return;
+
+    float panelW = 220.f;
+    float panelH = windowH - 160.f;
+    float panelX = windowW - panelW - 20.f;
+    float panelY = 140.f;
+
+    sf::RectangleShape panel({panelW, panelH});
+    panel.setPosition({panelX, panelY});
+    panel.setFillColor({30, 30, 45, 230});
+    panel.setOutlineColor({100, 100, 140});
+    panel.setOutlineThickness(2.f);
+    window.draw(panel);
+
+    sf::Text title(font, "OWNED", 22);
+    title.setPosition({panelX + 10.f, panelY + 8.f});
+    title.setFillColor({180, 180, 220});
+    window.draw(title);
+
+    drawInventoryPanel(window, items, panelX + 5.f, panelY + 40.f, panelW - 10.f);
+}
+
 // ─── Shop ─────────────────────────────────────────────────────────────────────
 
 static std::string ballTypeName(BallType t) {
@@ -822,7 +1073,7 @@ void UI::generateShopOffers() {
         {ShopItemCategory::Ball, BallType::Upgrade, PinType::Normal,
          "Upgrade Ball", "Hit pins +1 value.\n10% lighter, 5% faster.",        3},
         {ShopItemCategory::Ball, BallType::Heavy, PinType::Normal,
-         "Heavy Ball",   "15% heavier.\nKnocks pins easier.",                  4},
+         "Heavy Ball",   "15% heavier.\nKnocks pins easier.",                  2},
         {ShopItemCategory::Ball, BallType::Fastball, PinType::Normal,
          "Fastball",     "5% lighter.\n15% faster.",                           2},
         {ShopItemCategory::Ball, BallType::OddBall, PinType::Normal,
@@ -837,7 +1088,7 @@ void UI::generateShopOffers() {
         {ShopItemCategory::Pin, BallType::Normal, PinType::Mischievous,
          "Mischievous",  "One pin randomises\nvalue 1-15 each shot.",          2},
         {ShopItemCategory::Pin, BallType::Normal, PinType::Exploding,
-         "Exploding Pin","One pin explodes\n1s after being knocked.",           6},
+         "Exploding Pin","One pin explodes\n1s after being knocked.",           4},
         {ShopItemCategory::Pin, BallType::Normal, PinType::Light,
          "Light Pin",    "One pin worth 2\nbut very easy to knock.",           2},
         {ShopItemCategory::Pin, BallType::Normal, PinType::Big,
@@ -872,8 +1123,9 @@ void UI::generateShopOffers() {
     }
 }
 
-void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH) {
+void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items) {
     if (!fontLoaded) return;
+    const ActiveItems& equippedItems = items;
 
     if (shopOffers.empty()) generateShopOffers();
 
@@ -1039,6 +1291,9 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     contText.setPosition({windowW/2.f - 90.f, windowH - 88.f});
     contText.setFillColor(sf::Color::Black);
     window.draw(contText);
+
+    // Show what the player already owns
+    drawInventoryInShop(window, equippedItems, windowW, windowH);
 }
 
 int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens) {

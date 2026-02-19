@@ -907,7 +907,7 @@ void Game::draw() {
     }
 
     if (ui.getState() == GameState::Shop) {
-        ui.drawShop(window, xtreme.getTokens(), windowW, windowH);
+        ui.drawShop(window, xtreme.getTokens(), windowW, windowH, activeItems);
         window.display();
         return;
     }
@@ -943,7 +943,8 @@ void Game::draw() {
             xtreme.getLastCombo(),
             xtreme.getLastShotScore(),
             windowW,
-            windowH
+            windowH,
+            activeItems
         );
     } else {
         action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),

@@ -1,4 +1,3 @@
-
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <array>
@@ -58,12 +57,16 @@ public:
     void handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos);
 
     // Shop
-    void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH);
+    void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
     // Returns the BallType purchased (-1 = none, index into offers)
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens);
     void generateShopOffers();
     void resetEquippedBall() { equippedBall = BallType::Normal; }
     const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
+
+    // Shared inventory drawing
+    void drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items, float windowW, float windowH);
+    void drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items, float windowW, float windowH);
     
     // Game UI
     GameAction drawScorecard(sf::RenderWindow& window, 
@@ -86,7 +89,8 @@ public:
                              int combo,
                              int lastShotScore,
                              float windowW,
-                             float windowH);
+                             float windowH,
+                             const ActiveItems& items);
     
     void drawGameOverScreen(sf::RenderWindow& window,
                            GameOverMode mode,
@@ -133,4 +137,7 @@ private:
 
     std::vector<ShopOffer> shopOffers;
     BallType equippedBall = BallType::Normal;
+
+    // Shared inventory rendering core
+    void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);
 };
