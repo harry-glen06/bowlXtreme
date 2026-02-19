@@ -1,8 +1,8 @@
 #pragma once
 
 // Simple "Xtreme" scoring + progression.
-// - Each round has 2 frames (4 shots total)
-// - Each frame has 2 shots
+// - Each round has 2 frames (4 or 6 shots total with Extra Ball)
+// - Each frame has 2 shots (or 3 with Extra Ball power)
 // - Shot score: (baseImpact + sum(pin values hit)) * (pinsHit + baseCombo)
 
 class XtremeScorer {
@@ -10,13 +10,15 @@ public:
     void reset();
 
     // Pass in how many pins were knocked this shot and the sum of their values.
-    // If strike is true on shot 1, this shot gains +30% bonus points.
+    // If strike is true, this shot gains +30% bonus points.
     void recordShot(int pinsHit, int pinValueSum, bool strike = false);
 
     // Progress
     int getRound() const { return round; }
     int getFrameInRound() const { return frameInRound; } // 1-2
-    int getShotInFrame() const { return shotInFrame; }   // 1-2
+    int getShotInFrame() const { return shotInFrame; }   // 1..shotsPerFrame
+    int getShotsPerFrame() const { return shotsPerFrame; }
+    int getTotalShots() const { return totalShots; }
 
     // Tokens
     int getTokens() const { return tokenCounter; }
@@ -40,6 +42,9 @@ public:
     void setBaseCombo(int v) { baseCombo = v; }
     void setTargetStart(int v) { targetStart = v; }
     void setTargetIncrease(int v) { targetIncrease = v; }
+    void setExtraBallEnabled(bool enabled) { shotsPerFrame = enabled ? 3 : 2; }
+    void setPowerPassedGo(bool enabled) { powerPassedGo = enabled; }
+    void setPowerMoMoney(bool enabled) { powerMoMoney = enabled; }
 
     // Shop
     bool shopReady = false;
@@ -50,6 +55,8 @@ private:
     int round = 1;
     int frameInRound = 1;
     int shotInFrame = 1;
+    int shotsPerFrame = 2;
+    int totalShots = 0;
 
     int roundScore = 0;
 
@@ -72,4 +79,6 @@ private:
     int tokenCounter = 0;
 
     bool roundPassed = false;
+    bool powerPassedGo = false;
+    bool powerMoMoney = false;
 };

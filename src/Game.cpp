@@ -62,7 +62,24 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
         }
     }
 
+    const bool hasExtraPins =
+        activeItems.powerExtraPins || activeItems.hasPurchasedPower(PowerType::ExtraPins);
+    if (hasExtraPins) {
+        // Spawn as a wider front row so they stay in-lane and upright.
+        float y = startY + spacing * 0.85f;
+        out.emplace_back(sf::Vector2f(centerX - spacing, y), radius, pinValue++);
+        out.emplace_back(sf::Vector2f(centerX + spacing, y), radius, pinValue++);
+    }
+
     return out;
+}
+
+int Game::countStandingPins() const {
+    int standing = 0;
+    for (const auto& pin : pins) {
+        if (pin.isActive() && !pin.isFallen()) standing++;
+    }
+    return standing;
 }
 
 void Game::applyPurchasedPinTypes(std::vector<Pin>& pinSet) {
@@ -89,6 +106,67 @@ void Game::applyPurchasedPinTypes(std::vector<Pin>& pinSet) {
         pinSet[available[slot]].setPinType(static_cast<PinType>(pt));
         slot++;
     }
+}
+
+void Game::applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet) {
+    if (activeItems.pendingRandomPinUpgrades <= 0) return;
+
+    std::vector<int> candidates;
+    candidates.reserve(pinSet.size());
+    for (int i = 0; i < (int)pinSet.size(); i++) {
+        if (pinSet[i].isActive()) candidates.push_back(i);
+    }
+    if (candidates.empty()) {
+        activeItems.pendingRandomPinUpgrades = 0;
+        return;
+    }
+
+    for (int n = 0; n < activeItems.pendingRandomPinUpgrades; n++) {
+        int idx = candidates[rand() % candidates.size()];
+        pinSet[idx].setValue(pinSet[idx].getValue() + 1);
+    }
+    activeItems.pendingRandomPinUpgrades = 0;
+}
+
+void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
+    if (activeItems.swapCharges > 0) {
+        std::vector<int> active;
+        for (int i = 0; i < (int)pinSet.size(); i++) {
+            if (pinSet[i].isActive()) active.push_back(i);
+        }
+        if (active.size() >= 2) {
+            int a = rand() % active.size();
+            int b = rand() % active.size();
+            while (b == a) b = rand() % active.size();
+            std::swap(pinSet[active[a]], pinSet[active[b]]);
+            activeItems.swapCharges--;
+        }
+    }
+
+    if (activeItems.duplicateCharges > 0) {
+        std::vector<int> sourcesSpecial;
+        std::vector<int> sourcesAny;
+        std::vector<int> targets;
+        for (int i = 0; i < (int)pinSet.size(); i++) {
+            if (!pinSet[i].isActive()) continue;
+            sourcesAny.push_back(i);
+            if (pinSet[i].getPinType() != PinType::Normal) sourcesSpecial.push_back(i);
+            targets.push_back(i);
+        }
+
+        if (sourcesAny.size() >= 2) {
+            std::vector<int>& sourcePool = sourcesSpecial.empty() ? sourcesAny : sourcesSpecial;
+            int src = sourcePool[rand() % sourcePool.size()];
+
+            int dst = targets[rand() % targets.size()];
+            while (dst == src) dst = targets[rand() % targets.size()];
+
+            pinSet[dst].setPinType(pinSet[src].getPinType());
+            activeItems.duplicateCharges--;
+        }
+    }
+
+    applyPendingRandomPinUpgrades(pinSet);
 }
 
 void Game::loadHighScore() {
@@ -149,6 +227,8 @@ void Game::handleEvents() {
                         ui.setState(GameState::Playing);
                         scorer.resetGame();
                         gameOver = false;
+                        pendingGameOverFromScore = false;
+                        postScorePauseTimer = 0.0f;
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
                         ui.resetEquippedBall();
@@ -162,6 +242,8 @@ void Game::handleEvents() {
                         xtreme.reset();
                         xtremeMode = true;
                         gameOver = false;
+                        pendingGameOverFromScore = false;
+                        postScorePauseTimer = 0.0f;
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
                         ui.resetEquippedBall();
@@ -179,7 +261,13 @@ void Game::handleEvents() {
                     sf::Vector2i worldPosI((int)worldPos.x, (int)worldPos.y);
                     int purchased = ui.handleShopClick(window, worldPosI, xtreme.getTokens(), activeItems);
 
-                    if (purchased >= 0) {
+                    if (purchased == -2) {
+                        if (activeItems.skipCharges > 0 && xtreme.getTokens() >= 1) {
+                            xtreme.addTokens(-1);
+                            activeItems.skipCharges--;
+                            ui.generateShopOffers(activeItems);
+                        }
+                    } else if (purchased >= 0) {
                         const auto& offers = ui.getShopOffers();
                         xtreme.addTokens(-offers[purchased].cost);
 
@@ -201,6 +289,10 @@ void Game::handleEvents() {
                             if (offers[purchased].powerType == PowerType::Bumpers) {
                                 lane.bumpersOn = true;
                             }
+                            xtreme.setExtraBallEnabled(activeItems.powerExtraBall);
+                            xtreme.setPowerPassedGo(activeItems.powerPassedGo);
+                            xtreme.setPowerMoMoney(activeItems.powerMoMoney);
+                            xtreme.setBaseCombo(1 + activeItems.homeBaseComboBonus);
                         }
                     }
 
@@ -208,10 +300,12 @@ void Game::handleEvents() {
                     if (worldPos.x > windowW/2.f - 110.f && worldPos.x < windowW/2.f + 110.f &&
                         worldPos.y > windowH - 100.f    && worldPos.y < windowH - 40.f) {
                         ui.setState(GameState::Xtreme);
+                        postScorePauseTimer = 0.0f;
                         ui.generateShopOffers(activeItems);
                         // Fresh pins for the new round with purchased types applied
                         pins = createPins(lane.centerX(), 240.0f);
                         applyPurchasedPinTypes(pins);
+                        applyPowerPinLayout(pins);
                         resetBall();
                     }
                 }
@@ -227,9 +321,21 @@ void Game::resetBall() {
     aimDeg = -90.0f;
     inGutter = false;
     gutterSide = 0;
+    shotRollTimer = 0.0f;
+    backlineJamTimer = 0.0f;
 
     // Reset per-shot item state
     activeItems.resetForNewShot();
+
+    if (ui.getState() == GameState::Xtreme) {
+        xtreme.setExtraBallEnabled(activeItems.powerExtraBall);
+        xtreme.setPowerPassedGo(activeItems.powerPassedGo);
+        xtreme.setPowerMoMoney(activeItems.powerMoMoney);
+        xtreme.setBaseCombo(1 + activeItems.homeBaseComboBonus);
+    }
+    if (activeItems.powerBumpers) {
+        lane.bumpersOn = true;
+    }
 
     // Pick the active ball based on mode + shot number.
     // Xtreme has two shots per frame, so slot 1 -> shot 1 and slot 2 -> shot 2.
@@ -246,6 +352,7 @@ void Game::resetBall() {
 
     // Prepare pin special behaviours for the new shot
     prepareNewShot();
+    activeItems.pinsStandingAtShotStart = countStandingPins();
 
     // Stop rolling sound
     audio.stopBallRoll();
@@ -285,16 +392,20 @@ void Game::applyBlackHoleGravity(float dt) {
     }
 }
 
+int Game::computePinValueWithItems(int pinIndex) const {
+    int val = pins[pinIndex].getValue();
+    switch (activeItems.ballType) {
+        case BallType::EightBall: val = 8; break;
+        case BallType::OddBall: val = (val % 2 != 0) ? val * 2 : val / 2; break;
+        default: break;
+    }
+    return val;
+}
+
 int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
     int total = 0;
     for (int idx : hitIndices) {
-        int val = pins[idx].getValue();
-        switch (activeItems.ballType) {
-            case BallType::EightBall: val = 8; break;
-            case BallType::OddBall: val = (val % 2 != 0) ? val * 2 : val / 2; break;
-            default: break;
-        }
-        total += val;
+        total += computePinValueWithItems(idx);
     }
     if (activeItems.ballType == BallType::Retrigger && activeItems.retriggered)
         total += activeItems.retriggeredValue * 2;
@@ -346,6 +457,8 @@ void Game::prepareNewShot() {
 void Game::startPendingReset() {
     pendingReset = true;
     resetTimer = 0.0f;
+    shotRollTimer = 0.0f;
+    backlineJamTimer = 0.0f;
 }
 
 
@@ -377,6 +490,25 @@ void Game::finishPendingResetIfReady(float dt) {
         }
     }
     int physicalPinsDownThisShot = knockedThisBall;
+    int shotBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getShotInFrame() : 0;
+    bool earthquakeStrikeThisShot = false;
+
+    if (ui.getState() == GameState::Xtreme && activeItems.powerEarthquake) {
+        activeItems.earthquakeShotCounter++;
+        if (activeItems.earthquakeShotCounter >= 10) {
+            activeItems.earthquakeShotCounter = 0;
+            earthquakeStrikeThisShot = true;
+
+            // Force remaining standing pins down and count them in this shot.
+            for (int i = 0; i < (int)pins.size(); i++) {
+                if (!pins[i].isActive() || pins[i].isFallen()) continue;
+                pins[i].setFallen(true);
+                hitPinIndices.push_back(i);
+                physicalPinsDownThisShot++;
+            }
+            knockedThisBall = physicalPinsDownThisShot;
+        }
+    }
 
     // ── Special pin effects at score time ────────────────────────────────────
 
@@ -387,8 +519,8 @@ void Game::finishPendingResetIfReady(float dt) {
         }
     }
 
-    // ThirdTime: increment counter for each ThirdTime pin knocked,
-    // apply x2 combo bonus if this is the 3rd (or 6th, 9th...) time
+    // ThirdTime: increment counter for each ThirdTime pin knocked.
+    // Every 3rd score event on that pin grants one combo doubling.
     for (int idx : hitPinIndices) {
         if (pins[idx].getPinType() == PinType::ThirdTime) {
             pins[idx].incrementTimesScored();
@@ -403,29 +535,36 @@ void Game::finishPendingResetIfReady(float dt) {
     // Compute value sum with ball item effects + pin effects
     int pinValueSumThisBall = computePinValueSumWithItems(hitPinIndices);
 
-    // LuckyDucky: if luckyZero, subtract that pin's contribution
+    // LuckyDucky: if luckyZero, subtract that pin's actual contribution.
     for (int idx : hitPinIndices) {
         if (pins[idx].getPinType() == PinType::LuckyDucky && pins[idx].isLuckyZero()) {
-            // Remove its value from the sum (it contributed 20 via computePinValueSumWithItems)
-            pinValueSumThisBall -= 20;
+            pinValueSumThisBall -= computePinValueWithItems(idx);
             knockedThisBall--;   // doesn't count toward pin-count scoring either
         }
     }
     if (knockedThisBall < 0) knockedThisBall = 0;
     if (pinValueSumThisBall < 0) pinValueSumThisBall = 0;
 
+    // Greedy: every current dollar/token adds +5 score contribution.
+    if (ui.getState() == GameState::Xtreme && activeItems.powerGreedy) {
+        pinValueSumThisBall += xtreme.getTokens() * 5;
+    }
+
     // Midas ball: gold-marked pins grant +1 token each
     if (activeItems.ballType == BallType::Midas) {
         for (int idx : activeItems.goldPinIndices) {
-            if (pins[idx].isFallen()) {
+            if (pins[idx].isFallen() && pins[idx].getPinType() != PinType::Gold) {
                 xtreme.addTokens(1);
             }
         }
         activeItems.goldPinIndices.clear();
     }
 
-    // ThirdTime combo bonus applied to knocked count (affects combo multiplier)
-    knockedThisBall += activeItems.thirdTimeComboBonus;
+    // ThirdTime: each trigger doubles combo once.
+    if (activeItems.thirdTimeComboBonus > 0 && knockedThisBall > 0) {
+        int doublings = std::min(activeItems.thirdTimeComboBonus, 4); // cap at x16
+        knockedThisBall *= (1 << doublings);
+    }
 
     // Gutter ball
     if (inGutter && knockedThisBall == 0) {
@@ -434,16 +573,37 @@ void Game::finishPendingResetIfReady(float dt) {
 
     // Record score
     if (ui.getState() == GameState::Xtreme) {
-        bool strikeThisShot = (xtreme.getShotInFrame() == 1 && physicalPinsDownThisShot >= 10);
+        // shotBeforeRecord is intentionally captured before recordShot(),
+        // because recordShot advances the internal shot counter.
+        bool strikeThisShot = (shotBeforeRecord == 1 &&
+                               physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+        bool spareThisShot = (shotBeforeRecord > 1 &&
+                              physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+        if (activeItems.powerConfusion && spareThisShot) {
+            strikeThisShot = true;
+        }
+        if (earthquakeStrikeThisShot) {
+            strikeThisShot = true;
+        }
         xtreme.recordShot(knockedThisBall, pinValueSumThisBall, strikeThisShot);
+
+        if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
+            activeItems.homeBaseComboBonus += physicalPinsDownThisShot;
+            xtreme.setBaseCombo(1 + activeItems.homeBaseComboBonus);
+        }
+
+        // Random upgrade applies once after each completed frame.
+        if (xtreme.getShotInFrame() == 1 && activeItems.powerRandomUpgrade) {
+            activeItems.pendingRandomPinUpgrades += 1;
+        }
     } else {
         scorer.recordBall(knockedThisBall);
     }
 
     // Handle pin resets based on game state
     if (ui.getState() == GameState::Xtreme) {
-        if (xtreme.getShotInFrame() == 2) {
-            // Shot 1 done: deactivate fallen, reset standing (type resets in resetToOriginalPosition)
+        if (xtreme.getShotInFrame() > 1) {
+            // Non-final shot done: deactivate fallen, reset standing.
             for (auto& pin : pins) {
                 if (pin.isFallen()) {
                     pin.setActive(false);
@@ -459,10 +619,12 @@ void Game::finishPendingResetIfReady(float dt) {
             if (!activeItems.lockPinChangesMidRound) {
                 applyPurchasedPinTypes(pins);
             }
+            applyPowerPinLayout(pins);
         } else {
-            // Shot 2 done: fresh pins with purchased types
+            // Final shot in frame done: fresh pins with purchased types.
             pins = createPins(lane.centerX(), 240.0f);
             applyPurchasedPinTypes(pins);
+            applyPowerPinLayout(pins);
         }
     } else if (scorer.getCurrentFrame() < 10) {
         // Get the previous frame info to determine what to do
@@ -533,10 +695,13 @@ void Game::finishPendingResetIfReady(float dt) {
         }
     }
     
-    // Check for game over
+    // Check for transitions (game over / shop) and optionally pause so
+    // players can see the score animation before screens change.
+    bool needsPostScorePause = false;
     if (ui.getState() == GameState::Xtreme) {
         if (xtreme.isGameOver()) {
-            gameOver = true;
+            pendingGameOverFromScore = true;
+            needsPostScorePause = true;
 
             finalXtremeRoundsCleared = std::max(0, xtreme.getRound() - 1);
 
@@ -544,10 +709,13 @@ void Game::finishPendingResetIfReady(float dt) {
                 xtremeBestRound = finalXtremeRoundsCleared;
                 saveHighScore();
             }
+        } else if (xtreme.isShopReady()) {
+            needsPostScorePause = true;
         }
     } else {
         if (scorer.isGameOver()) {
-            gameOver = true;
+            pendingGameOverFromScore = true;
+            needsPostScorePause = true;
 
             finalNormalScore = scorer.getTotalScore();
 
@@ -560,6 +728,11 @@ void Game::finishPendingResetIfReady(float dt) {
 
     resetBall();
     pendingReset = false;
+    if (needsPostScorePause) {
+        postScorePauseTimer = pendingGameOverFromScore
+            ? postScorePauseDurationGameOver
+            : postScorePauseDurationShop;
+    }
 }
 
 void Game::applyGuttersAndBumpers() {
@@ -577,7 +750,8 @@ void Game::applyGuttersAndBumpers() {
         v.x = 0.0f;
         v.y = -420.0f;
     } else {
-        if (lane.bumpersOn) {
+        bool bumpersActive = lane.bumpersOn || activeItems.powerBumpers;
+        if (bumpersActive) {
             // Left bumper
             if (p.x < playL + r && v.x < 0.0f) {
                 p.x = playL + r;
@@ -676,18 +850,20 @@ void Game::doCollisions() {
                 }
 
                 // Upgrade ball: each hit pin gains +1 value
-                if (activeItems.ballType == BallType::Upgrade &&
-                    !activeItems.lockPinChangesMidRound) {
+                if (activeItems.ballType == BallType::Upgrade) {
                     pin.setValue(pin.getValue() + 1);
                 }
 
                 // Midas ball: mark pin as gold (store index)
                 if (activeItems.ballType == BallType::Midas) {
-                    bool alreadyGold = false;
-                    for (int idx : activeItems.goldPinIndices)
-                        if (idx == pi) { alreadyGold = true; break; }
-                    if (!alreadyGold)
-                        activeItems.goldPinIndices.push_back(pi);
+                    // Gold pins already pay via their own effect; don't double-count.
+                    if (pin.getPinType() != PinType::Gold) {
+                        bool alreadyGold = false;
+                        for (int idx : activeItems.goldPinIndices)
+                            if (idx == pi) { alreadyGold = true; break; }
+                        if (!alreadyGold)
+                            activeItems.goldPinIndices.push_back(pi);
+                    }
                 }
 
                 // Retrigger: on 2nd pin hit, record its value for triple scoring
@@ -784,6 +960,8 @@ void Game::update(float dt) {
             // Back to menu
             ui.setState(GameState::Menu);
             gameOver = false;
+            pendingGameOverFromScore = false;
+            postScorePauseTimer = 0.0f;
             pendingReset = false;
             equipBall(BallType::Normal);
             activeItems.resetAll();
@@ -798,7 +976,8 @@ void Game::update(float dt) {
                 scorer.resetGame();
             }
             gameOver = false;
-            finalScore = 0;
+            pendingGameOverFromScore = false;
+            postScorePauseTimer = 0.0f;
             pendingReset = false;
             equipBall(BallType::Normal);
             activeItems.resetAll();
@@ -810,6 +989,27 @@ void Game::update(float dt) {
         prevR = nowR;
         prevM = nowM;
         return;
+    }
+
+    if (postScorePauseTimer > 0.0f) {
+        postScorePauseTimer -= dt;
+        if (postScorePauseTimer <= 0.0f) {
+            postScorePauseTimer = 0.0f;
+
+            if (pendingGameOverFromScore) {
+                gameOver = true;
+                pendingGameOverFromScore = false;
+                return;
+            }
+
+            if (ui.getState() == GameState::Xtreme && xtreme.isShopReady()) {
+                ui.setState(GameState::Shop);
+                xtreme.consumeShopReady();
+                return;
+            }
+        } else {
+            return;
+        }
     }
     
     // Move/aim before roll
@@ -844,8 +1044,8 @@ void Game::update(float dt) {
         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
         float launchAim = aimDeg;
         if (activeItems.shoeType == ShoeType::Clown) {
-            // Clown shoes add a tiny random wobble to the launch direction.
-            launchAim += static_cast<float>((rand() % 17) - 8);
+            // Clown shoes add a noticeable random wobble to launch direction.
+            launchAim += static_cast<float>((rand() % 29) - 14);
         }
         float a = degToRad(launchAim);
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
@@ -866,7 +1066,11 @@ void Game::update(float dt) {
     bool nowC = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C);
 
     if (nowB && !prevB) {
-        lane.bumpersOn = !lane.bumpersOn;
+        if (!activeItems.powerBumpers) {
+            lane.bumpersOn = !lane.bumpersOn;
+        } else {
+            lane.bumpersOn = true;
+        }
     }
 
     if (nowR && !prevR) {
@@ -876,7 +1080,8 @@ void Game::update(float dt) {
             scorer.resetGame();
         }
         gameOver = false;
-        finalScore = 0;
+        pendingGameOverFromScore = false;
+        postScorePauseTimer = 0.0f;
         pendingReset = false;
         equipBall(BallType::Normal);
         activeItems.resetAll();
@@ -933,6 +1138,30 @@ void Game::update(float dt) {
     applyBlackHoleGravity(dt);
     processExplosions();
 
+    // Anti-softlock: if a roll is jammed near the backline (usually pin wedged),
+    // or rolling for too long, end the shot so the game can progress.
+    if (rollLocked && !pendingReset) {
+        shotRollTimer += dt;
+
+        sf::Vector2f p = ball.getPos();
+        sf::Vector2f v = ball.getVel();
+        bool nearBackline = p.y < (lane.top + ball.getRadius() + 85.0f);
+        bool mostlySideways = std::abs(v.y) < 95.0f;
+
+        if (nearBackline && mostlySideways) {
+            backlineJamTimer += dt;
+        } else {
+            backlineJamTimer = 0.0f;
+        }
+
+        if (backlineJamTimer >= backlineJamTime || shotRollTimer >= maxShotRollTime) {
+            ball.stop();
+            rollLocked = false;
+            audio.stopBallRoll();
+            startPendingReset();
+        }
+    }
+
     // Start reset if ball hits back
     if (!pendingReset && ball.getPos().y < lane.top + ball.getRadius()) {
         ball.stop();
@@ -943,7 +1172,10 @@ void Game::update(float dt) {
 
     finishPendingResetIfReady(dt);
 
-    if (ui.getState() == GameState::Xtreme && xtreme.isShopReady()) {
+    if (postScorePauseTimer <= 0.0f &&
+        !pendingGameOverFromScore &&
+        ui.getState() == GameState::Xtreme &&
+        xtreme.isShopReady()) {
         ui.setState(GameState::Shop);
         xtreme.consumeShopReady();
         return;
@@ -991,6 +1223,7 @@ void Game::draw() {
             xtreme.getRound(),
             xtreme.getFrameInRound(),
             xtreme.getShotInFrame(),
+            xtreme.getTotalShots(),
             xtreme.getTargetScore(),
             xtreme.getRoundScore(),
             xtreme.getTokens(),
@@ -1030,6 +1263,8 @@ void Game::draw() {
         scorer.resetGame();
         xtreme.reset();
         xtremeMode = false;
+        pendingGameOverFromScore = false;
+        postScorePauseTimer = 0.0f;
         equipBall(BallType::Normal);
         activeItems.resetAll();
         ui.resetEquippedBall();

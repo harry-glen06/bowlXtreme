@@ -4,6 +4,8 @@ void XtremeScorer::reset() {
     round = 1;
     frameInRound = 1;
     shotInFrame = 1;
+    shotsPerFrame = 2;
+    totalShots = 0;
 
     roundScore = 0;
     
@@ -19,6 +21,8 @@ void XtremeScorer::reset() {
     lastPinsHit = 0;
     lastPinValueSum = 0;
     roundPassed = false;
+    powerPassedGo = false;
+    powerMoMoney = false;
 }
 
 void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
@@ -26,6 +30,7 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
 
     if (pinsHit < 0) pinsHit = 0;
     if (pinValueSum < 0) pinValueSum = 0;
+    totalShots++;
 
     lastPinsHit = pinsHit;
     lastPinValueSum = pinValueSum;
@@ -33,7 +38,7 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
     lastImpact = baseImpact + pinValueSum;
     lastCombo = pinsHit + baseCombo;
     lastShotScore = lastImpact * lastCombo;
-    if (strike && shotInFrame == 1) {
+    if (strike) {
         int strikeBonus = (lastShotScore * 30) / 100;
         lastShotScore += strikeBonus;
     }
@@ -46,12 +51,12 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
     }
 
     // advance shot
-    if (shotInFrame == 1) {
-        shotInFrame = 2;
+    if (shotInFrame < shotsPerFrame) {
+        shotInFrame++;
         return;
     }
 
-    // finished shot 2
+    // finished final shot in frame
     shotInFrame = 1;
 
     // =====================
@@ -63,8 +68,10 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
         if (roundPassed) {
 
             // token reward
-            int interest = tokenCounter / 3;
+            int interestDivisor = powerMoMoney ? 2 : 3;
+            int interest = tokenCounter / interestDivisor;
             int reward = 6;     // 3 base + 3 bonus for early clear
+            if (powerPassedGo) reward += 5;
             tokenCounter += interest + reward;
 
             shopReady = true; 
@@ -96,8 +103,10 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
     }
 
     // passed round normally
-    int interest = tokenCounter / 3;
+    int interestDivisor = powerMoMoney ? 2 : 3;
+    int interest = tokenCounter / interestDivisor;
     int reward = 3;     // normal clear reward
+    if (powerPassedGo) reward += 5;
     tokenCounter += interest + reward;
 
     shopReady = true; 

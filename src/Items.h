@@ -76,6 +76,8 @@ struct ActiveItems {
     int skipCharges = 0;
     int earthquakeShotCounter = 0;
     int pendingRandomPinUpgrades = 0;
+    int homeBaseComboBonus = 0;
+    int pinsStandingAtShotStart = 10;
 
     // Per-shot state
     int   pinsHitThisShot  = 0;
@@ -132,10 +134,12 @@ struct ActiveItems {
         skipCharges = 0;
         earthquakeShotCounter = 0;
         pendingRandomPinUpgrades = 0;
+        homeBaseComboBonus = 0;
+        pinsStandingAtShotStart = 10;
     }
 
     BallType getBallForShot(int shot) const {
-        return (shot == 2) ? ballSlot2 : ballSlot1;
+        return (shot >= 2) ? ballSlot2 : ballSlot1;
     }
 
     BallType getBallForSlot(int slot) const {
@@ -241,5 +245,13 @@ struct ActiveItems {
             case PowerType::MoMoney:            powerMoMoney = true; break;
             default: break;
         }
+    }
+
+    bool hasPurchasedPower(PowerType p) const {
+        int target = static_cast<int>(p);
+        for (int raw : purchasedPowers) {
+            if (raw == target) return true;
+        }
+        return false;
     }
 };

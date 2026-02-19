@@ -60,7 +60,7 @@ public:
 
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
-    // Returns the BallType purchased (-1 = none, index into offers)
+    // Returns purchase index, -1 = none, -2 = use shop skip
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void resetEquippedBall() { selectedBallSlot = 1; }
@@ -85,6 +85,7 @@ public:
                              int round,
                              int frameInRound,
                              int shotInFrame,
+                             int totalShots,
                              int targetScore,
                              int roundScore,
                              int tokens,
@@ -140,6 +141,25 @@ private:
 
     std::vector<ShopOffer> shopOffers;
     int selectedBallSlot = 1;
+
+    // Xtreme shot-score animation state
+    int  hudLastShotCounter = -1;
+    int  hudCountTarget = 0;
+    float hudCountValue = 0.0f;
+    float hudCountTimer = 0.0f;
+    float hudCountDuration = 0.6f;
+    float hudFormulaTimer = 0.0f;
+    float hudFormulaDuration = 0.5f;
+    int hudImpactTarget = 10;
+    int hudComboTarget = 1;
+    float hudImpactValue = 10.0f;
+    float hudComboValue = 1.0f;
+    bool hudCounting = false;
+    bool hudCountingFormula = false;
+    bool hudShowBigScore = false;
+    float hudBigTimer = 0.0f;
+    sf::Clock hudAnimClock;
+    bool hudAnimClockPrimed = false;
 
     // Shared inventory rendering core
     void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);

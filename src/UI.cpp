@@ -1,5 +1,6 @@
 #include "UI.h"
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
 #include <cstdlib>
 
@@ -554,6 +555,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              int round,
                              int frameInRound,
                              int shotInFrame,
+                             int totalShots,
                              int targetScore,
                              int roundScore,
                              int tokens,
@@ -565,6 +567,89 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              const ActiveItems& items) {
     if (!fontLoaded) return GameAction::None;
     if (state != GameState::Xtreme) return GameAction::None;
+
+    float dt = 0.0f;
+    if (!hudAnimClockPrimed) {
+        hudAnimClock.restart();
+        hudAnimClockPrimed = true;
+    } else {
+        dt = hudAnimClock.restart().asSeconds();
+    }
+
+    if (totalShots <= 0) {
+        hudLastShotCounter = 0;
+        hudCountTarget = 0;
+        hudCountValue = 0.0f;
+        hudCountTimer = 0.0f;
+        hudFormulaTimer = 0.0f;
+        hudImpactTarget = 10;
+        hudComboTarget = 1;
+        hudImpactValue = 10.0f;
+        hudComboValue = 1.0f;
+        hudCounting = false;
+        hudCountingFormula = false;
+        hudShowBigScore = false;
+        hudBigTimer = 0.0f;
+    } else if (totalShots != hudLastShotCounter) {
+        hudLastShotCounter = totalShots;
+        hudCountTarget = std::max(0, lastShotScore);
+        hudImpactTarget = std::max(10, impact);
+        hudComboTarget = std::max(1, combo);
+        hudCountValue = 0.0f;
+        hudImpactValue = 10.0f;
+        hudComboValue = 1.0f;
+        hudFormulaTimer = 0.0f;
+        int formulaDelta = (hudImpactTarget - 10) + (hudComboTarget - 1) * 3;
+        hudFormulaDuration = std::clamp(0.25f + (float)formulaDelta * 0.02f, 0.25f, 0.75f);
+        hudCountTimer = 0.0f;
+        hudCountDuration = std::clamp(0.30f + (float)hudCountTarget / 320.0f, 0.30f, 1.10f);
+        hudCountingFormula = true;
+        hudCounting = false;
+        hudShowBigScore = false;
+        hudBigTimer = 0.0f;
+    }
+
+    if (hudCountingFormula) {
+        hudFormulaTimer += dt;
+        float t = (hudFormulaDuration > 0.001f) ? (hudFormulaTimer / hudFormulaDuration) : 1.0f;
+        t = std::clamp(t, 0.0f, 1.0f);
+        float eased = 1.0f - std::pow(1.0f - t, 3.0f);
+        hudImpactValue = 10.0f + (float)(hudImpactTarget - 10) * eased;
+        hudComboValue = 1.0f + (float)(hudComboTarget - 1) * eased;
+
+        if (t >= 1.0f) {
+            hudImpactValue = (float)hudImpactTarget;
+            hudComboValue = (float)hudComboTarget;
+            hudCountingFormula = false;
+            hudCounting = true;
+            hudCountTimer = 0.0f;
+            hudCountValue = 0.0f;
+        }
+    } else if (hudCounting) {
+        hudCountTimer += dt;
+        float t = (hudCountDuration > 0.001f) ? (hudCountTimer / hudCountDuration) : 1.0f;
+        t = std::clamp(t, 0.0f, 1.0f);
+        float eased = 1.0f - std::pow(1.0f - t, 3.0f);
+        hudCountValue = (float)hudCountTarget * eased;
+        if (t >= 1.0f) {
+            hudCountValue = (float)hudCountTarget;
+            hudCounting = false;
+            hudShowBigScore = true;
+            hudBigTimer = 0.0f;
+        }
+    } else if (hudShowBigScore) {
+        hudBigTimer += dt;
+        if (hudBigTimer >= 0.9f) {
+            hudShowBigScore = false;
+            hudCountTarget = 0;
+            hudCountValue = 0.0f;
+            hudFormulaTimer = 0.0f;
+            hudImpactTarget = 10;
+            hudComboTarget = 1;
+            hudImpactValue = 10.0f;
+            hudComboValue = 1.0f;
+        }
+    }
 
     // Left info panel
     sf::RectangleShape leftPanel(sf::Vector2f(250, windowH - 80));
@@ -601,7 +686,9 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     window.draw(target);
     y += 70;
 
-    sf::Text big(font, std::to_string(impact) + " X " + std::to_string(combo), 56);
+    int shownImpact = std::max(10, (int)std::round(hudImpactValue));
+    int shownCombo = std::max(1, (int)std::round(hudComboValue));
+    sf::Text big(font, std::to_string(shownImpact) + " X " + std::to_string(shownCombo), 56);
     big.setPosition(sf::Vector2f(lx, y));
     big.setFillColor(sf::Color(120, 240, 255));
     big.setOutlineColor(sf::Color::Black);
@@ -615,9 +702,15 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     window.draw(explain);
     y += 34;
 
-    sf::Text shotScore(font, "shot score: " + std::to_string(lastShotScore), 22);
+    int shownShotAdd = 0;
+    if (hudCounting) {
+        shownShotAdd = (int)std::round(hudCountValue);
+    } else if (hudShowBigScore) {
+        shownShotAdd = hudCountTarget;
+    }
+    sf::Text shotScore(font, "shot add: " + std::to_string(shownShotAdd), 22);
     shotScore.setPosition(sf::Vector2f(lx, y));
-    shotScore.setFillColor(sf::Color::Black);
+    shotScore.setFillColor(hudCounting ? sf::Color(100, 255, 170) : sf::Color::Black);
     window.draw(shotScore);
     y += 34;
 
@@ -631,6 +724,27 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     tokenText.setPosition(sf::Vector2f(lx, y));
     tokenText.setFillColor(sf::Color(255, 215, 0));
     window.draw(tokenText);
+
+    if (hudShowBigScore && hudCountTarget > 0) {
+        float t = std::clamp(hudBigTimer / 0.9f, 0.0f, 1.0f);
+        float pulse = 1.0f + 0.12f * std::sin(t * 6.283185f);
+        float fade = (t > 0.72f) ? (1.0f - (t - 0.72f) / 0.28f) : 1.0f;
+        fade = std::clamp(fade, 0.0f, 1.0f);
+        std::uint8_t alpha = (std::uint8_t)(255.0f * fade);
+
+        sf::Text bigShot(font, "+" + std::to_string(hudCountTarget), 88);
+        bigShot.setStyle(sf::Text::Bold);
+        bigShot.setScale({pulse, pulse});
+        bigShot.setFillColor(sf::Color(255, 230, 110, alpha));
+        bigShot.setOutlineColor(sf::Color(20, 20, 20, alpha));
+        bigShot.setOutlineThickness(4.0f);
+
+        sf::FloatRect bb = bigShot.getLocalBounds();
+        float centerX = 40.0f + 125.0f;
+        float centerY = 40.0f + 360.0f;
+        bigShot.setPosition({centerX - bb.size.x * 0.5f, centerY - bb.size.y * 0.5f});
+        window.draw(bigShot);
+    }
 
     // Right inventory panel (moved further right)
     const float inventoryOffsetX = 60.f;
@@ -994,19 +1108,46 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         iy += pinRows * (pinSize * 3.f + 28.f) + 8.f;
     }
 
-    if (!items.purchasedPowers.empty()) {
+    const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+    std::vector<int> counts(powerCount, 0);
+    for (int raw : items.purchasedPowers) {
+        if (raw >= 0 && raw < powerCount) counts[raw]++;
+    }
+
+    // Keep inventory display aligned with live power state, even if purchase
+    // history ever goes out of sync.
+    auto forceOwned = [&](PowerType p, bool owned) {
+        if (owned) counts[(int)p] = std::max(counts[(int)p], 1);
+    };
+    forceOwned(PowerType::Greedy, items.powerGreedy);
+    forceOwned(PowerType::RandomUpgrade, items.powerRandomUpgrade);
+    forceOwned(PowerType::ExtraPins, items.powerExtraPins);
+    forceOwned(PowerType::ExtraBall, items.powerExtraBall);
+    forceOwned(PowerType::Bumpers, items.powerBumpers);
+    forceOwned(PowerType::HomeBase, items.powerHomeBase);
+    forceOwned(PowerType::Confusion, items.powerConfusion);
+    forceOwned(PowerType::Earthquake, items.powerEarthquake);
+    forceOwned(PowerType::UpgradesForEveryone, items.powerUpgradesForEveryone);
+    forceOwned(PowerType::Sales, items.powerSales);
+    forceOwned(PowerType::PassedGo, items.powerPassedGo);
+    forceOwned(PowerType::MoMoney, items.powerMoMoney);
+
+    counts[(int)PowerType::Duplicate] = items.duplicateCharges;
+    counts[(int)PowerType::SwapPins] = items.swapCharges;
+    counts[(int)PowerType::Skip] = items.skipCharges;
+
+    bool hasShownPowers = false;
+    for (int c : counts) {
+        if (c > 0) { hasShownPowers = true; break; }
+    }
+
+    if (hasShownPowers) {
         // ── Powers section ────────────────────────────────────────────────────
         sf::Text powersLabel(font, "POWERS", 20);
         powersLabel.setPosition({x + 10.f, iy});
         powersLabel.setFillColor({180, 180, 180});
         window.draw(powersLabel);
         iy += 26.f;
-
-        const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
-        std::vector<int> counts(powerCount, 0);
-        for (int raw : items.purchasedPowers) {
-            if (raw >= 0 && raw < powerCount) counts[raw]++;
-        }
 
         const float colW = width * 0.48f;
         int shown = 0;
@@ -1146,11 +1287,16 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     if (!fontLoaded) return;
     if (state != GameState::Shop) return;
 
-    // Place shop-owned inventory below cards so it never overlaps offers.
     float panelW = 280.f;
-    float panelH = 320.f;
+    float panelH = 420.f;
     float panelX = windowW - panelW - 24.f;
-    float panelY = windowH - panelH - 120.f;
+    float panelY = windowH - panelH - 32.f;
+    if (shopOffers.size() > 4) {
+        panelW = 240.f;
+        panelH = 440.f;
+        panelX = 16.f;
+        panelY = windowH - panelH - 24.f;
+    }
 
     sf::RectangleShape panel({panelW, panelH});
     panel.setPosition({panelX, panelY});
@@ -1164,7 +1310,28 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     title.setFillColor({180, 180, 220});
     window.draw(title);
 
-    drawInventoryPanel(window, items, panelX + 5.f, panelY + 40.f, panelW - 10.f);
+    // Clip inventory content to the panel interior so large loadouts never
+    // draw outside the box.
+    const float clipPadX = 6.f;
+    const float clipPadBottom = 8.f;
+    const float contentTop = panelY + 40.f;
+    const float clipX = panelX + clipPadX;
+    const float clipY = contentTop;
+    const float clipW = panelW - clipPadX * 2.f;
+    const float clipH = panelH - (contentTop - panelY) - clipPadBottom;
+
+    if (clipW > 1.f && clipH > 1.f) {
+        sf::View prevView = window.getView();
+        sf::View clipView(sf::FloatRect(sf::Vector2f(clipX, clipY), sf::Vector2f(clipW, clipH)));
+        clipView.setViewport(sf::FloatRect(
+            sf::Vector2f(clipX / windowW, clipY / windowH),
+            sf::Vector2f(clipW / windowW, clipH / windowH)));
+        window.setView(clipView);
+
+        drawInventoryPanel(window, items, panelX + 6.f, contentTop, panelW - 12.f);
+
+        window.setView(prevView);
+    }
 }
 
 // ─── Shop ─────────────────────────────────────────────────────────────────────
@@ -1307,29 +1474,29 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "Steel Caps",   "Pins cannot change\nduring a round.",                4},
         // Powers
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Greedy",       "Every dollar adds\n+5 score each shot.",             4},
+         "Greedy",       "Every dollar adds\n+5 score each shot.",             5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::RandomUpgrade,
-         "Random Upgrade","After each frame,\na random pin gains +1 value.",    4},
+         "Random Upgrade","After each frame,\na random pin gains +1 value.",    3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
          "Extra Pins",   "Adds two extra pins\nto the rack.",                   5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraBall,
          "Extra Ball",   "Adds one extra shot\nper frame.",                     6},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Duplicate,
-         "Duplicate",    "Copy one pin type\nto another. 1 use.",               2},
+         "Duplicate",    "Copy one random pin\ntype to another. 1 use.",        2},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Bumpers,
-         "Bumpers",      "No gutter balls\nfor the rest of run.",               4},
+         "Bumpers",      "No gutter balls\nfor the rest of run.",               5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::SwapPins,
-         "Swap Pins",    "Swap two pin spots.\n1 use.",                         2},
+         "Swap Pins",    "Swap two random\npin spots. 1 use.",                  2},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::HomeBase,
-         "Home Base",    "Each pin hit raises\nbase combo by 1.",               4},
+         "Home Base",    "Each pin hit raises\nbase combo by 1.",               5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Confusion,
          "Confusion",    "Spares score like\nstrikes.",                         3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Earthquake,
-         "Earthquake",   "Every 10 shots,\na free strike.",                     5},
+         "Earthquake",   "Every 10 shots,\na free strike.",                     6},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Skip,
          "Skip",         "Gain two shop skips\nfor 1 dollar.",                  1},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::UpgradesForEveryone,
-         "Upgrades+3",   "Future shops show\nthree extra items.",               5},
+         "Upgrades+3",   "Future shops show\nthree extra items.",               4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Sales,
          "Sales",        "Everything in shop\nis 20% cheaper.",                 4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::PassedGo,
@@ -1338,12 +1505,16 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "Mo Money",     "Interest every 2\ndollars, not 3.",                   4},
     };
 
+    auto hasOwnedPower = [&](PowerType p) {
+        return items.hasPower(p) || items.hasPurchasedPower(p);
+    };
+
     std::vector<RawOffer> filtered;
     filtered.reserve(pool.size());
     for (const auto& offer : pool) {
         if (offer.category == ShopItemCategory::Power &&
             !powerIsStackable(offer.powerType) &&
-            items.hasPower(offer.powerType)) {
+            hasOwnedPower(offer.powerType)) {
             continue;
         }
 
@@ -1361,8 +1532,8 @@ void UI::generateShopOffers(const ActiveItems& items) {
         std::swap(filtered[i], filtered[j]);
     }
 
-    // Pick 4 offers
-    int count = std::min(4, (int)filtered.size());
+    int maxOffers = hasOwnedPower(PowerType::UpgradesForEveryone) ? 7 : 4;
+    int count = std::min(maxOffers, (int)filtered.size());
     for (int i = 0; i < count; i++) {
         ShopOffer o;
         o.category    = filtered[i].category;
@@ -1404,6 +1575,27 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     tokenText.setOutlineThickness(2);
     window.draw(tokenText);
 
+    const float skipX = windowW - 250.f;
+    const float skipY = 88.f;
+    const float skipW = 220.f;
+    const float skipH = 40.f;
+    if (items.skipCharges > 0) {
+        bool canUseSkip = tokens >= 1;
+        sf::RectangleShape skipBtn({skipW, skipH});
+        skipBtn.setPosition({skipX, skipY});
+        skipBtn.setFillColor(canUseSkip ? sf::Color(120, 170, 240) : sf::Color(70, 80, 100));
+        skipBtn.setOutlineColor(sf::Color::Black);
+        skipBtn.setOutlineThickness(2.f);
+        window.draw(skipBtn);
+
+        sf::Text skipText(font,
+                          "SKIP (1) x" + std::to_string(items.skipCharges),
+                          20);
+        skipText.setPosition({skipX + 14.f, skipY + 8.f});
+        skipText.setFillColor(sf::Color::White);
+        window.draw(skipText);
+    }
+
     // Ball slot selector (which slot a purchased ball should fill)
     sf::Text slotTitle(font, "Ball Slot", 22);
     slotTitle.setPosition({40.f, 38.f});
@@ -1439,16 +1631,22 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     slotCurrent.setFillColor({200, 200, 200});
     window.draw(slotCurrent);
 
-    // 4-card layout
+    // Card layout (up to 4 per row)
+    const int cardsPerRow = 4;
     float cardW = 210.f, cardH = 340.f;
     float cardGap = 20.f;
-    float totalW = 4 * cardW + 3 * cardGap;
-    float startX = (windowW - totalW) / 2.f;
-    float cardY  = 150.f;
+    float firstCardY  = 150.f;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         const auto& offer = shopOffers[i];
-        float cx = startX + i * (cardW + cardGap);
+        int row = i / cardsPerRow;
+        int col = i % cardsPerRow;
+        int remaining = (int)shopOffers.size() - row * cardsPerRow;
+        int cardsInRow = std::min(cardsPerRow, remaining);
+        float rowTotalW = cardsInRow * cardW + (cardsInRow - 1) * cardGap;
+        float rowStartX = (windowW - rowTotalW) / 2.f;
+        float cx = rowStartX + col * (cardW + cardGap);
+        float cardY = firstCardY + row * (cardH + cardGap);
         bool canAfford = tokens >= offer.cost;
         bool isBall = (offer.category == ShopItemCategory::Ball);
         bool isPin  = (offer.category == ShopItemCategory::Pin);
@@ -1458,7 +1656,9 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         bool isEquipped = false;
         if (isBall) isEquipped = (items.getBallForSlot(selectedBallSlot) == offer.ballType);
         if (isShoe) isEquipped = (items.shoeType == offer.shoeType);
-        if (isPower && !isStackablePower) isEquipped = items.hasPower(offer.powerType);
+        if (isPower && !isStackablePower) {
+            isEquipped = items.hasPower(offer.powerType) || items.hasPurchasedPower(offer.powerType);
+        }
 
         // Card background tint by category
         sf::Color cardColor = isEquipped      ? sf::Color(40, 100, 40)  :
@@ -1624,14 +1824,31 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         return -1;
     }
 
+    const float skipX = 1024.f - 250.f;
+    const float skipY = 88.f;
+    const float skipW = 220.f;
+    const float skipH = 40.f;
+    if (items.skipCharges > 0 &&
+        mousePos.x >= skipX && mousePos.x <= skipX + skipW &&
+        mousePos.y >= skipY && mousePos.y <= skipY + skipH) {
+        if (tokens >= 1) return -2;
+        return -1;
+    }
+
+    const int cardsPerRow = 4;
     float cardW = 210.f, cardH = 340.f;
     float cardGap = 20.f;
-    float totalW = 4 * cardW + 3 * cardGap;
-    float startX = (1024.f - totalW) / 2.f;
-    float cardY  = 150.f;
+    float firstCardY  = 150.f;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
-        float cx  = startX + i * (cardW + cardGap);
+        int row = i / cardsPerRow;
+        int col = i % cardsPerRow;
+        int remaining = (int)shopOffers.size() - row * cardsPerRow;
+        int cardsInRow = std::min(cardsPerRow, remaining);
+        float rowTotalW = cardsInRow * cardW + (cardsInRow - 1) * cardGap;
+        float rowStartX = (1024.f - rowTotalW) / 2.f;
+        float cardY = firstCardY + row * (cardH + cardGap);
+        float cx  = rowStartX + col * (cardW + cardGap);
         float btnX = cx + 10.f;
         float btnY = cardY + cardH - 56.f;
         float btnW = cardW - 20.f;
@@ -1647,7 +1864,7 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
                 isAlreadyOwned = (items.shoeType == offer.shoeType);
             } else if (offer.category == ShopItemCategory::Power &&
                        !powerIsStackable(offer.powerType)) {
-                isAlreadyOwned = items.hasPower(offer.powerType);
+                isAlreadyOwned = items.hasPower(offer.powerType) || items.hasPurchasedPower(offer.powerType);
             }
 
             if (!isAlreadyOwned && tokens >= offer.cost) {

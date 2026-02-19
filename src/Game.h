@@ -33,6 +33,9 @@ private:
 
     std::vector<Pin> createPins(float centerX, float startY);
     void applyPurchasedPinTypes(std::vector<Pin>& pinSet);
+    void applyPowerPinLayout(std::vector<Pin>& pinSet);
+    void applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet);
+    int countStandingPins() const;
     void processExplosions();
     void prepareNewShot();
 
@@ -51,6 +54,7 @@ private:
     ActiveItems activeItems;
     void equipBall(BallType type);
     void applyBlackHoleGravity(float dt);
+    int  computePinValueWithItems(int pinIndex) const;
     int  computePinValueSumWithItems(const std::vector<int>& hitPinIndices);
 
 private:
@@ -79,6 +83,10 @@ private:
     bool rollLocked = false;
     sf::Vector2f rollDir = sf::Vector2f(0.0f, -1.0f);
     float minRollSpeed = 250.0f;
+    float shotRollTimer = 0.0f;
+    float backlineJamTimer = 0.0f;
+    float maxShotRollTime = 7.0f;
+    float backlineJamTime = 0.70f;
 
     // Gutter state
     bool inGutter = false;
@@ -90,10 +98,13 @@ private:
     float maxResetWait = 2.0f;
     float pinsStillSpeed = 25.0f;
     float endBuffer = 0.25f;
+    float postScorePauseTimer = 0.0f;
+    float postScorePauseDurationShop = 1.8f;
+    float postScorePauseDurationGameOver = 1.0f;
+    bool pendingGameOverFromScore = false;
 
     // Game over state
     bool gameOver = false;
-    int finalScore = 0;
 
     bool xtremeMode = false;
     int bestRound = 0;
