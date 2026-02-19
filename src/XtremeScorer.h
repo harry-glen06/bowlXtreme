@@ -17,6 +17,9 @@ public:
     int getFrameInRound() const { return frameInRound; } // 1-2
     int getShotInFrame() const { return shotInFrame; }   // 1-2
 
+    // Tokens
+    int getTokens() const { return tokenCounter; }
+
     // Scores
     int getRoundScore() const { return roundScore; }
     int getTargetScore() const { return targetScore; }
@@ -36,6 +39,11 @@ public:
     void setTargetStart(int v) { targetStart = v; }
     void setTargetIncrease(int v) { targetIncrease = v; }
 
+    // Shop
+    bool shopReady = false;
+    bool isShopReady() const { return shopReady; }
+    void consumeShopReady() { shopReady = false; }
+
 private:
     int round = 1;
     int frameInRound = 1;
@@ -48,9 +56,9 @@ private:
     int baseImpact = 10;
     int baseCombo = 1;
 
-    int targetStart = 600;
-    int targetIncrease = 200;
-    int targetScore = 600;
+    int targetStart = 500;
+    int targetIncrease = 180;
+    int targetScore = 500;
 
     // last shot
     int lastImpact = 10;
@@ -58,6 +66,8 @@ private:
     int lastShotScore = 10;
     int lastPinsHit = 0;
     int lastPinValueSum = 0;
+
+    int tokenCounter = 0;
 
     bool roundPassed = false;
 };

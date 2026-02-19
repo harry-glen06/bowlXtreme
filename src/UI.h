@@ -9,6 +9,7 @@ enum class GameState {
     Menu,
     Playing,
     Xtreme,
+    Shop,
     GameOver
 };
 
@@ -42,6 +43,9 @@ public:
     // Settings
     void drawSettings(sf::RenderWindow& window, float windowW, float windowH);
     void handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos);
+
+    // Shop
+    void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH);
     
     // Game UI
     GameAction drawScorecard(sf::RenderWindow& window, 
@@ -59,6 +63,7 @@ public:
                              int shotInFrame,
                              int targetScore,
                              int roundScore,
+                             int tokens,
                              int impact,
                              int combo,
                              int lastShotScore,

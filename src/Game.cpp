@@ -161,6 +161,13 @@ void Game::handleEvents() {
                         // Show settings (we'll implement this next)
                     }
                 }
+                if (ui.getState() == GameState::Shop) {
+                    if (worldPos.x > windowW - 280 && worldPos.x < windowW - 60 &&
+                        worldPos.y > windowH - 110 && worldPos.y < windowH - 50) {
+
+                        ui.setState(GameState::Xtreme);   // back to game
+                    }
+                }
             }
         }
     }
@@ -662,6 +669,12 @@ void Game::update(float dt) {
     }
 
     finishPendingResetIfReady(dt);
+
+    if (ui.getState() == GameState::Xtreme && xtreme.isShopReady()) {
+        ui.setState(GameState::Shop);
+        xtreme.consumeShopReady();
+        return;
+    }
 }
 
 void Game::draw() {
@@ -675,6 +688,11 @@ void Game::draw() {
         return;
     }
 
+    if (ui.getState() == GameState::Shop) {
+        ui.drawShop(window, xtreme.getTokens(), windowW, windowH);
+        window.display();
+        return;
+    }
     // Draw game
     lane.draw(window);
     for (const auto& pin : pins) pin.draw(window);
@@ -702,6 +720,7 @@ void Game::draw() {
             xtreme.getShotInFrame(),
             xtreme.getTargetScore(),
             xtreme.getRoundScore(),
+            xtreme.getTokens(),
             xtreme.getLastImpact(),
             xtreme.getLastCombo(),
             xtreme.getLastShotScore(),

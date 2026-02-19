@@ -555,6 +555,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              int shotInFrame,
                              int targetScore,
                              int roundScore,
+                             int tokens,
                              int impact,
                              int combo,
                              int lastShotScore,
@@ -622,6 +623,12 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     roundScoreText.setPosition(sf::Vector2f(lx, y));
     roundScoreText.setFillColor(sf::Color::Black);
     window.draw(roundScoreText);
+
+    y += 40;
+    sf::Text tokenText(font, "tokens: " + std::to_string(tokens), 26);
+    tokenText.setPosition(sf::Vector2f(lx, y));
+    tokenText.setFillColor(sf::Color(255, 215, 0));
+    window.draw(tokenText);
 
     // Right items panel (placeholder categories)
     sf::RectangleShape rightPanel(sf::Vector2f(300, windowH - 80));
@@ -748,4 +755,81 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
         windowH / 2 + 140
     ));
     window.draw(menuText);
+}
+
+// Shop
+void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH) {
+    if (!fontLoaded) return;
+
+    // background
+    sf::RectangleShape bg(sf::Vector2f(windowW, windowH));
+    bg.setFillColor(sf::Color(30, 30, 30));
+    window.draw(bg);
+
+    // left panel
+    sf::RectangleShape left(sf::Vector2f(320, windowH - 80));
+    left.setPosition(sf::Vector2f(40, 40));
+    left.setFillColor(sf::Color(90, 90, 90));
+    left.setOutlineColor(sf::Color::Black);
+    left.setOutlineThickness(4);
+    window.draw(left);
+
+    // right panel
+    sf::RectangleShape right(sf::Vector2f(windowW - 420, windowH - 80));
+    right.setPosition(sf::Vector2f(380, 40));
+    right.setFillColor(sf::Color(70, 70, 70));
+    right.setOutlineColor(sf::Color::Black);
+    right.setOutlineThickness(4);
+    window.draw(right);
+
+    // Title
+    sf::Text title(font, "SHOP", 90);
+    title.setPosition(sf::Vector2f(420, 60));
+    title.setFillColor(sf::Color::Black);
+    window.draw(title);
+
+    // Tokens (gold)
+    sf::Text tokenText(font, "TOKENS: " + std::to_string(tokens), 36);
+    tokenText.setPosition(sf::Vector2f(windowW - 330, 60));
+    tokenText.setFillColor(sf::Color(255, 215, 0));
+    tokenText.setOutlineColor(sf::Color::Black);
+    tokenText.setOutlineThickness(2);
+    window.draw(tokenText);
+
+    // Left categories
+    float y = 90.0f;
+    sf::Text pins(font, "pins", 60); pins.setPosition({90, y}); pins.setFillColor(sf::Color::Black); window.draw(pins);
+    y += 140;
+    sf::Text shoes(font, "shoes", 60); shoes.setPosition({70, y}); shoes.setFillColor(sf::Color::Black); window.draw(shoes);
+    y += 140;
+    sf::Text balls(font, "balls", 60); balls.setPosition({80, y}); balls.setFillColor(sf::Color::Black); window.draw(balls);
+    y += 140;
+    sf::Text powers(font, "powers", 60); powers.setPosition({50, y}); powers.setFillColor(sf::Color::Black); window.draw(powers);
+
+    // Placeholder offers on the right (we will replace with real random items next)
+    float ox = 420.0f;
+    float oy = 180.0f;
+
+    sf::Text offerTitle(font, "4-6 random items", 50);
+    offerTitle.setPosition(sf::Vector2f(ox, oy));
+    offerTitle.setFillColor(sf::Color::Black);
+    window.draw(offerTitle);
+
+    sf::Text offerSub(font, "with their prices", 50);
+    offerSub.setPosition(sf::Vector2f(ox, oy + 70));
+    offerSub.setFillColor(sf::Color::Black);
+    window.draw(offerSub);
+
+    // Continue button
+    sf::RectangleShape cont(sf::Vector2f(220, 60));
+    cont.setPosition(sf::Vector2f(windowW - 280, windowH - 110));
+    cont.setFillColor(sf::Color(80, 200, 220));
+    cont.setOutlineColor(sf::Color::Black);
+    cont.setOutlineThickness(3);
+    window.draw(cont);
+
+    sf::Text contText(font, "CONTINUE", 28);
+    contText.setPosition(sf::Vector2f(windowW - 250, windowH - 95));
+    contText.setFillColor(sf::Color::Black);
+    window.draw(contText);
 }

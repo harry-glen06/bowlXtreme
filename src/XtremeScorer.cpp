@@ -6,6 +6,8 @@ void XtremeScorer::reset() {
     shotInFrame = 1;
 
     roundScore = 0;
+    
+    tokenCounter = 0;
 
     lost = false;
 
@@ -34,51 +36,70 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum) {
 
     roundScore += lastShotScore;
 
-    // If we ever hit the target, lock it in for this round
+    // mark round as passed if target reached
     if (roundScore >= targetScore) {
         roundPassed = true;
     }
 
-    // Advance shot
+    // advance shot
     if (shotInFrame == 1) {
         shotInFrame = 2;
         return;
     }
 
-    // Shot 2 completed, move to next frame or round
+    // finished shot 2
     shotInFrame = 1;
 
-    // Finished frame 1
+    // =====================
+    // FRAME 1 COMPLETE
+    // =====================
     if (frameInRound == 1) {
-        // If we already passed, skip frame 2 and start next round
+
+        // passed early -> skip frame 2
         if (roundPassed) {
+
+            // token reward
+            int interest = tokenCounter / 3;
+            int reward = 6;     // 3 base + 3 bonus for early clear
+            tokenCounter += interest + reward;
+
+            shopReady = true; 
+
             round++;
             targetScore += targetIncrease;
             roundScore = 0;
+
             frameInRound = 1;
-            shotInFrame = 1;
             roundPassed = false;
             return;
         }
 
-        // Otherwise go to frame 2
+        // otherwise go to frame 2
         frameInRound = 2;
         return;
     }
 
-    // Finished frame 2 => round complete
+    // =====================
+    // FRAME 2 COMPLETE
+    // =====================
+
     frameInRound = 1;
 
-    // Only lose if we never passed
+    // failed round
     if (!roundPassed) {
         lost = true;
         return;
     }
 
-    // Passed the round
+    // passed round normally
+    int interest = tokenCounter / 3;
+    int reward = 3;     // normal clear reward
+    tokenCounter += interest + reward;
+
+    shopReady = true; 
+
     round++;
     targetScore += targetIncrease;
     roundScore = 0;
     roundPassed = false;
 }
-
