@@ -10,6 +10,7 @@
 #include "XtremeScorer.h"
 #include "AudioManager.h"
 #include "UI.h"
+#include "Items.h"
 
 class Game {
 public:
@@ -41,6 +42,12 @@ private:
     int xtremeBestRound = 0;
     int finalNormalScore = 0;
     int finalXtremeRoundsCleared = 0;
+
+    // Item system
+    ActiveItems activeItems;
+    void equipBall(BallType type);
+    void applyBlackHoleGravity(float dt);
+    int  computePinValueSumWithItems(const std::vector<int>& hitPinIndices);
 
 private:
     const float windowW = 1024.0f;

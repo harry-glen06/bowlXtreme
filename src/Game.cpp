@@ -1,5 +1,6 @@
 #include "Game.h"
 #include "Physics.h"
+#include "Items.h"
 #include <string>
 #include <cmath>
 #include <ctime>
@@ -162,10 +163,21 @@ void Game::handleEvents() {
                     }
                 }
                 if (ui.getState() == GameState::Shop) {
-                    if (worldPos.x > windowW - 280 && worldPos.x < windowW - 60 &&
-                        worldPos.y > windowH - 110 && worldPos.y < windowH - 50) {
+                    sf::Vector2i worldPosI((int)worldPos.x, (int)worldPos.y);
+                    int purchased = ui.handleShopClick(window, worldPosI, xtreme.getTokens());
 
-                        ui.setState(GameState::Xtreme);   // back to game
+                    if (purchased >= 0) {
+                        // Deduct tokens and equip the ball
+                        const auto& offers = ui.getShopOffers();
+                        xtreme.addTokens(-offers[purchased].cost);
+                        equipBall(offers[purchased].ballType);
+                    }
+
+                    // Continue button
+                    if (worldPos.x > windowW/2.f - 110.f && worldPos.x < windowW/2.f + 110.f &&
+                        worldPos.y > windowH - 100.f    && worldPos.y < windowH - 40.f) {
+                        ui.setState(GameState::Xtreme);
+                        ui.generateShopOffers();   // fresh offers next round
                     }
                 }
             }
@@ -180,11 +192,63 @@ void Game::resetBall() {
     aimDeg = -90.0f;
     inGutter = false;
     gutterSide = 0;
-    
+
+    // Reset per-shot item state
+    activeItems.resetForNewShot();
+
     // Stop rolling sound
     audio.stopBallRoll();
 }
 
+
+void Game::equipBall(BallType type) {
+    activeItems.applyBallType(type);
+    ball.setBallType(type);
+    ball.applyItemMultipliers(activeItems.radiusMultiplier, activeItems.massMultiplier);
+    switch (type) {
+        case BallType::BlackHole:  ball.setColor({10,  0,   20});  break;
+        case BallType::Midas:      ball.setColor({210, 170, 20});  break;
+        case BallType::Upgrade:    ball.setColor({30,  80,  200}); break;
+        case BallType::Heavy:      ball.setColor({60,  60,  65});  break;
+        case BallType::Fastball:   ball.setColor({240, 240, 240}); break;
+        case BallType::OddBall:    ball.setColor({60,  180, 60});  break;
+        case BallType::EightBall:  ball.setColor({10,  10,  10});  break;
+        case BallType::Retrigger:  ball.setColor({160, 170, 180}); break;
+        default:                   ball.setColor({25,  55,  140}); break;
+    }
+}
+
+void Game::applyBlackHoleGravity(float dt) {
+    if (activeItems.ballType != BallType::BlackHole) return;
+    if (!rollLocked) return;
+    sf::Vector2f ballPos = ball.getPos();
+    const float pullStrength = 180.0f;
+    for (auto& pin : pins) {
+        if (!pin.isActive() || pin.isFallen()) continue;
+        sf::Vector2f diff = ballPos - pin.getPos();
+        float dist = std::sqrt(diff.x*diff.x + diff.y*diff.y);
+        if (dist < 1.f) continue;
+        float force = pullStrength / (dist * 0.06f + 1.f);
+        sf::Vector2f pull = (diff / dist) * force * dt;
+        pin.setVel(pin.getVel() + pull);
+    }
+}
+
+int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
+    int total = 0;
+    for (int idx : hitIndices) {
+        int val = pins[idx].getValue();
+        switch (activeItems.ballType) {
+            case BallType::EightBall: val = 8; break;
+            case BallType::OddBall: val = (val % 2 != 0) ? val * 2 : val / 2; break;
+            default: break;
+        }
+        total += val;
+    }
+    if (activeItems.ballType == BallType::Retrigger && activeItems.retriggered)
+        total += activeItems.retriggeredValue * 2;
+    return total;
+}
 void Game::startPendingReset() {
     pendingReset = true;
     resetTimer = 0.0f;
@@ -207,20 +271,33 @@ void Game::finishPendingResetIfReady(float dt) {
     bool ready = (pinsStill && resetTimer >= endBuffer) || (resetTimer >= maxResetWait);
     if (!ready) return;
 
-    // Count pins knocked THIS ball
+    // Count pins knocked THIS ball and apply item modifiers
     int knockedThisBall = 0;
-    int pinValueSumThisBall = 0;
-    for (auto& pin : pins) {
-        if (!pin.isActive()) continue;
-        if (pin.isFallen()) {
+    std::vector<int> hitPinIndices;
+    for (int i = 0; i < (int)pins.size(); i++) {
+        if (!pins[i].isActive()) continue;
+        if (pins[i].isFallen()) {
             knockedThisBall++;
-            pinValueSumThisBall += pin.getValue();
+            hitPinIndices.push_back(i);
         }
+    }
+
+    // Compute value sum with item effects (OddBall, EightBall, Retrigger)
+    int pinValueSumThisBall = computePinValueSumWithItems(hitPinIndices);
+
+    // Midas ball: gold pins grant +1 token each
+    if (activeItems.ballType == BallType::Midas) {
+        for (int idx : activeItems.goldPinIndices) {
+            if (pins[idx].isFallen()) {
+                xtreme.addTokens(1);
+            }
+        }
+        activeItems.goldPinIndices.clear();
     }
 
     // FIXED: Gutter ball only if ball went in gutter AND didn't knock down any pins
     if (inGutter && knockedThisBall == 0) {
-        knockedThisBall = 0;  // Confirm it's a gutter ball (0 pins)
+        knockedThisBall = 0;
     }
     // If ball hit pins THEN went in gutter, still count the pins!
 
@@ -401,11 +478,12 @@ void Game::doCollisions() {
         sf::Vector2f bv = ball.getVel();
         sf::Vector2f bvStart = bv;
         float br = ball.getRadius();
-        float bm = 4.0f;
+        float bm = ball.getMass();  // respects item mass multiplier
 
         bool hitAnyPin = false;
 
-        for (auto& pin : pins) {
+        for (int pi = 0; pi < (int)pins.size(); pi++) {
+            auto& pin = pins[pi];
             if (!pin.isActive()) continue;
 
             sf::Vector2f pp = pin.getPos();
@@ -423,18 +501,48 @@ void Game::doCollisions() {
 
             float impact = length(pv - pvBefore);
             if (impact > 5.0f) hitAnyPin = true;
-            
+
             // Play pin hit sound
             if (impact > 50.0f) {
                 float impactVolume = std::min(100.0f, 40.0f + impact * 0.5f);
                 audio.playRandomPinHit(impactVolume);
             }
 
+            // Pin first contact this shot (impact threshold)
+            bool freshImpact = (!pin.isFallen() && impact > 50.0f);
+
             // Pin falls
-            if (!pin.isFallen() && impact > 50.0f) {
+            if (freshImpact) {
                 pin.setFallen(true);
                 float spin = (bv.x - pv.x) * 0.01f;
                 pin.setAngularVel(std::clamp(spin, -6.0f, 6.0f));
+            }
+
+            // ── Item effects on first meaningful contact ──────────────────
+            if (freshImpact || (impact > 50.0f && !pin.isFallen())) {
+
+                activeItems.pinsHitThisShot++;
+
+                // Upgrade ball: each hit pin gains +1 value
+                if (activeItems.ballType == BallType::Upgrade) {
+                    pin.setValue(pin.getValue() + 1);
+                }
+
+                // Midas ball: mark pin as gold (store index)
+                if (activeItems.ballType == BallType::Midas) {
+                    bool alreadyGold = false;
+                    for (int idx : activeItems.goldPinIndices)
+                        if (idx == pi) { alreadyGold = true; break; }
+                    if (!alreadyGold)
+                        activeItems.goldPinIndices.push_back(pi);
+                }
+
+                // Retrigger: on 2nd pin hit, record its value for triple scoring
+                if (activeItems.ballType == BallType::Retrigger &&
+                    activeItems.pinsHitThisShot == 2 && !activeItems.retriggered) {
+                    activeItems.retriggered = true;
+                    activeItems.retriggeredValue = pin.getValue();
+                }
             }
         }
 
@@ -580,9 +688,10 @@ void Game::update(float dt) {
         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
         float a = degToRad(aimDeg);
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
-        ball.launch(rollDir, 1600.0f);
+        float launchSpeed = 1600.0f * activeItems.speedMultiplier;
+        ball.launch(rollDir, launchSpeed);
         rollLocked = true;
-        
+
         // Start rolling sound
         audio.startBallRoll();
     }
@@ -659,6 +768,7 @@ void Game::update(float dt) {
 
     applyGuttersAndBumpers();
     doCollisions();
+    applyBlackHoleGravity(dt);
 
     // Start reset if ball hits back
     if (!pendingReset && ball.getPos().y < lane.top + ball.getRadius()) {

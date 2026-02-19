@@ -4,6 +4,7 @@
 #include <array>
 #include <vector>
 #include "BowlingScorer.h"
+#include "Items.h"
 
 enum class GameState {
     Menu,
@@ -30,6 +31,13 @@ enum class GameAction {
     ExitToMenu
 };
 
+struct ShopOffer {
+    BallType ballType;
+    std::string name;
+    std::string description;
+    int cost;
+};
+
 class UI {
 public:
     UI();
@@ -46,6 +54,10 @@ public:
 
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH);
+    // Returns the BallType purchased (-1 = none, index into offers)
+    int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens);
+    void generateShopOffers();
+    const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
     
     // Game UI
     GameAction drawScorecard(sf::RenderWindow& window, 
@@ -108,8 +120,11 @@ private:
     
     // Settings
     bool bumpersDefault = false;
-    float musicVolume = 50.0f;  // 0-100
-    float soundVolume = 70.0f;  // 0-100
-    int defaultBallColor = 0;   // 0-7 (color index)
+    float musicVolume = 50.0f;
+    float soundVolume = 70.0f;
+    int defaultBallColor = 0;
     bool inSettings = false;
+
+    std::vector<ShopOffer> shopOffers;
+    BallType equippedBall = BallType::Normal;
 };

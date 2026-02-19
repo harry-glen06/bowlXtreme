@@ -19,6 +19,7 @@ public:
 
     // Tokens
     int getTokens() const { return tokenCounter; }
+    void addTokens(int amount) { tokenCounter += amount; }
 
     // Scores
     int getRoundScore() const { return roundScore; }

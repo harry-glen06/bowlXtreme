@@ -757,79 +757,233 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     window.draw(menuText);
 }
 
-// Shop
+// ─── Shop ─────────────────────────────────────────────────────────────────────
+
+static std::string ballTypeName(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return "Black Hole";
+        case BallType::Midas:      return "Midas Ball";
+        case BallType::Upgrade:    return "Upgrade Ball";
+        case BallType::Heavy:      return "Heavy Ball";
+        case BallType::Fastball:   return "Fastball";
+        case BallType::OddBall:    return "Odd Ball";
+        case BallType::EightBall:  return "8-Ball";
+        case BallType::Retrigger:  return "Retrigger";
+        default:                   return "Normal";
+    }
+}
+
+static std::string ballTypeDesc(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return "Pins drift toward\nball. 8% smaller.";
+        case BallType::Midas:      return "Hit pins turn gold.\nEach gold pin = +1 token.";
+        case BallType::Upgrade:    return "Each pin hit gains\n+1 value. 10% lighter,\n5% faster.";
+        case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
+        case BallType::Fastball:   return "5% lighter, 15% faster.";
+        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.5 score.";
+        case BallType::EightBall:  return "All pins worth 8.";
+        case BallType::Retrigger:  return "2nd pin hit scores 3x.";
+        default:                   return "A standard bowling ball.";
+    }
+}
+
+static int ballTypeCost(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return 4;
+        case BallType::Midas:      return 5;
+        case BallType::Upgrade:    return 3;
+        case BallType::Heavy:      return 2;
+        case BallType::Fastball:   return 2;
+        case BallType::OddBall:    return 3;
+        case BallType::EightBall:  return 4;
+        case BallType::Retrigger:  return 4;
+        default:                   return 1;
+    }
+}
+
+void UI::generateShopOffers() {
+    // Pool of purchasable balls (excludes Normal)
+    std::vector<BallType> pool = {
+        BallType::BlackHole, BallType::Midas, BallType::Upgrade,
+        BallType::Heavy,     BallType::Fastball, BallType::OddBall,
+        BallType::EightBall, BallType::Retrigger
+    };
+
+    // Shuffle
+    for (int i = (int)pool.size() - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        std::swap(pool[i], pool[j]);
+    }
+
+    shopOffers.clear();
+    int count = std::min(3, (int)pool.size());
+    for (int i = 0; i < count; i++) {
+        ShopOffer offer;
+        offer.ballType   = pool[i];
+        offer.name       = ballTypeName(pool[i]);
+        offer.description = ballTypeDesc(pool[i]);
+        offer.cost       = ballTypeCost(pool[i]);
+        shopOffers.push_back(offer);
+    }
+}
+
 void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH) {
     if (!fontLoaded) return;
 
-    // background
+    if (shopOffers.empty()) generateShopOffers();
+
+    // Background
     sf::RectangleShape bg(sf::Vector2f(windowW, windowH));
-    bg.setFillColor(sf::Color(30, 30, 30));
+    bg.setFillColor(sf::Color(25, 25, 35));
     window.draw(bg);
 
-    // left panel
-    sf::RectangleShape left(sf::Vector2f(320, windowH - 80));
-    left.setPosition(sf::Vector2f(40, 40));
-    left.setFillColor(sf::Color(90, 90, 90));
-    left.setOutlineColor(sf::Color::Black);
-    left.setOutlineThickness(4);
-    window.draw(left);
-
-    // right panel
-    sf::RectangleShape right(sf::Vector2f(windowW - 420, windowH - 80));
-    right.setPosition(sf::Vector2f(380, 40));
-    right.setFillColor(sf::Color(70, 70, 70));
-    right.setOutlineColor(sf::Color::Black);
-    right.setOutlineThickness(4);
-    window.draw(right);
-
     // Title
-    sf::Text title(font, "SHOP", 90);
-    title.setPosition(sf::Vector2f(420, 60));
-    title.setFillColor(sf::Color::Black);
+    sf::Text title(font, "SHOP", 80);
+    title.setPosition({windowW/2.f - 80.f, 30.f});
+    title.setFillColor(sf::Color(255, 215, 0));
+    title.setOutlineColor(sf::Color::Black);
+    title.setOutlineThickness(3);
     window.draw(title);
 
-    // Tokens (gold)
-    sf::Text tokenText(font, "TOKENS: " + std::to_string(tokens), 36);
-    tokenText.setPosition(sf::Vector2f(windowW - 330, 60));
+    // Tokens display
+    sf::Text tokenText(font, "Tokens: " + std::to_string(tokens), 36);
+    tokenText.setPosition({windowW - 240.f, 40.f});
     tokenText.setFillColor(sf::Color(255, 215, 0));
     tokenText.setOutlineColor(sf::Color::Black);
     tokenText.setOutlineThickness(2);
     window.draw(tokenText);
 
-    // Left categories
-    float y = 90.0f;
-    sf::Text pins(font, "pins", 60); pins.setPosition({90, y}); pins.setFillColor(sf::Color::Black); window.draw(pins);
-    y += 140;
-    sf::Text shoes(font, "shoes", 60); shoes.setPosition({70, y}); shoes.setFillColor(sf::Color::Black); window.draw(shoes);
-    y += 140;
-    sf::Text balls(font, "balls", 60); balls.setPosition({80, y}); balls.setFillColor(sf::Color::Black); window.draw(balls);
-    y += 140;
-    sf::Text powers(font, "powers", 60); powers.setPosition({50, y}); powers.setFillColor(sf::Color::Black); window.draw(powers);
+    // Draw 3 item cards
+    float cardW = 260.f, cardH = 340.f;
+    float totalW = 3 * cardW + 2 * 40.f;
+    float startX = (windowW - totalW) / 2.f;
+    float cardY  = 150.f;
 
-    // Placeholder offers on the right (we will replace with real random items next)
-    float ox = 420.0f;
-    float oy = 180.0f;
+    for (int i = 0; i < (int)shopOffers.size(); i++) {
+        const auto& offer = shopOffers[i];
+        float cx = startX + i * (cardW + 40.f);
+        bool canAfford = tokens >= offer.cost;
+        bool isEquipped = (equippedBall == offer.ballType);
 
-    sf::Text offerTitle(font, "4-6 random items", 50);
-    offerTitle.setPosition(sf::Vector2f(ox, oy));
-    offerTitle.setFillColor(sf::Color::Black);
-    window.draw(offerTitle);
+        // Card background
+        sf::Color cardColor = isEquipped  ? sf::Color(40, 100, 40)  :
+                              canAfford   ? sf::Color(50, 50, 70)    :
+                                            sf::Color(40, 40, 40);
+        sf::RectangleShape card({cardW, cardH});
+        card.setPosition({cx, cardY});
+        card.setFillColor(cardColor);
+        card.setOutlineColor(isEquipped ? sf::Color(80, 220, 80) :
+                             canAfford  ? sf::Color(200, 200, 255) :
+                                          sf::Color(80, 80, 80));
+        card.setOutlineThickness(3);
+        window.draw(card);
 
-    sf::Text offerSub(font, "with their prices", 50);
-    offerSub.setPosition(sf::Vector2f(ox, oy + 70));
-    offerSub.setFillColor(sf::Color::Black);
-    window.draw(offerSub);
+        // Item name
+        sf::Text nameText(font, offer.name, 28);
+        nameText.setPosition({cx + 12.f, cardY + 14.f});
+        nameText.setFillColor(sf::Color::White);
+        window.draw(nameText);
+
+        // Mini ball preview circle
+        float br = 38.f;
+        sf::CircleShape preview(br);
+        preview.setOrigin({br, br});
+        preview.setPosition({cx + cardW/2.f, cardY + 130.f});
+        sf::Color previewColor;
+        switch (offer.ballType) {
+            case BallType::BlackHole:  previewColor = {10,  0,   20};  break;
+            case BallType::Midas:      previewColor = {210, 170, 20};  break;
+            case BallType::Upgrade:    previewColor = {30,  80,  200}; break;
+            case BallType::Heavy:      previewColor = {60,  60,  65};  break;
+            case BallType::Fastball:   previewColor = {240, 240, 240}; break;
+            case BallType::OddBall:    previewColor = {60,  180, 60};  break;
+            case BallType::EightBall:  previewColor = {10,  10,  10};  break;
+            case BallType::Retrigger:  previewColor = {160, 170, 180}; break;
+            default:                   previewColor = {25,  55,  140}; break;
+        }
+        preview.setFillColor(previewColor);
+        preview.setOutlineColor({255,255,255,80});
+        preview.setOutlineThickness(2);
+        window.draw(preview);
+
+        // Description (word-wrap by newline)
+        std::string desc = offer.description;
+        float dy = cardY + 195.f;
+        std::string line;
+        for (char ch : desc) {
+            if (ch == '\n') {
+                sf::Text lt(font, line, 20);
+                lt.setPosition({cx + 12.f, dy});
+                lt.setFillColor(sf::Color(200, 200, 200));
+                window.draw(lt);
+                dy += 26.f;
+                line.clear();
+            } else {
+                line += ch;
+            }
+        }
+        if (!line.empty()) {
+            sf::Text lt(font, line, 20);
+            lt.setPosition({cx + 12.f, dy});
+            lt.setFillColor(sf::Color(200, 200, 200));
+            window.draw(lt);
+        }
+
+        // Buy button
+        sf::Color btnColor = isEquipped  ? sf::Color(40, 150, 40) :
+                             canAfford   ? sf::Color(80, 200, 120) :
+                                           sf::Color(80, 80, 80);
+        sf::RectangleShape btn({cardW - 20.f, 44.f});
+        btn.setPosition({cx + 10.f, cardY + cardH - 56.f});
+        btn.setFillColor(btnColor);
+        btn.setOutlineColor(sf::Color::Black);
+        btn.setOutlineThickness(2);
+        window.draw(btn);
+
+        std::string btnLabel = isEquipped ? "EQUIPPED" :
+                               canAfford  ? "BUY (" + std::to_string(offer.cost) + " tokens)" :
+                                            "Need " + std::to_string(offer.cost) + " tokens";
+        sf::Text btnText(font, btnLabel, 20);
+        btnText.setPosition({cx + 18.f, cardY + cardH - 48.f});
+        btnText.setFillColor(sf::Color::White);
+        window.draw(btnText);
+    }
 
     // Continue button
-    sf::RectangleShape cont(sf::Vector2f(220, 60));
-    cont.setPosition(sf::Vector2f(windowW - 280, windowH - 110));
+    sf::RectangleShape cont({220.f, 60.f});
+    cont.setPosition({windowW/2.f - 110.f, windowH - 100.f});
     cont.setFillColor(sf::Color(80, 200, 220));
     cont.setOutlineColor(sf::Color::Black);
     cont.setOutlineThickness(3);
     window.draw(cont);
 
-    sf::Text contText(font, "CONTINUE", 28);
-    contText.setPosition(sf::Vector2f(windowW - 250, windowH - 95));
+    sf::Text contText(font, "CONTINUE", 30);
+    contText.setPosition({windowW/2.f - 90.f, windowH - 88.f});
     contText.setFillColor(sf::Color::Black);
     window.draw(contText);
 }
+
+int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens) {
+    float cardW = 260.f, cardH = 340.f;
+    float totalW = 3 * cardW + 2 * 40.f;
+    float startX = (1024.f - totalW) / 2.f;
+    float cardY  = 150.f;
+
+    for (int i = 0; i < (int)shopOffers.size(); i++) {
+        float cx = startX + i * (cardW + 40.f);
+        float btnX = cx + 10.f;
+        float btnY = cardY + cardH - 56.f;
+        float btnW = cardW - 20.f;
+        float btnH = 44.f;
+
+        if (mousePos.x >= btnX && mousePos.x <= btnX + btnW &&
+            mousePos.y >= btnY && mousePos.y <= btnY + btnH) {
+            if (tokens >= shopOffers[i].cost) {
+                equippedBall = shopOffers[i].ballType;
+                return i;  // purchased offer index
+            }
+        }
+    }
+    return -1;  // nothing purchased
+}
+
