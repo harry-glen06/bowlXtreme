@@ -1,422 +1,443 @@
 #include "Pin.h"
 #include <cmath>
+#include <cstdlib>
+#include <algorithm>
 
 static float length(sf::Vector2f v) {
-    return std::sqrt(v.x * v.x + v.y * v.y);
+    return std::sqrt(v.x*v.x + v.y*v.y);
 }
 
+// ─── Constructor ─────────────────────────────────────────────────────────────
 Pin::Pin(sf::Vector2f startPosition, float radius, int value)
-    : pos(startPosition),
-      startPos(startPosition),  //Save the original position
-      vel(0.0f, 0.0f),
+    : pos(startPosition), startPos(startPosition),
+      vel(0.f, 0.f),
       radius(radius),
-      mass(2.8f),
-      restitution(0.55f),
-      frictionStrength(5.0f),
-      angularVel(0.0f),
-      angle(0.0f),
-      fallen(false),
-      active(true),
-      value(value)
-{
+      baseMass(2.8f), mass(2.8f),
+      restitution(0.55f), frictionStrength(5.0f),
+      angularVel(0.f), angle(0.f),
+      fallen(false), active(true),
+      value(value), baseValue(value)
+{}
+
+void Pin::setPinType(PinType t) {
+    pinType = t;
+    // Apply stat changes based on type
+    switch (t) {
+        case PinType::Light:
+            mass  = baseMass * 0.45f;
+            value = 2;
+            baseValue = 2;
+            break;
+        case PinType::Big:
+            mass  = baseMass * 2.2f;
+            value = 7;
+            baseValue = 7;
+            break;
+        case PinType::LuckyDucky:
+            value = 20;
+            baseValue = 20;
+            mass = baseMass;
+            break;
+        default:
+            mass = baseMass;
+            break;
+    }
 }
 
-void Pin::resetToOriginalPosition() {
-    pos = startPos;                    // Move back to original triangle spot
-    vel = sf::Vector2f(0.0f, 0.0f);    // Stop moving
-    angularVel = 0.0f;                 // Stop spinning
-    angle = 0.0f;                      // Stand upright
-    fallen = false;                    // Mark as standing
-    // NOTE: Don't change 'active' - that's handled by Game logic
+void Pin::rollLuckyDucky() {
+    // 35% chance to score 0 this shot
+    luckyZero = (pinType == PinType::LuckyDucky) && ((rand() % 100) < 35);
 }
+
+void Pin::randomiseMischievous() {
+    if (pinType == PinType::Mischievous)
+        value = 1 + rand() % 15;
+}
+
+// ─── Reset ───────────────────────────────────────────────────────────────────
+void Pin::resetToOriginalPosition() {
+    pos         = startPos;
+    vel         = {0.f, 0.f};
+    angularVel  = 0.f;
+    angle       = 0.f;
+    fallen      = false;
+    explodeArmed  = false;
+    explodeTimer  = 0.f;
+    hasExploded   = false;
+    luckyZero     = false;
+    // Reset type back to Normal — purchased types get re-applied by Game
+    pinType = PinType::Normal;
+    mass    = baseMass;
+    value   = baseValue;
+}
+
+// ─── Update ──────────────────────────────────────────────────────────────────
 void Pin::update(float dt) {
     if (!active) return;
-    // Move
+
     pos += vel * dt;
 
-    // Different friction for standing vs fallen
-    float fric = fallen ? 19.0f : 28.0f;
+    // Ice pins slide faster when fallen
+    float fric = fallen
+        ? (pinType == PinType::Ice ? 19.f * 0.85f : 19.f)
+        : 28.f;
 
     float speed = length(vel);
-    if (speed > 0.0f) {
+    if (speed > 0.f) {
         sf::Vector2f dir = vel / speed;
-
-        float drop = fric * dt;
-        float newSpeed = speed - drop;
-        if (newSpeed < 0.0f) newSpeed = 0.0f;
-
+        float newSpeed = speed - fric * dt;
+        if (newSpeed < 0.f) newSpeed = 0.f;
         vel = dir * newSpeed;
     }
 
-    // Standing pins should "stick" and stop quickly
-    if (!fallen && speed < 40.0f) {
-        vel = sf::Vector2f(0.0f, 0.0f);
-    }
+    if (!fallen && speed < 40.f)   vel = {0.f, 0.f};
+    if (!fallen && speed < 120.f)  vel = {0.f, 0.f};
 
-    // Fallen pins can rotate
     if (fallen) {
-        angle += angularVel * dt;
-
-        // angular damping
+        angle      += angularVel * dt;
         angularVel *= std::pow(0.2f, dt);
+        if (std::abs(angularVel) < 0.05f) angularVel = 0.f;
 
-        if (std::abs(angularVel) < 0.05f)
-            angularVel = 0.0f;
+        // Exploding pin timer
+        if (pinType == PinType::Exploding && explodeArmed && !hasExploded) {
+            explodeTimer += dt;
+        }
     } else {
-        // keep upright
-        angle = 0.0f;
-        angularVel = 0.0f;
+        angle      = 0.f;
+        angularVel = 0.f;
     }
 
-    // Tiny velocity cutoff
-    if (std::abs(vel.x) < 2.0f && std::abs(vel.y) < 2.0f) {
-        vel = sf::Vector2f(0.0f, 0.0f);
-    }
-
-    // Standing pins should stop quickly (feel heavy)
-    if (!fallen && speed < 120.0f) {
-        vel = sf::Vector2f(0.0f, 0.0f);
-    }
+    if (std::abs(vel.x) < 2.f && std::abs(vel.y) < 2.f) vel = {0.f, 0.f};
 }
 
-void Pin::draw(sf::RenderWindow& window) const {
-    if (!active) return;
+// ─── Setters ─────────────────────────────────────────────────────────────────
+sf::Vector2f Pin::getPos()        const { return pos; }
+sf::Vector2f Pin::getVel()        const { return vel; }
+float        Pin::getRadius()     const { return radius; }
+float        Pin::getMass()       const { return mass; }
+float        Pin::getRestitution()const { return restitution; }
+bool         Pin::isActive()      const { return active; }
+bool         Pin::isFallen()      const { return fallen; }
+float        Pin::getAngle()      const { return angle; }
+float        Pin::getAngularVel() const { return angularVel; }
 
-    // Enhanced shadow with soft edges
-    float shadowR = radius * 1.4f;
-    for (int i = 0; i < 5; i++) {
-        sf::CircleShape shadow(shadowR - i * 3.0f);
-        shadow.setOrigin(sf::Vector2f(shadow.getRadius(), shadow.getRadius()));
-        shadow.setPosition(sf::Vector2f(pos.x + radius * 0.3f, pos.y + radius * 0.3f));
-        shadow.setFillColor(sf::Color(0, 0, 0, 30 - i * 4));
-        window.draw(shadow);
-    }
-
-    // Angle handling
-    float drawAngle = 0.0f;
-    if (fallen) {
-        drawAngle = angle;
-        if (std::abs(drawAngle) < 10.0f) drawAngle = 75.0f;
-    }
-
-    // One transform for the whole pin
-    sf::Transform t;
-    t.translate(pos);
-    t.rotate(sf::degrees(drawAngle));
-
-    sf::RenderStates st;
-    st.transform = t;
-
-    // Shape sizing
-    float H = radius * 5.0f;   // total height
-    float maxW = radius * 2.0f; // belly width
-
-    // --- Official USBC Bowling Pin Specifications ---
-    // Total height: 15" (measuring from bottom)
-    // All measurements are diameter readings at specific heights from bottom
-    // Converting diameter to radius (halfW) as percentage of max diameter (4.766" at 6.5")
-    
-    struct Slice { float y; float halfW; };
-    
-    // Note: y-coordinates are inverted (negative = top, positive = bottom)
-    // Converting bottom-up measurements to top-down coordinates
-    
-    Slice slices[] = {
-        // Top of pin (15" from bottom = -H * 0.58)
-        { -H * 0.58f, maxW * 0.127f },  // 1.212" dia at 15" = 25.4% of max
-        
-        // Head section
-        { -H * 0.56f, maxW * 0.165f },  // ~1.57" dia at 14.5"
-        { -H * 0.54f, maxW * 0.200f },  // ~1.9" dia at 14"
-        { -H * 0.52f, maxW * 0.235f },  // 2.24" dia at 13.5"
-        { -H * 0.50f, maxW * 0.270f },  // 2.57" dia at 13"
-        
-        // Upper neck
-        { -H * 0.48f, maxW * 0.295f },  // 2.81" dia at 12.5"
-        { -H * 0.46f, maxW * 0.315f },  // 3.0" dia at 12"
-        { -H * 0.44f, maxW * 0.330f },  // 3.14" dia at 11.5"
-        { -H * 0.42f, maxW * 0.340f },  // 3.237" dia at 11" (neck area)
-        
-        // Neck to shoulder transition
-        { -H * 0.40f, maxW * 0.345f },  // 3.288" dia at 10.5"
-        { -H * 0.38f, maxW * 0.360f },  // 3.426" dia at 10"
-        { -H * 0.36f, maxW * 0.385f },  // 3.664" dia at 9.5"
-        { -H * 0.34f, maxW * 0.420f },  // 4.0" dia at 9"
-        
-        // Shoulder expansion
-        { -H * 0.32f, maxW * 0.470f },  // 4.47" dia at 8.5"
-        { -H * 0.30f, maxW * 0.535f },  // ~5.09" dia at 8"
-        { -H * 0.28f, maxW * 0.610f },  // ~5.8" dia at 7.5"
-        { -H * 0.26f, maxW * 0.690f },  // ~6.56" dia at 7"
-        
-        // Approaching widest point (belly)
-        { -H * 0.24f, maxW * 0.780f },  // ~7.42" dia at 6.5" (widest point: 4.766" radius)
-        { -H * 0.22f, maxW * 0.870f },  // approaching max
-        { -H * 0.20f, maxW * 0.950f },  // 
-        { -H * 0.18f, maxW * 0.990f },  // near widest
-        { -H * 0.16f, maxW * 1.000f },  // 4.766" dia at ~6.5" HEIGHT (WIDEST)
-        { -H * 0.14f, maxW * 1.000f },  
-        { -H * 0.12f, maxW * 0.995f },  
-        
-        // Starting to taper
-        { -H * 0.10f, maxW * 0.980f },  // 4.667" dia at 6"
-        { -H * 0.08f, maxW * 0.960f },  
-        { -H * 0.06f, maxW * 0.935f },  // 4.457" dia at 5.5"
-        { -H * 0.04f, maxW * 0.905f },  
-        { -H * 0.02f, maxW * 0.875f },  // 4.17" dia at 5"
-        {  H * 0.00f, maxW * 0.850f },  
-        
-        // Lower body taper
-        {  H * 0.02f, maxW * 0.825f },  // 3.933" dia at 4.5"
-        {  H * 0.04f, maxW * 0.800f },  
-        {  H * 0.06f, maxW * 0.780f },  // 3.719" dia at 4"
-        {  H * 0.08f, maxW * 0.765f },  
-        {  H * 0.10f, maxW * 0.755f },  // 3.6" dia at 3.5"
-        {  H * 0.12f, maxW * 0.750f },  
-        {  H * 0.14f, maxW * 0.750f },  // 3.576" dia at 3"
-        
-        // Base begins to flare (around 2.5" from bottom)
-        {  H * 0.16f, maxW * 0.755f },  
-        {  H * 0.20f, maxW * 0.770f },  // 3.671" dia at 2.5"
-        {  H * 0.24f, maxW * 0.795f },  
-        {  H * 0.28f, maxW * 0.825f },  // 3.933" dia at 2"
-        {  H * 0.32f, maxW * 0.855f },  
-        {  H * 0.36f, maxW * 0.880f },  // 4.195" dia at 1.5"
-        {  H * 0.40f, maxW * 0.900f },  
-        {  H * 0.44f, maxW * 0.915f },  // 4.362" dia at 1"
-        {  H * 0.48f, maxW * 0.925f },  
-        {  H * 0.52f, maxW * 0.930f },  // 4.433" dia at 0.5"
-        {  H * 0.56f, maxW * 0.930f },  
-        {  H * 0.58f, maxW * 0.925f }   // bottom edge
-    };
-
-    const int n = (int)(sizeof(slices) / sizeof(slices[0]));
-    
-    // Create gradient using vertex array for realistic cylinder shading
-    sf::VertexArray pinGradient(sf::PrimitiveType::TriangleStrip);
-    
-    for (int i = 0; i < n; i++) {
-        float normalizedY = (slices[i].y + H * 0.58f) / (H * 1.16f); // 0 at top, 1 at bottom
-        
-        // Left side - darker (shadow side)
-        sf::Vertex leftVert;
-        leftVert.position = sf::Vector2f(-slices[i].halfW, slices[i].y);
-        // Gradient from light gray to darker gray
-        int grayValue = 160 + (int)(normalizedY * 40.0f);
-        leftVert.color = sf::Color(grayValue, grayValue, grayValue);
-        pinGradient.append(leftVert);
-        
-        // Right side - lighter (lit side)
-        sf::Vertex rightVert;
-        rightVert.position = sf::Vector2f(slices[i].halfW, slices[i].y);
-        grayValue = 240 + (int)(normalizedY * 10.0f);
-        rightVert.color = sf::Color(grayValue, grayValue, grayValue);
-        pinGradient.append(rightVert);
-    }
-    
-    window.draw(pinGradient, st);
-
-    // Add cylinder edge highlights for 3D roundness
-    // Left highlight (bright edge)
-    sf::VertexArray leftHighlight(sf::PrimitiveType::TriangleStrip);
-    for (int i = 0; i < n; i++) {
-        float normalizedY = (slices[i].y + H * 0.58f) / (H * 1.16f);
-        
-        // Inner edge
-        sf::Vertex v1;
-        v1.position = sf::Vector2f(-slices[i].halfW * 0.85f, slices[i].y);
-        v1.color = sf::Color(255, 255, 255, 120 - (int)(normalizedY * 40.0f));
-        leftHighlight.append(v1);
-        
-        // Outer edge
-        sf::Vertex v2;
-        v2.position = sf::Vector2f(-slices[i].halfW, slices[i].y);
-        v2.color = sf::Color(255, 255, 255, 0);
-        leftHighlight.append(v2);
-    }
-    window.draw(leftHighlight, st);
-    
-    // Right edge darkening for depth
-    sf::VertexArray rightDarkening(sf::PrimitiveType::TriangleStrip);
-    for (int i = 0; i < n; i++) {
-        // Inner
-        sf::Vertex v1;
-        v1.position = sf::Vector2f(slices[i].halfW * 0.85f, slices[i].y);
-        v1.color = sf::Color(200, 200, 200, 0);
-        rightDarkening.append(v1);
-        
-        // Outer edge
-        sf::Vertex v2;
-        v2.position = sf::Vector2f(slices[i].halfW, slices[i].y);
-        v2.color = sf::Color(140, 140, 140, 60);
-        rightDarkening.append(v2);
-    }
-    window.draw(rightDarkening, st);
-
-    // Specular highlight stripe (glossy reflection)
-    sf::VertexArray specular(sf::PrimitiveType::TriangleStrip);
-    for (int i = 0; i < n; i++) {
-        float normalizedY = (slices[i].y + H * 0.58f) / (H * 1.16f);
-        
-        // Narrow vertical highlight
-        sf::Vertex v1;
-        v1.position = sf::Vector2f(-slices[i].halfW * 0.45f, slices[i].y);
-        int alpha = 140 - (int)(std::abs(normalizedY - 0.4f) * 200.0f);
-        if (alpha < 0) alpha = 0;
-        v1.color = sf::Color(255, 255, 255, alpha);
-        specular.append(v1);
-        
-        sf::Vertex v2;
-        v2.position = sf::Vector2f(-slices[i].halfW * 0.30f, slices[i].y);
-        v2.color = sf::Color(255, 255, 255, alpha);
-        specular.append(v2);
-    }
-    window.draw(specular, st);
-
-    // --- Red stripes that wrap around the pin contour ---
-    // Helper function to find width at a given Y position
-    auto getWidthAtY = [&](float yPos) -> float {
-        // Find the slice closest to this Y position
-        for (int i = 0; i < n - 1; i++) {
-            if (yPos >= slices[i].y && yPos <= slices[i + 1].y) {
-                // Interpolate between the two slices
-                float t = (yPos - slices[i].y) / (slices[i + 1].y - slices[i].y);
-                return slices[i].halfW * (1.0f - t) + slices[i + 1].halfW * t;
-            }
-        }
-        return maxW * 0.5f; // fallback
-    };
-    
-    // Draw curved stripes that follow pin contour
-    auto drawCurvedStripe = [&](float yCenter, float thickness) {
-        sf::VertexArray stripe(sf::PrimitiveType::TriangleStrip);
-        
-        // Sample points along the stripe height
-        int samples = 8;
-        for (int i = 0; i <= samples; i++) {
-            float t = (float)i / samples;
-            float y = yCenter - thickness * 0.5f + thickness * t;
-            float width = getWidthAtY(y);
-            
-            // Create gradient from dark on left to bright on right
-            int leftRed = 160 + (int)(t * 20);
-            int rightRed = 200 + (int)(t * 20);
-            
-            // Left vertex
-            sf::Vertex vLeft;
-            vLeft.position = sf::Vector2f(-width, y);
-            vLeft.color = sf::Color(leftRed, 25, 25);
-            stripe.append(vLeft);
-            
-            // Right vertex
-            sf::Vertex vRight;
-            vRight.position = sf::Vector2f(width, y);
-            vRight.color = sf::Color(rightRed, 35, 35);
-            stripe.append(vRight);
-        }
-        
-        window.draw(stripe, st);
-        
-        // Add highlight on the stripe
-        sf::VertexArray stripeHighlight(sf::PrimitiveType::TriangleStrip);
-        for (int i = 0; i <= samples; i++) {
-            float t = (float)i / samples;
-            float y = yCenter - thickness * 0.4f + thickness * 0.8f * t;
-            float width = getWidthAtY(y) * 0.35f;
-            
-            // Narrow highlight on left side
-            sf::Vertex vLeft;
-            vLeft.position = sf::Vector2f(-width - width * 0.8f, y);
-            vLeft.color = sf::Color(255, 100, 100, 80);
-            stripeHighlight.append(vLeft);
-            
-            sf::Vertex vRight;
-            vRight.position = sf::Vector2f(-width - width * 0.2f, y);
-            vRight.color = sf::Color(255, 100, 100, 80);
-            stripeHighlight.append(vRight);
-        }
-        
-        window.draw(stripeHighlight, st);
-    };
-
-    float stripeThick = radius * 0.30f;
-    drawCurvedStripe(-H * 0.285f, stripeThick);  // neck stripe
-    drawCurvedStripe(-H * 0.195f, stripeThick);  // upper body stripe
-
-    // Base ring that wraps around the base contour
-    float baseY = H * 0.51f;
-    float baseThickness = radius * 0.18f;
-    
-    sf::VertexArray baseRing(sf::PrimitiveType::TriangleStrip);
-    int baseSamples = 6;
-    for (int i = 0; i <= baseSamples; i++) {
-        float t = (float)i / baseSamples;
-        float y = baseY - baseThickness * 0.5f + baseThickness * t;
-        float width = getWidthAtY(y);
-        
-        // Gradient gold color
-        int goldR = 190 + (int)(t * 20);
-        int goldG = 170 + (int)(t * 20);
-        
-        // Left vertex
-        sf::Vertex vLeft;
-        vLeft.position = sf::Vector2f(-width, y);
-        vLeft.color = sf::Color(goldR, goldG, 100);
-        baseRing.append(vLeft);
-        
-        // Right vertex
-        sf::Vertex vRight;
-        vRight.position = sf::Vector2f(width, y);
-        vRight.color = sf::Color(goldR + 20, goldG + 20, 120);
-        baseRing.append(vRight);
-    }
-    
-    window.draw(baseRing, st);
-    
-    // Highlight on base ring
-    sf::VertexArray baseHighlight(sf::PrimitiveType::TriangleStrip);
-    for (int i = 0; i <= baseSamples; i++) {
-        float t = (float)i / baseSamples;
-        float y = baseY - baseThickness * 0.4f + baseThickness * 0.8f * t;
-        float width = getWidthAtY(y) * 0.30f;
-        
-        sf::Vertex vLeft;
-        vLeft.position = sf::Vector2f(-width - width * 1.2f, y);
-        vLeft.color = sf::Color(250, 235, 170, 100);
-        baseHighlight.append(vLeft);
-        
-        sf::Vertex vRight;
-        vRight.position = sf::Vector2f(-width - width * 0.3f, y);
-        vRight.color = sf::Color(250, 235, 170, 100);
-        baseHighlight.append(vRight);
-    }
-    
-    window.draw(baseHighlight, st);
-}
-
-// Getters
-sf::Vector2f Pin::getPos() const { return pos; }
-sf::Vector2f Pin::getVel() const { return vel; }
-float Pin::getRadius() const { return radius; }
-float Pin::getMass() const { return mass; }
-float Pin::getRestitution() const { return restitution; }
-bool Pin::isActive() const { return active; }
-
-bool Pin::isFallen() const { return fallen; }
-float Pin::getAngle() const { return angle; }
-float Pin::getAngularVel() const { return angularVel; }
-
-// Setters
 void Pin::setPos(sf::Vector2f p) { pos = p; }
 void Pin::setVel(sf::Vector2f v) { vel = v; }
-void Pin::setActive(bool a) { active = a; }
+void Pin::setActive(bool a)      { active = a; }
+void Pin::setAngularVel(float w) { angularVel = w; }
 
 void Pin::setFallen(bool f) {
     fallen = f;
     if (!fallen) {
-        angle = 0.0f;
-        angularVel = 0.0f;
+        angle = angularVel = 0.f;
+        explodeArmed = false;
+        explodeTimer = 0.f;
+    } else {
+        if (pinType == PinType::Exploding && !hasExploded)
+            explodeArmed = true;
     }
 }
 
-void Pin::setAngularVel(float w) { angularVel = w; }
+// ─── Drawing helpers ─────────────────────────────────────────────────────────
+// Shared pin silhouette — draws the classic bowling-pin shape in a given colour,
+// already in local transform space (origin = pin centre).
+static void drawPinShape(sf::RenderWindow& window, sf::RenderStates st,
+                          float H, float maxW,
+                          sf::Color bodyColorL, sf::Color bodyColorR,
+                          bool drawStripes, sf::Color stripeColor,
+                          bool drawBase,  sf::Color baseColor)
+{
+    struct Slice { float y; float halfW; };
+    static const Slice slices[] = {
+        {-H*.58f,maxW*.127f},{-H*.56f,maxW*.165f},{-H*.54f,maxW*.200f},
+        {-H*.52f,maxW*.235f},{-H*.50f,maxW*.270f},{-H*.48f,maxW*.295f},
+        {-H*.46f,maxW*.315f},{-H*.44f,maxW*.330f},{-H*.42f,maxW*.340f},
+        {-H*.40f,maxW*.345f},{-H*.38f,maxW*.360f},{-H*.36f,maxW*.385f},
+        {-H*.34f,maxW*.420f},{-H*.32f,maxW*.470f},{-H*.30f,maxW*.535f},
+        {-H*.28f,maxW*.610f},{-H*.26f,maxW*.690f},{-H*.24f,maxW*.780f},
+        {-H*.22f,maxW*.870f},{-H*.20f,maxW*.950f},{-H*.18f,maxW*.990f},
+        {-H*.16f,maxW*1.00f},{-H*.14f,maxW*1.00f},{-H*.12f,maxW*.995f},
+        {-H*.10f,maxW*.980f},{-H*.08f,maxW*.960f},{-H*.06f,maxW*.935f},
+        {-H*.04f,maxW*.905f},{-H*.02f,maxW*.875f},{ H*.00f,maxW*.850f},
+        { H*.02f,maxW*.825f},{ H*.04f,maxW*.800f},{ H*.06f,maxW*.780f},
+        { H*.08f,maxW*.765f},{ H*.10f,maxW*.755f},{ H*.12f,maxW*.750f},
+        { H*.14f,maxW*.750f},{ H*.16f,maxW*.755f},{ H*.20f,maxW*.770f},
+        { H*.24f,maxW*.795f},{ H*.28f,maxW*.825f},{ H*.32f,maxW*.855f},
+        { H*.36f,maxW*.880f},{ H*.40f,maxW*.900f},{ H*.44f,maxW*.915f},
+        { H*.48f,maxW*.925f},{ H*.52f,maxW*.930f},{ H*.56f,maxW*.930f},
+        { H*.58f,maxW*.925f}
+    };
+    const int n = (int)(sizeof(slices)/sizeof(slices[0]));
+
+    auto getW = [&](float yPos) -> float {
+        for (int i = 0; i < n-1; i++) {
+            if (yPos >= slices[i].y && yPos <= slices[i+1].y) {
+                float t = (yPos-slices[i].y)/(slices[i+1].y-slices[i].y);
+                return slices[i].halfW*(1-t)+slices[i+1].halfW*t;
+            }
+        }
+        return maxW*0.5f;
+    };
+
+    // Body gradient
+    sf::VertexArray body(sf::PrimitiveType::TriangleStrip);
+    for (int i = 0; i < n; i++) {
+        body.append({{-slices[i].halfW, slices[i].y}, bodyColorL});
+        body.append({{ slices[i].halfW, slices[i].y}, bodyColorR});
+    }
+    window.draw(body, st);
+
+    // Left highlight
+    sf::VertexArray lhl(sf::PrimitiveType::TriangleStrip);
+    for (int i = 0; i < n; i++) {
+        lhl.append({{-slices[i].halfW*0.85f, slices[i].y}, {255,255,255,100}});
+        lhl.append({{-slices[i].halfW,       slices[i].y}, {255,255,255,0}});
+    }
+    window.draw(lhl, st);
+
+    // Specular
+    sf::VertexArray spec(sf::PrimitiveType::TriangleStrip);
+    for (int i = 0; i < n; i++) {
+        float ny = (slices[i].y + H*.58f)/(H*1.16f);
+        int a = (int)(140 - std::abs(ny-0.4f)*200.f);
+        a = std::max(0, a);
+        spec.append({{-slices[i].halfW*0.45f, slices[i].y}, {255,255,255,(uint8_t)a}});
+        spec.append({{-slices[i].halfW*0.30f, slices[i].y}, {255,255,255,(uint8_t)a}});
+    }
+    window.draw(spec, st);
+
+    // Stripes
+    if (drawStripes) {
+        auto drawStripe = [&](float yc, float thick) {
+            sf::VertexArray s(sf::PrimitiveType::TriangleStrip);
+            for (int i = 0; i <= 8; i++) {
+                float t = (float)i/8;
+                float y = yc - thick*.5f + thick*t;
+                float w = getW(y);
+                s.append({{-w, y}, stripeColor});
+                s.append({{ w, y}, stripeColor});
+            }
+            window.draw(s, st);
+        };
+        drawStripe(-H*.285f, maxW*.30f);
+        drawStripe(-H*.195f, maxW*.30f);
+    }
+
+    // Base ring
+    if (drawBase) {
+        float by = H*.51f, bt = maxW*.18f;
+        sf::VertexArray br(sf::PrimitiveType::TriangleStrip);
+        for (int i = 0; i <= 6; i++) {
+            float t = (float)i/6;
+            float y = by - bt*.5f + bt*t;
+            float w = getW(y);
+            br.append({{-w, y}, baseColor});
+            br.append({{ w, y}, baseColor});
+        }
+        window.draw(br, st);
+    }
+}
+
+// ─── Draw ─────────────────────────────────────────────────────────────────────
+void Pin::draw(sf::RenderWindow& window) const {
+    if (!active) return;
+
+    // Shadow
+    float shadowR = radius * 1.4f;
+    for (int i = 0; i < 5; i++) {
+        sf::CircleShape shadow(shadowR - i*3.f);
+        shadow.setOrigin({shadow.getRadius(), shadow.getRadius()});
+        shadow.setPosition({pos.x + radius*.3f, pos.y + radius*.3f});
+        shadow.setFillColor({0,0,0,(uint8_t)(30-i*4)});
+        window.draw(shadow);
+    }
+
+    float drawAngle = 0.f;
+    if (fallen) {
+        drawAngle = angle;
+        if (std::abs(drawAngle) < 10.f) drawAngle = 75.f;
+    }
+
+    sf::Transform t;
+    t.translate(pos);
+    t.rotate(sf::degrees(drawAngle));
+    sf::RenderStates st;
+    st.transform = t;
+
+    float H    = radius * 5.f;
+    float maxW = radius * 2.f;
+
+    switch (pinType) {
+
+    case PinType::Gold: {
+        // Shimmering gold body, gold stripes
+        drawPinShape(window, st, H, maxW,
+            {210,175,50}, {255,220,80},
+            true,  {180,140,20},
+            true,  {200,160,30});
+        // Gold sparkle dots
+        for (int i = 0; i < 3; i++) {
+            float gy = -H*.3f + i * H*.15f;
+            float gx = -maxW*.2f + i * maxW*.2f;
+            sf::CircleShape dot(radius*.12f);
+            dot.setOrigin({radius*.12f, radius*.12f});
+            dot.setPosition({gx, gy});
+            dot.setFillColor({255,255,180,200});
+            window.draw(dot, st);
+        }
+        break;
+    }
+
+    case PinType::Mischievous: {
+        // Purple/magenta swirly pin
+        drawPinShape(window, st, H, maxW,
+            {120,20,160}, {180,40,220},
+            true,  {80,0,120},
+            true,  {100,0,140});
+        // "?" overlay
+        sf::CircleShape q(radius*.35f);
+        q.setOrigin({radius*.35f, radius*.35f});
+        q.setPosition({0.f, -H*.25f});
+        q.setFillColor({255,255,255,60});
+        window.draw(q, st);
+        break;
+    }
+
+    case PinType::Exploding: {
+        // Orange/red pin, countdown indicator
+        drawPinShape(window, st, H, maxW,
+            {200,80,20}, {240,120,30},
+            true,  {160,40,10},
+            true,  {180,60,15});
+        // Fuse dot on top — pulses as timer counts down
+        float pulse = explodeArmed
+            ? (std::sin(explodeTimer * 8.f) * 0.5f + 0.5f)
+            : 1.f;
+        float dotR = radius * .22f * pulse;
+        sf::CircleShape fuse(dotR);
+        fuse.setOrigin({dotR, dotR});
+        fuse.setPosition({0.f, -H*.52f});
+        fuse.setFillColor({255,(uint8_t)(50+100*(1-pulse)),0,220});
+        window.draw(fuse, st);
+        break;
+    }
+
+    case PinType::Light: {
+        // Pale blue, thin-looking
+        drawPinShape(window, st, H, maxW,
+            {140,200,240}, {200,230,255},
+            true,  {100,170,220},
+            true,  {120,190,230});
+        break;
+    }
+
+    case PinType::Big: {
+        // Dark red, chunky (radius visually emphasised via extra outline)
+        drawPinShape(window, st, H, maxW,
+            {140,20,20}, {200,40,40},
+            true,  {100,10,10},
+            true,  {120,15,15});
+        sf::CircleShape ring(radius*1.05f);
+        ring.setOrigin({radius*1.05f, radius*1.05f});
+        ring.setPosition({0.f, 0.f});
+        ring.setFillColor(sf::Color::Transparent);
+        ring.setOutlineThickness(3.f);
+        ring.setOutlineColor({200,40,40,120});
+        window.draw(ring, st);
+        break;
+    }
+
+    case PinType::Ice: {
+        // Icy cyan/white
+        drawPinShape(window, st, H, maxW,
+            {180,230,255}, {220,245,255},
+            true,  {140,210,245},
+            true,  {160,220,250});
+        // Ice crystal flare
+        for (int i = 0; i < 4; i++) {
+            float a = i * 3.14159f / 2.f;
+            float ex = std::cos(a) * maxW * .45f;
+            float ey = std::sin(a) * maxW * .45f - H*.15f;
+            sf::Vertex line[2] = {
+                {{0.f, -H*.15f}, {255,255,255,180}},
+                {{ex, ey},       {200,240,255,0}}
+            };
+            window.draw(line, 2, sf::PrimitiveType::Lines, st);
+        }
+        break;
+    }
+
+    case PinType::CopyCat: {
+        // Mirrored silver/grey with dashed outline
+        drawPinShape(window, st, H, maxW,
+            {150,150,155}, {200,200,205},
+            false, {},
+            true,  {130,130,135});
+        // Dashed outline approximation
+        for (int i = 0; i < 6; i++) {
+            float fy = -H*.4f + i * H*.16f;
+            float fw = maxW * .92f;
+            sf::RectangleShape dash({fw*2.f, 2.f});
+            dash.setOrigin({fw, 1.f});
+            dash.setPosition({0.f, fy});
+            dash.setFillColor({80,80,200,160});
+            window.draw(dash, st);
+        }
+        break;
+    }
+
+    case PinType::LuckyDucky: {
+        // Bright yellow duck-like pin
+        drawPinShape(window, st, H, maxW,
+            {230,200,20}, {255,230,40},
+            false, {},
+            true,  {200,170,15});
+        // Duck bill triangle
+        sf::ConvexShape bill;
+        bill.setPointCount(3);
+        bill.setPoint(0, {0.f,        -H*.44f});
+        bill.setPoint(1, {maxW*.5f,   -H*.50f});
+        bill.setPoint(2, {maxW*.5f,   -H*.38f});
+        bill.setFillColor({255,140,0});
+        window.draw(bill, st);
+        // Eye dot
+        sf::CircleShape eye(radius*.15f);
+        eye.setOrigin({radius*.15f, radius*.15f});
+        eye.setPosition({maxW*.15f, -H*.47f});
+        eye.setFillColor({20,20,20});
+        window.draw(eye, st);
+        break;
+    }
+
+    case PinType::ThirdTime: {
+        // Green pin with "x2" indicator ring
+        drawPinShape(window, st, H, maxW,
+            {20,140,50}, {40,190,70},
+            true,  {10,100,30},
+            true,  {15,120,40});
+        // Ring around belly
+        sf::CircleShape ring(maxW*.95f);
+        ring.setOrigin({maxW*.95f, maxW*.95f});
+        ring.setPosition({0.f, -H*.16f});
+        ring.setFillColor(sf::Color::Transparent);
+        ring.setOutlineThickness(3.f);
+        ring.setOutlineColor({150,255,150,180});
+        window.draw(ring, st);
+        break;
+    }
+
+    default: {
+        // Normal white pin
+        drawPinShape(window, st, H, maxW,
+            {160,160,160}, {240,240,240},
+            true,  {180,30,30},
+            true,  {190,170,100});
+        break;
+    }
+    }
+
+    // Value label (small number at the belly of standing pins)
+    // Only draw if pin has a non-zero value and is standing
+    // (Rendered as a tiny dot cluster; no font dependency)
+    // Skip for now — Game draws value labels via UI if desired
+}

@@ -5,6 +5,7 @@
 #include <vector>
 #include "BowlingScorer.h"
 #include "Items.h"
+#include "Pin.h"
 
 enum class GameState {
     Menu,
@@ -31,8 +32,12 @@ enum class GameAction {
     ExitToMenu
 };
 
+enum class ShopItemCategory { Ball, Pin };
+
 struct ShopOffer {
-    BallType ballType;
+    ShopItemCategory category = ShopItemCategory::Ball;
+    BallType ballType = BallType::Normal;
+    PinType  pinType  = PinType::Normal;
     std::string name;
     std::string description;
     int cost;
@@ -57,6 +62,7 @@ public:
     // Returns the BallType purchased (-1 = none, index into offers)
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens);
     void generateShopOffers();
+    void resetEquippedBall() { equippedBall = BallType::Normal; }
     const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
     
     // Game UI

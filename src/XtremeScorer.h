@@ -57,9 +57,9 @@ private:
     int baseImpact = 10;
     int baseCombo = 1;
 
-    int targetStart = 500;
-    int targetIncrease = 180;
-    int targetScore = 500;
+    int targetStart = 450;
+    int targetIncrease = 150;
+    int targetScore = 450;
 
     // last shot
     int lastImpact = 10;

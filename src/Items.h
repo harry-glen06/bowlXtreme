@@ -3,36 +3,51 @@
 
 enum class BallType {
     Normal,
-    BlackHole,   // Pins pulled toward ball; ball 8% smaller
-    Midas,       // Hit pins become gold (score gold tokens)
-    Upgrade,     // Each pin hit gains +1 value; ball 10% lighter, 5% faster
-    Heavy,       // Ball 15% heavier, easier to knock pins
-    Fastball,    // Ball 5% lighter, 15% faster
-    OddBall,     // Odd-value pins score double, even-value pins score half
-    EightBall,   // All pins worth 8
-    Retrigger,   // 2nd pin hit is scored 3x total
+    BlackHole,
+    Midas,
+    Upgrade,
+    Heavy,
+    Fastball,
+    OddBall,
+    EightBall,
+    Retrigger,
 };
 
 struct ActiveItems {
     BallType ballType = BallType::Normal;
 
-    // Derived stat multipliers (recalculated when ball changes)
     float radiusMultiplier  = 1.0f;
     float speedMultiplier   = 1.0f;
-    float massMultiplier    = 1.0f;   // applied to ball collision mass
+    float massMultiplier    = 1.0f;
 
-    // Per-shot state (reset each ball launch)
+    // Per-shot state
     int   pinsHitThisShot  = 0;
     bool  retriggered      = false;
-    int   retriggeredValue = 0;       // value added to score at shot end
-
-    // Midas: which pin indices are gold this round
+    int   retriggeredValue = 0;
+    int   firstBallHitPinIndex = -1;
     std::vector<int> goldPinIndices;
+    int   thirdTimeComboBonus = 0;
+
+    // Purchased pin types — one pin per type gets assigned each new frame
+    // e.g. if player bought Gold and Exploding, one pin will be Gold and one Exploding each frame
+    std::vector<int> purchasedPinTypes;  // stored as int (cast from PinType)
 
     void resetForNewShot() {
-        pinsHitThisShot  = 0;
-        retriggered      = false;
-        retriggeredValue = 0;
+        pinsHitThisShot        = 0;
+        retriggered            = false;
+        retriggeredValue       = 0;
+        firstBallHitPinIndex   = -1;
+        thirdTimeComboBonus    = 0;
+    }
+
+    void resetAll() {
+        resetForNewShot();
+        goldPinIndices.clear();
+        purchasedPinTypes.clear();
+        ballType        = BallType::Normal;
+        radiusMultiplier = 1.0f;
+        speedMultiplier  = 1.0f;
+        massMultiplier   = 1.0f;
     }
 
     void applyBallType(BallType type) {

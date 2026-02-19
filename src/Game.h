@@ -11,6 +11,7 @@
 #include "AudioManager.h"
 #include "UI.h"
 #include "Items.h"
+#include "Pin.h"
 
 class Game {
 public:
@@ -31,6 +32,9 @@ private:
     void doCollisions();
 
     std::vector<Pin> createPins(float centerX, float startY);
+    void applyPurchasedPinTypes(std::vector<Pin>& pinSet);
+    void processExplosions();
+    void prepareNewShot();
 
     sf::View view;
     void applyLetterbox(unsigned winW, unsigned winH);
