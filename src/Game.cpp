@@ -373,24 +373,29 @@ void Game::handleEvents() {
                         if (activeItems.powerBumpers) lane.bumpersOn = true;
                     };
 
-                    auto getLastSellablePower = [&](PowerType& out) {
-                        for (auto it = activeItems.purchasedPowers.rbegin();
-                             it != activeItems.purchasedPowers.rend(); ++it) {
-                            if (*it < 0 || *it > (int)PowerType::MoMoney) continue;
-                            PowerType p = static_cast<PowerType>(*it);
-                            if (activeItems.hasPower(p)) {
-                                out = p;
-                                return true;
-                            }
-                        }
-                        for (int i = 0; i <= (int)PowerType::MoMoney; i++) {
+                    auto buildSellablePowerList = [&]() {
+                        const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+                        std::vector<int> remaining(powerCount, 0);
+                        for (int i = 0; i < powerCount; i++) {
                             PowerType p = static_cast<PowerType>(i);
-                            if (activeItems.hasPower(p)) {
-                                out = p;
-                                return true;
+                            if (!activeItems.hasPower(p)) continue;
+                            if (p == PowerType::Duplicate) {
+                                remaining[i] = std::max(0, activeItems.duplicateCharges);
+                            } else if (p == PowerType::SwapPins) {
+                                remaining[i] = std::max(0, activeItems.swapCharges);
+                            } else {
+                                remaining[i] = 1;
                             }
                         }
-                        return false;
+                        std::vector<PowerType> out;
+                        out.reserve(activeItems.purchasedPowers.size());
+                        for (int raw : activeItems.purchasedPowers) {
+                            if (raw < 0 || raw >= powerCount) continue;
+                            if (remaining[raw] <= 0) continue;
+                            out.push_back(static_cast<PowerType>(raw));
+                            remaining[raw]--;
+                        }
+                        return out;
                     };
 
                     auto sellOnePower = [&](PowerType p) {
@@ -503,6 +508,18 @@ void Game::handleEvents() {
                             if (sellValue > 0) xtreme.addTokens(sellValue);
                             ui.generateShopOffers(activeItems);
                         }
+                    } else if (purchased <= UI::ShopActionSellPinByIndexBase &&
+                               purchased > UI::ShopActionSellPowerByIndexBase) {
+                        int pinIndex = UI::ShopActionSellPinByIndexBase - purchased;
+                        if (pinIndex >= 0 &&
+                            pinIndex < (int)activeItems.purchasedPinTypes.size()) {
+                            int raw = activeItems.purchasedPinTypes[pinIndex];
+                            activeItems.purchasedPinTypes.erase(
+                                activeItems.purchasedPinTypes.begin() + pinIndex);
+                            int sellValue = pinTypeCost(static_cast<PinType>(raw)) / 2;
+                            if (sellValue > 0) xtreme.addTokens(sellValue);
+                            ui.generateShopOffers(activeItems);
+                        }
                     } else if (purchased == UI::ShopActionSellBallSlot1 ||
                                purchased == UI::ShopActionSellBallSlot2) {
                         int slot = (purchased == UI::ShopActionSellBallSlot2) ? 2 : 1;
@@ -522,9 +539,15 @@ void Game::handleEvents() {
                             ui.generateShopOffers(activeItems);
                         }
                     } else if (purchased == UI::ShopActionSellPower) {
-                        PowerType toSell = PowerType::Greedy;
-                        if (getLastSellablePower(toSell)) {
-                            sellOnePower(toSell);
+                        std::vector<PowerType> sellable = buildSellablePowerList();
+                        if (!sellable.empty()) {
+                            sellOnePower(sellable.back());
+                        }
+                    } else if (purchased <= UI::ShopActionSellPowerByIndexBase) {
+                        int powerIndex = UI::ShopActionSellPowerByIndexBase - purchased;
+                        std::vector<PowerType> sellable = buildSellablePowerList();
+                        if (powerIndex >= 0 && powerIndex < (int)sellable.size()) {
+                            sellOnePower(sellable[powerIndex]);
                         }
                     } else if (purchased >= 0) {
                         const auto& offers = ui.getShopOffers();
@@ -584,8 +607,11 @@ void Game::handleEvents() {
                             xtreme.addTokens(-offer.cost);
                             bool changedShoes = (activeItems.shoeType != offer.shoeType);
                             activeItems.applyShoeType(offer.shoeType);
-                            if (offer.shoeType == ShoeType::Clown && changedShoes) {
+                            if (offer.shoeType == ShoeType::Clown &&
+                                changedShoes &&
+                                !activeItems.clownBonusClaimed) {
                                 xtreme.addTokens(10);
+                                activeItems.clownBonusClaimed = true;
                             }
                         } else if (offer.category == ShopItemCategory::Pin) {
                             xtreme.addTokens(-offer.cost);
@@ -719,6 +745,8 @@ int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
     for (int idx : hitIndices) {
         total += computePinValueWithItems(idx);
     }
+    // Retrigger means the 2nd pin hit scores 3x total:
+    // 1x from the normal sum above, plus 2x extra here.
     if (activeItems.ballType == BallType::Retrigger && activeItems.retriggered)
         total += activeItems.retriggeredValue * 2;
     return total;
@@ -837,7 +865,7 @@ void Game::finishPendingResetIfReady(float dt) {
         if (pins[idx].getPinType() == PinType::ThirdTime) {
             activeItems.thirdTimeGlobalKnocks++;
             if (activeItems.thirdTimeGlobalKnocks % 3 == 0) {
-                activeItems.thirdTimeComboBonus += 1; // +1 to pinsHit (combo) count
+                activeItems.thirdTimeComboBonus += 1; // one extra combo doubling
             }
         }
     }
@@ -847,14 +875,13 @@ void Game::finishPendingResetIfReady(float dt) {
     // Compute value sum with ball item effects + pin effects
     int pinValueSumThisBall = computePinValueSumWithItems(hitPinIndices);
 
-    // LuckyDucky: if luckyZero, subtract that pin's actual contribution.
+    // LuckyDucky: if luckyZero, subtract that pin's value contribution only.
+    // It still counts as a physically knocked pin for combo/strike handling.
     for (int idx : hitPinIndices) {
         if (pins[idx].getPinType() == PinType::LuckyDucky && pins[idx].isLuckyZero()) {
             pinValueSumThisBall -= computePinValueWithItems(idx);
-            knockedThisBall--;   // doesn't count toward pin-count scoring either
         }
     }
-    if (knockedThisBall < 0) knockedThisBall = 0;
     if (pinValueSumThisBall < 0) pinValueSumThisBall = 0;
 
     // Greedy: every current dollar/token adds +5 score contribution.
@@ -872,10 +899,10 @@ void Game::finishPendingResetIfReady(float dt) {
         activeItems.goldPinIndices.clear();
     }
 
-    // ThirdTime: each trigger doubles combo once.
+    int thirdTimeComboMultiplier = 1;
     if (activeItems.thirdTimeComboBonus > 0 && knockedThisBall > 0) {
         int doublings = std::min(activeItems.thirdTimeComboBonus, 4); // cap at x16
-        knockedThisBall *= (1 << doublings);
+        thirdTimeComboMultiplier = (1 << doublings);
     }
 
     // Gutter ball
@@ -898,7 +925,11 @@ void Game::finishPendingResetIfReady(float dt) {
         if (earthquakeStrikeThisShot) {
             strikeThisShot = true;
         }
-        xtreme.recordShot(knockedThisBall, pinValueSumThisBall, strikeThisShot);
+        xtreme.recordShot(
+            knockedThisBall,
+            pinValueSumThisBall,
+            strikeThisShot,
+            static_cast<float>(thirdTimeComboMultiplier));
 
         if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
             activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;

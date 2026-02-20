@@ -10,8 +10,9 @@ public:
     void reset();
 
     // Pass in how many pins were knocked this shot and the sum of their values.
+    // comboMultiplier scales the combo term ((pinsHit + baseCombo) * comboMultiplier).
     // If strike is true, this shot gains +40% bonus points.
-    void recordShot(int pinsHit, int pinValueSum, bool strike = false);
+    void recordShot(int pinsHit, int pinValueSum, bool strike = false, float comboMultiplier = 1.0f);
 
     // Progress
     int getRound() const { return round; }

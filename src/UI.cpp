@@ -1303,8 +1303,14 @@ struct ShopOwnedPanelLayout {
     sf::FloatRect sellBall1;
     sf::FloatRect sellBall2;
     sf::FloatRect sellShoe;
-    sf::FloatRect sellPin;
-    sf::FloatRect sellPower;
+};
+
+struct ShopOwnedDynamicLayout {
+    std::vector<sf::FloatRect> pinSellRects;
+    std::vector<sf::FloatRect> powerSellRects;
+    std::vector<PowerType> sellablePowers;
+    float pinHeaderY = 0.f;
+    float powerHeaderY = 0.f;
     float contentTop = 0.f;
 };
 
@@ -1335,10 +1341,7 @@ static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float win
 
     layout.sellBall1 = sf::FloatRect({layout.panelX + pad, actionTop}, {halfW, btnH});
     layout.sellBall2 = sf::FloatRect({layout.panelX + pad + halfW + gap, actionTop}, {halfW, btnH});
-    layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {halfW, btnH});
-    layout.sellPin   = sf::FloatRect({layout.panelX + pad + halfW + gap, actionTop + btnH + gap}, {halfW, btnH});
-    layout.sellPower = sf::FloatRect({layout.panelX + pad, actionTop + (btnH + gap) * 2.f}, {actionW, btnH});
-    layout.contentTop = actionTop + btnH * 3.f + gap * 2.f + 12.f;
+    layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {actionW, btnH});
     return layout;
 }
 
@@ -1347,23 +1350,78 @@ static int pinTypeCost(PinType t);
 static int shoeTypeCost(ShoeType t);
 static int powerTypeCost(PowerType t);
 
-static bool getLastSellablePower(const ActiveItems& items, PowerType& out) {
-    for (auto it = items.purchasedPowers.rbegin(); it != items.purchasedPowers.rend(); ++it) {
-        if (*it < 0 || *it > (int)PowerType::MoMoney) continue;
-        PowerType p = static_cast<PowerType>(*it);
-        if (items.hasPower(p)) {
-            out = p;
-            return true;
-        }
-    }
-    for (int p = 0; p <= (int)PowerType::MoMoney; p++) {
+static std::vector<PowerType> buildSellablePowerList(const ActiveItems& items) {
+    const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+    std::vector<int> remaining(powerCount, 0);
+
+    for (int p = 0; p < powerCount; p++) {
         PowerType t = static_cast<PowerType>(p);
-        if (items.hasPower(t)) {
-            out = t;
-            return true;
+        if (!items.hasPower(t)) continue;
+        if (t == PowerType::Duplicate) {
+            remaining[p] = std::max(0, items.duplicateCharges);
+        } else if (t == PowerType::SwapPins) {
+            remaining[p] = std::max(0, items.swapCharges);
+        } else {
+            remaining[p] = 1;
         }
     }
-    return false;
+
+    std::vector<PowerType> out;
+    out.reserve(items.purchasedPowers.size());
+    for (int raw : items.purchasedPowers) {
+        if (raw < 0 || raw >= powerCount) continue;
+        if (remaining[raw] <= 0) continue;
+        out.push_back(static_cast<PowerType>(raw));
+        remaining[raw]--;
+    }
+    return out;
+}
+
+static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanelLayout& layout,
+                                                            const ActiveItems& items) {
+    ShopOwnedDynamicLayout out;
+    out.sellablePowers = buildSellablePowerList(items);
+
+    const float pad = 8.f;
+    const float gap = 6.f;
+    const float headerH = 16.f;
+    const float rowH = 22.f;
+    const float listW = layout.panelW - pad * 2.f;
+    const float colW = (listW - gap) * 0.5f;
+    float y = layout.sellShoe.position.y + layout.sellShoe.size.y + 10.f;
+
+    out.pinHeaderY = y;
+    y += headerH;
+    int pinCount = static_cast<int>(items.purchasedPinTypes.size());
+    out.pinSellRects.reserve(pinCount);
+    for (int i = 0; i < pinCount; i++) {
+        int row = i / 2;
+        int col = i % 2;
+        float x = layout.panelX + pad + col * (colW + gap);
+        float ry = y + row * rowH;
+        out.pinSellRects.emplace_back(sf::FloatRect({x, ry}, {colW, rowH}));
+    }
+    y += ((pinCount + 1) / 2) * rowH + 6.f;
+
+    out.powerHeaderY = y;
+    y += headerH;
+    int powerCount = static_cast<int>(out.sellablePowers.size());
+    out.powerSellRects.reserve(powerCount);
+    for (int i = 0; i < powerCount; i++) {
+        int row = i / 2;
+        int col = i % 2;
+        float x = layout.panelX + pad + col * (colW + gap);
+        float ry = y + row * rowH;
+        out.powerSellRects.emplace_back(sf::FloatRect({x, ry}, {colW, rowH}));
+    }
+    y += ((powerCount + 1) / 2) * rowH + 10.f;
+
+    out.contentTop = y;
+    float minContentTop = layout.panelY + 120.f;
+    float maxContentTop = layout.panelY + layout.panelH - 40.f;
+    if (out.contentTop < minContentTop) out.contentTop = minContentTop;
+    if (out.contentTop > maxContentTop) out.contentTop = maxContentTop;
+    return out;
 }
 
 // Inventory panel shown inside the shop screen
@@ -1386,22 +1444,16 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     title.setFillColor({180, 180, 220});
     window.draw(title);
 
+    ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
+
     BallType slot1Ball = items.getBallForSlot(1);
     BallType slot2Ball = items.getBallForSlot(2);
     bool canSellS1 = (slot1Ball != BallType::Normal);
     bool canSellS2 = (slot2Ball != BallType::Normal);
     bool canSellShoe = (items.shoeType != ShoeType::None);
-    bool canSellPin = !items.purchasedPinTypes.empty();
     int s1Value = canSellS1 ? (ballTypeCost(slot1Ball) / 2) : 0;
     int s2Value = canSellS2 ? (ballTypeCost(slot2Ball) / 2) : 0;
     int shoeValue = canSellShoe ? (shoeTypeCost(items.shoeType) / 2) : 0;
-    int pinValue = 0;
-    if (canSellPin) {
-        pinValue = pinTypeCost(static_cast<PinType>(items.purchasedPinTypes.back())) / 2;
-    }
-    PowerType powerToSell = PowerType::Greedy;
-    bool canSellPower = getLastSellablePower(items, powerToSell);
-    int powerValue = canSellPower ? (powerTypeCost(powerToSell) / 2) : 0;
 
     auto drawSellButton = [&](const sf::FloatRect& rect, const std::string& label, bool enabled) {
         sf::RectangleShape button(rect.size);
@@ -1420,23 +1472,51 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     drawSellButton(layout.sellBall1, "Sell S1 (+" + std::to_string(s1Value) + ")", canSellS1);
     drawSellButton(layout.sellBall2, "Sell S2 (+" + std::to_string(s2Value) + ")", canSellS2);
     drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe);
-    drawSellButton(layout.sellPin, "Sell Pin (+" + std::to_string(pinValue) + ")", canSellPin);
 
-    std::string sellPowerLabel = "Sell Power";
-    if (canSellPower) {
-        sellPowerLabel = "Sell " + powerShortName(powerToSell) +
-                         " (+" + std::to_string(powerValue) + ")";
+    sf::Text pinHeader(font, "SELL PINS", 13);
+    pinHeader.setPosition({layout.panelX + 10.f, dynamic.pinHeaderY});
+    pinHeader.setFillColor({180, 180, 210});
+    window.draw(pinHeader);
+
+    for (int i = 0; i < (int)dynamic.pinSellRects.size(); i++) {
+        int raw = items.purchasedPinTypes[i];
+        int value = pinTypeCost(static_cast<PinType>(raw)) / 2;
+        std::string label = pinShortName(raw) + " +" + std::to_string(value);
+        drawSellButton(dynamic.pinSellRects[i], label, true);
     }
-    drawSellButton(layout.sellPower, sellPowerLabel, canSellPower);
+    if (dynamic.pinSellRects.empty()) {
+        sf::Text none(font, "None", 12);
+        none.setPosition({layout.panelX + 12.f, dynamic.pinHeaderY + 14.f});
+        none.setFillColor({120, 120, 140});
+        window.draw(none);
+    }
+
+    sf::Text powerHeader(font, "SELL POWERS", 13);
+    powerHeader.setPosition({layout.panelX + 10.f, dynamic.powerHeaderY});
+    powerHeader.setFillColor({180, 180, 210});
+    window.draw(powerHeader);
+
+    for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
+        PowerType p = dynamic.sellablePowers[i];
+        int value = powerTypeCost(p) / 2;
+        std::string label = powerShortName(p) + " +" + std::to_string(value);
+        drawSellButton(dynamic.powerSellRects[i], label, true);
+    }
+    if (dynamic.powerSellRects.empty()) {
+        sf::Text none(font, "None", 12);
+        none.setPosition({layout.panelX + 12.f, dynamic.powerHeaderY + 14.f});
+        none.setFillColor({120, 120, 140});
+        window.draw(none);
+    }
 
     // Clip inventory content to the panel interior so large loadouts never
     // draw outside the box.
     const float clipPadX = 6.f;
     const float clipPadBottom = 8.f;
     const float clipX = layout.panelX + clipPadX;
-    const float clipY = layout.contentTop;
+    const float clipY = dynamic.contentTop;
     const float clipW = layout.panelW - clipPadX * 2.f;
-    const float clipH = layout.panelH - (layout.contentTop - layout.panelY) - clipPadBottom;
+    const float clipH = layout.panelH - (dynamic.contentTop - layout.panelY) - clipPadBottom;
 
     if (clipW > 1.f && clipH > 1.f) {
         sf::View prevView = window.getView();
@@ -1452,7 +1532,7 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
         clipView.setViewport(clipVp);
         window.setView(clipView);
 
-        drawInventoryPanel(window, items, layout.panelX + 6.f, layout.contentTop, layout.panelW - 12.f);
+        drawInventoryPanel(window, items, layout.panelX + 6.f, dynamic.contentTop, layout.panelW - 12.f);
 
         window.setView(prevView);
     }
@@ -1655,7 +1735,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "3rd Time",     "Every 3rd 3rd-Time\nknock doubles combo.",           3},
         // Shoes
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Clown, PowerType::Greedy,
-         "Clown Shoes",  "Funny wobble:\nlaunch angle shifts a bit but gain 10 dollars.", 0},
+         "Clown Shoes",  "Funny wobble:\nlaunch angle shifts a bit.\nFirst buy: +10 dollars.", 0},
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Running, PowerType::Greedy,
          "Running Shoes","Ball launches\n18% faster.",                         3},
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Moon, PowerType::Greedy,
@@ -2057,6 +2137,7 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     }
 
     ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(1024.f, 1024.f, shopOffers.size());
+    ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
     if (pointInRect(layout.sellBall1, mousePos) && items.getBallForSlot(1) != BallType::Normal) {
         return ShopActionSellBallSlot1;
     }
@@ -2066,12 +2147,15 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     if (pointInRect(layout.sellShoe, mousePos) && items.shoeType != ShoeType::None) {
         return ShopActionSellShoe;
     }
-    if (pointInRect(layout.sellPin, mousePos) && !items.purchasedPinTypes.empty()) {
-        return ShopActionSellPin;
+    for (int i = 0; i < (int)dynamic.pinSellRects.size(); i++) {
+        if (pointInRect(dynamic.pinSellRects[i], mousePos)) {
+            return ShopActionSellPinByIndexBase - i;
+        }
     }
-    PowerType powerToSell = PowerType::Greedy;
-    if (pointInRect(layout.sellPower, mousePos) && getLastSellablePower(items, powerToSell)) {
-        return ShopActionSellPower;
+    for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
+        if (pointInRect(dynamic.powerSellRects[i], mousePos)) {
+            return ShopActionSellPowerByIndexBase - i;
+        }
     }
 
     const int cardsPerRow = 4;

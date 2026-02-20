@@ -54,6 +54,8 @@ public:
     static constexpr int ShopActionSellBallSlot2 = -5;
     static constexpr int ShopActionSellShoe = -6;
     static constexpr int ShopActionSellPower = -7;
+    static constexpr int ShopActionSellPinByIndexBase = -1000;   // action = base - pinIndex
+    static constexpr int ShopActionSellPowerByIndexBase = -2000; // action = base - powerIndex
 
     UI();
     
@@ -70,6 +72,7 @@ public:
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
     // Returns purchase index (>=0) or one of the ShopAction* constants.
+    // Per-item sell actions use ShopActionSellPinByIndexBase / ShopActionSellPowerByIndexBase.
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void resetEquippedBall() { selectedBallSlot = 1; }

@@ -26,18 +26,19 @@ void XtremeScorer::reset() {
     powerMoMoney = false;
 }
 
-void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
+void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, float comboMultiplier) {
     if (lost) return;
 
     if (pinsHit < 0) pinsHit = 0;
     if (pinValueSum < 0) pinValueSum = 0;
+    if (comboMultiplier < 1.0f) comboMultiplier = 1.0f;
     totalShots++;
 
     lastPinsHit = pinsHit;
     lastPinValueSum = pinValueSum;
 
     lastImpact = baseImpact + pinValueSum;
-    float comboValue = static_cast<float>(pinsHit) + baseCombo;
+    float comboValue = (static_cast<float>(pinsHit) + baseCombo) * comboMultiplier;
     lastCombo = static_cast<int>(std::lround(comboValue));
     lastShotScore = static_cast<int>(std::lround(static_cast<float>(lastImpact) * comboValue));
     if (strike) {

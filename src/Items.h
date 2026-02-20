@@ -71,6 +71,7 @@ struct ActiveItems {
     bool powerSales = false;
     bool powerPassedGo = false;
     bool powerMoMoney = false;
+    bool clownBonusClaimed = false;
 
     int duplicateCharges = 0;
     int swapCharges = 0;
@@ -132,6 +133,7 @@ struct ActiveItems {
         powerSales = false;
         powerPassedGo = false;
         powerMoMoney = false;
+        clownBonusClaimed = false;
 
         duplicateCharges = 0;
         swapCharges = 0;
