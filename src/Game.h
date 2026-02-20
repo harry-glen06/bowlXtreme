@@ -58,8 +58,8 @@ private:
     int  computePinValueSumWithItems(const std::vector<int>& hitPinIndices);
 
 private:
-    const float windowW = 1024.0f;
-    const float windowH = 1024.0f;
+    float windowW = 1024.0f;
+    float windowH = 1024.0f;
 
     sf::RenderWindow window;
     sf::Clock clock;

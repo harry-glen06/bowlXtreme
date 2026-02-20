@@ -268,8 +268,9 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
 }
 
 MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
-    float windowW = 1024.0f; //window.getSize().x;
-    float windowH = 1024.0f; //window.getSize().y;
+    sf::View v = window.getView();
+    float windowW = v.getSize().x;
+    float windowH = v.getSize().y;
     
     float buttonY = windowH - 200;
     float buttonSpacing = 20.0f;
@@ -403,8 +404,9 @@ void UI::drawSettings(sf::RenderWindow& window, float windowW, float windowH) {
 }
 
 void UI::handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
-    float windowW = 1024.0f;
-    float windowH = 1024.0f;
+    sf::View v = window.getView();
+    float windowW = v.getSize().x;
+    float windowH = v.getSize().y;
     
     float panelW = 600;
     float panelH = 500;
@@ -2105,7 +2107,9 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 }
 
 int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items) {
-    (void)window;
+    sf::View v = window.getView();
+    float windowW = v.getSize().x;
+    float windowH = v.getSize().y;
 
     // Slot selector buttons
     const float slotY = 70.f;
@@ -2125,7 +2129,7 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         return ShopActionNone;
     }
 
-    const float skipX = 1024.f - 250.f;
+    const float skipX = windowW - 250.f;
     const float skipY = 88.f;
     const float skipW = 220.f;
     const float skipH = 40.f;
@@ -2136,7 +2140,7 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         return ShopActionNone;
     }
 
-    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(1024.f, 1024.f, shopOffers.size());
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size());
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
     if (pointInRect(layout.sellBall1, mousePos) && items.getBallForSlot(1) != BallType::Normal) {
         return ShopActionSellBallSlot1;
@@ -2173,7 +2177,7 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         int remaining = (int)shopOffers.size() - row * cardsPerRow;
         int cardsInRow = std::min(cardsPerRow, remaining);
         float rowTotalW = cardsInRow * cardW + (cardsInRow - 1) * cardGap;
-        float rowStartX = (1024.f - rowTotalW) / 2.f;
+        float rowStartX = (windowW - rowTotalW) / 2.f;
         float cardY = firstCardY + row * (cardH + cardGap);
         float cx  = rowStartX + col * (cardW + cardGap);
         float btnX = cx + 10.f;

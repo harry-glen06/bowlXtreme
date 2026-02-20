@@ -207,7 +207,16 @@ void Game::handleEvents() {
 
         if (ev->is<sf::Event::Resized>()) {
             auto r = ev->getIf<sf::Event::Resized>();
+            float oldCenterX = lane.centerX();
             applyLetterbox(r->size.x, r->size.y);
+            lane.init(windowW);
+            float dx = lane.centerX() - oldCenterX;
+            if (std::abs(dx) > 0.001f) {
+                ball.setPos(ball.getPos() + sf::Vector2f(dx, 0.0f));
+                for (auto& pin : pins) {
+                    pin.translate(sf::Vector2f(dx, 0.0f));
+                }
+            }
         }
         
         // Handle mouse clicks for menu
@@ -1668,18 +1677,16 @@ void Game::draw() {
 }
 
 void Game::applyLetterbox(unsigned winW, unsigned winH) {
-    float windowRatio = (float)winW / (float)winH;
-    float viewRatio = windowW / windowH;
-    float sizeX = 1.0f, sizeY = 1.0f, posX = 0.0f, posY = 0.0f;
+    if (winW == 0 || winH == 0) return;
+    // Keep a fixed world height so gameplay framing (lane + ball) stays valid,
+    // while expanding world width to fill widescreen windows without stretching.
+    constexpr float designH = 1024.0f;
+    float aspect = static_cast<float>(winW) / static_cast<float>(winH);
+    windowH = designH;
+    windowW = designH * aspect;
 
-    if (windowRatio > viewRatio) { 
-        sizeX = viewRatio / windowRatio; 
-        posX = (1.0f - sizeX) * 0.5f; 
-    } else { 
-        sizeY = windowRatio / viewRatio; 
-        posY = (1.0f - sizeY) * 0.5f; 
-    }
-
-    view.setViewport(sf::FloatRect(sf::Vector2f(posX, posY), sf::Vector2f(sizeX, sizeY)));
+    view.setSize(sf::Vector2f(windowW, windowH));
+    view.setCenter(sf::Vector2f(windowW * 0.5f, windowH * 0.5f));
+    view.setViewport(sf::FloatRect(sf::Vector2f(0.f, 0.f), sf::Vector2f(1.f, 1.f)));
     window.setView(view);
 }

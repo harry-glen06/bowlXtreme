@@ -71,6 +71,7 @@ public:
     bool  isActive()  const;
 
     void setPos(sf::Vector2f p);
+    void translate(sf::Vector2f delta);
     void setVel(sf::Vector2f v);
     void setActive(bool a);
     void setSlideMultiplier(float mult);

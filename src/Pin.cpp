@@ -135,6 +135,10 @@ float        Pin::getAngle()      const { return angle; }
 float        Pin::getAngularVel() const { return angularVel; }
 
 void Pin::setPos(sf::Vector2f p) { pos = p; }
+void Pin::translate(sf::Vector2f delta) {
+    pos += delta;
+    startPos += delta;
+}
 void Pin::setVel(sf::Vector2f v) { vel = v; }
 void Pin::setActive(bool a)      { active = a; }
 void Pin::setSlideMultiplier(float mult) {
