@@ -260,6 +260,55 @@ void Game::handleEvents() {
                 if (ui.getState() == GameState::Shop) {
                     sf::Vector2i worldPosI((int)worldPos.x, (int)worldPos.y);
                     int purchased = ui.handleShopClick(window, worldPosI, xtreme.getTokens(), activeItems);
+                    const int sellReturnOffset = 10000;
+
+                    auto erasePowerRecord = [&](PowerType p, bool all) {
+                        int target = static_cast<int>(p);
+                        if (all) {
+                            activeItems.purchasedPowers.erase(
+                                std::remove(activeItems.purchasedPowers.begin(),
+                                            activeItems.purchasedPowers.end(),
+                                            target),
+                                activeItems.purchasedPowers.end());
+                            return;
+                        }
+                        auto it = std::find(activeItems.purchasedPowers.begin(),
+                                            activeItems.purchasedPowers.end(),
+                                            target);
+                        if (it != activeItems.purchasedPowers.end()) {
+                            activeItems.purchasedPowers.erase(it);
+                        }
+                    };
+
+                    auto isStackablePower = [](PowerType p) {
+                        return p == PowerType::Duplicate || p == PowerType::SwapPins;
+                    };
+
+                    auto ownedPermanentPowerCount = [&]() {
+                        int count = 0;
+                        for (int i = 0; i <= (int)PowerType::MoMoney; i++) {
+                            PowerType p = static_cast<PowerType>(i);
+                            if (isStackablePower(p)) continue;
+                            if (activeItems.hasPower(p) || activeItems.hasPurchasedPower(p)) {
+                                count++;
+                            }
+                        }
+                        return count;
+                    };
+
+                    auto syncRunPowersToScorer = [&]() {
+                        bool hasExtraBall = activeItems.powerExtraBall ||
+                                            activeItems.hasPurchasedPower(PowerType::ExtraBall);
+                        bool hasPassedGo = activeItems.powerPassedGo ||
+                                           activeItems.hasPurchasedPower(PowerType::PassedGo);
+                        bool hasMoMoney = activeItems.powerMoMoney ||
+                                          activeItems.hasPurchasedPower(PowerType::MoMoney);
+                        xtreme.setExtraBallEnabled(hasExtraBall);
+                        xtreme.setPowerPassedGo(hasPassedGo);
+                        xtreme.setPowerMoMoney(hasMoMoney);
+                        xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
+                        if (activeItems.powerBumpers) lane.bumpersOn = true;
+                    };
 
                     if (purchased == -2) {
                         if (activeItems.skipCharges > 0 && xtreme.getTokens() >= 1) {
@@ -267,32 +316,202 @@ void Game::handleEvents() {
                             activeItems.skipCharges--;
                             ui.generateShopOffers(activeItems);
                         }
+                    } else if (purchased >= sellReturnOffset) {
+                        int sellIndex = purchased - sellReturnOffset;
+                        const auto& offers = ui.getShopOffers();
+                        if (sellIndex >= 0 && sellIndex < (int)offers.size()) {
+                            const auto& offer = offers[sellIndex];
+                            int sellValue = offer.cost / 2;
+                            bool sold = false;
+
+                            if (offer.category == ShopItemCategory::Ball) {
+                                int slot = ui.getSelectedBallSlot();
+                                if (activeItems.getBallForSlot(slot) == offer.ballType) {
+                                    activeItems.setBallForSlot(slot, BallType::Normal);
+                                    sold = true;
+                                }
+                            } else if (offer.category == ShopItemCategory::Shoe) {
+                                if (activeItems.shoeType == offer.shoeType) {
+                                    activeItems.applyShoeType(ShoeType::None);
+                                    sold = true;
+                                }
+                            } else if (offer.category == ShopItemCategory::Pin) {
+                                int target = static_cast<int>(offer.pinType);
+                                auto it = std::find(activeItems.purchasedPinTypes.begin(),
+                                                    activeItems.purchasedPinTypes.end(),
+                                                    target);
+                                if (it != activeItems.purchasedPinTypes.end()) {
+                                    activeItems.purchasedPinTypes.erase(it);
+                                    sold = true;
+                                }
+                            } else if (offer.category == ShopItemCategory::Power) {
+                                switch (offer.powerType) {
+                                    case PowerType::Duplicate:
+                                        if (activeItems.duplicateCharges > 0) {
+                                            activeItems.duplicateCharges--;
+                                            erasePowerRecord(PowerType::Duplicate, false);
+                                            sold = true;
+                                        }
+                                        break;
+                                    case PowerType::SwapPins:
+                                        if (activeItems.swapCharges > 0) {
+                                            activeItems.swapCharges--;
+                                            erasePowerRecord(PowerType::SwapPins, false);
+                                            sold = true;
+                                        }
+                                        break;
+                                    case PowerType::Greedy:
+                                        activeItems.powerGreedy = false;
+                                        erasePowerRecord(PowerType::Greedy, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::RandomUpgrade:
+                                        activeItems.powerRandomUpgrade = false;
+                                        erasePowerRecord(PowerType::RandomUpgrade, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::ExtraPins:
+                                        activeItems.powerExtraPins = false;
+                                        erasePowerRecord(PowerType::ExtraPins, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::ExtraBall:
+                                        activeItems.powerExtraBall = false;
+                                        erasePowerRecord(PowerType::ExtraBall, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::Bumpers:
+                                        activeItems.powerBumpers = false;
+                                        lane.bumpersOn = ui.getBumpersDefault();
+                                        erasePowerRecord(PowerType::Bumpers, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::HomeBase:
+                                        activeItems.powerHomeBase = false;
+                                        activeItems.homeBaseComboBonus = 0.0f;
+                                        erasePowerRecord(PowerType::HomeBase, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::Confusion:
+                                        activeItems.powerConfusion = false;
+                                        erasePowerRecord(PowerType::Confusion, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::Earthquake:
+                                        activeItems.powerEarthquake = false;
+                                        activeItems.earthquakeShotCounter = 0;
+                                        erasePowerRecord(PowerType::Earthquake, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::Skip:
+                                        activeItems.powerSkip = false;
+                                        activeItems.skipCharges = 0;
+                                        erasePowerRecord(PowerType::Skip, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::UpgradesForEveryone:
+                                        activeItems.powerUpgradesForEveryone = false;
+                                        erasePowerRecord(PowerType::UpgradesForEveryone, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::Sales:
+                                        activeItems.powerSales = false;
+                                        erasePowerRecord(PowerType::Sales, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::PassedGo:
+                                        activeItems.powerPassedGo = false;
+                                        erasePowerRecord(PowerType::PassedGo, true);
+                                        sold = true;
+                                        break;
+                                    case PowerType::MoMoney:
+                                        activeItems.powerMoMoney = false;
+                                        erasePowerRecord(PowerType::MoMoney, true);
+                                        sold = true;
+                                        break;
+                                }
+                                if (sold) {
+                                    syncRunPowersToScorer();
+                                }
+                            }
+
+                            if (sold) {
+                                if (sellValue > 0) xtreme.addTokens(sellValue);
+                                ui.generateShopOffers(activeItems);
+                            }
+                        }
                     } else if (purchased >= 0) {
                         const auto& offers = ui.getShopOffers();
-                        xtreme.addTokens(-offers[purchased].cost);
+                        if (purchased >= (int)offers.size()) {
+                            continue;
+                        }
+                        const auto& offer = offers[purchased];
+                        bool canBuy = true;
 
-                        if (offers[purchased].category == ShopItemCategory::Ball) {
+                        if (offer.category == ShopItemCategory::Power) {
+                            const int maxPermanentPowers = 4;
+                            bool alreadyOwned = activeItems.hasPower(offer.powerType) ||
+                                                activeItems.hasPurchasedPower(offer.powerType);
+                            if (!isStackablePower(offer.powerType) &&
+                                !alreadyOwned &&
+                                ownedPermanentPowerCount() >= maxPermanentPowers) {
+                                canBuy = false;
+                            }
+                        }
+                        if (offer.category == ShopItemCategory::Pin) {
+                            bool hasExtraPins = activeItems.powerExtraPins ||
+                                                activeItems.hasPurchasedPower(PowerType::ExtraPins);
+                            int pinLimit = hasExtraPins ? 12 : 10;
+                            if ((int)activeItems.purchasedPinTypes.size() >= pinLimit) {
+                                canBuy = false;
+                            }
+                        }
+                        if (xtreme.getTokens() < offer.cost) {
+                            canBuy = false;
+                        }
+
+                        if (!canBuy) {
+                            // blocked by caps/rules; ignore click
+                        } else if (offer.category == ShopItemCategory::Ball) {
+                            xtreme.addTokens(-offer.cost);
                             int slot = ui.getSelectedBallSlot();
-                            activeItems.setBallForSlot(slot, offers[purchased].ballType);
-                        } else if (offers[purchased].category == ShopItemCategory::Shoe) {
-                            bool changedShoes = (activeItems.shoeType != offers[purchased].shoeType);
-                            activeItems.applyShoeType(offers[purchased].shoeType);
-                            if (offers[purchased].shoeType == ShoeType::Clown && changedShoes) {
+                            BallType oldBall = activeItems.getBallForSlot(slot);
+                            auto ballBaseCost = [](BallType t) {
+                                switch (t) {
+                                    case BallType::BlackHole: return 4;
+                                    case BallType::Midas:     return 5;
+                                    case BallType::Upgrade:   return 3;
+                                    case BallType::Heavy:     return 2;
+                                    case BallType::Fastball:  return 2;
+                                    case BallType::OddBall:   return 3;
+                                    case BallType::EightBall: return 4;
+                                    case BallType::Retrigger: return 4;
+                                    default:                  return 1;
+                                }
+                            };
+                            if (oldBall != BallType::Normal && oldBall != offer.ballType) {
+                                xtreme.addTokens(ballBaseCost(oldBall) / 2);
+                            }
+                            activeItems.setBallForSlot(slot, offer.ballType);
+                        } else if (offer.category == ShopItemCategory::Shoe) {
+                            xtreme.addTokens(-offer.cost);
+                            bool changedShoes = (activeItems.shoeType != offer.shoeType);
+                            activeItems.applyShoeType(offer.shoeType);
+                            if (offer.shoeType == ShoeType::Clown && changedShoes) {
                                 xtreme.addTokens(10);
                             }
-                        } else if (offers[purchased].category == ShopItemCategory::Pin) {
+                        } else if (offer.category == ShopItemCategory::Pin) {
+                            xtreme.addTokens(-offer.cost);
                             // Pin purchase: store type, will be applied next frame
                             activeItems.purchasedPinTypes.push_back(
-                                static_cast<int>(offers[purchased].pinType));
+                                static_cast<int>(offer.pinType));
                         } else {
-                            activeItems.applyPower(offers[purchased].powerType);
-                            if (offers[purchased].powerType == PowerType::Bumpers) {
+                            xtreme.addTokens(-offer.cost);
+                            activeItems.applyPower(offer.powerType);
+                            if (offer.powerType == PowerType::Bumpers) {
                                 lane.bumpersOn = true;
                             }
-                            xtreme.setExtraBallEnabled(activeItems.powerExtraBall);
-                            xtreme.setPowerPassedGo(activeItems.powerPassedGo);
-                            xtreme.setPowerMoMoney(activeItems.powerMoMoney);
-                            xtreme.setBaseCombo(1 + activeItems.homeBaseComboBonus);
+                            syncRunPowersToScorer();
                         }
                     }
 
@@ -328,10 +547,16 @@ void Game::resetBall() {
     activeItems.resetForNewShot();
 
     if (ui.getState() == GameState::Xtreme) {
-        xtreme.setExtraBallEnabled(activeItems.powerExtraBall);
-        xtreme.setPowerPassedGo(activeItems.powerPassedGo);
-        xtreme.setPowerMoMoney(activeItems.powerMoMoney);
-        xtreme.setBaseCombo(1 + activeItems.homeBaseComboBonus);
+        bool hasExtraBall = activeItems.powerExtraBall ||
+                            activeItems.hasPurchasedPower(PowerType::ExtraBall);
+        bool hasPassedGo = activeItems.powerPassedGo ||
+                           activeItems.hasPurchasedPower(PowerType::PassedGo);
+        bool hasMoMoney = activeItems.powerMoMoney ||
+                          activeItems.hasPurchasedPower(PowerType::MoMoney);
+        xtreme.setExtraBallEnabled(hasExtraBall);
+        xtreme.setPowerPassedGo(hasPassedGo);
+        xtreme.setPowerMoMoney(hasMoMoney);
+                        xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
     }
     if (activeItems.powerBumpers) {
         lane.bumpersOn = true;
@@ -413,8 +638,8 @@ int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
 }
 
 void Game::processExplosions() {
-    const float blastRadius = 120.f;
-    const float blastForce  = 900.f * 0.87f; // 13% weaker explosion effect
+    const float blastRadius = 108.f;
+    const float blastForce  = 900.f * 0.74f;
 
     for (auto& pin : pins) {
         if (!pin.isActive()) continue;
@@ -572,11 +797,12 @@ void Game::finishPendingResetIfReady(float dt) {
     }
 
     // Record score
+    bool strikeThisShot = false;
     if (ui.getState() == GameState::Xtreme) {
         // shotBeforeRecord is intentionally captured before recordShot(),
         // because recordShot advances the internal shot counter.
-        bool strikeThisShot = (shotBeforeRecord == 1 &&
-                               physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+        strikeThisShot = (shotBeforeRecord == 1 &&
+                          physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
         bool spareThisShot = (shotBeforeRecord > 1 &&
                               physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
         if (activeItems.powerConfusion && spareThisShot) {
@@ -588,8 +814,8 @@ void Game::finishPendingResetIfReady(float dt) {
         xtreme.recordShot(knockedThisBall, pinValueSumThisBall, strikeThisShot);
 
         if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
-            activeItems.homeBaseComboBonus += physicalPinsDownThisShot;
-            xtreme.setBaseCombo(1 + activeItems.homeBaseComboBonus);
+            activeItems.homeBaseComboBonus += 0.01f;
+            xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
         }
 
         // Random upgrade applies once after each completed frame.
@@ -603,23 +829,33 @@ void Game::finishPendingResetIfReady(float dt) {
     // Handle pin resets based on game state
     if (ui.getState() == GameState::Xtreme) {
         if (xtreme.getShotInFrame() > 1) {
-            // Non-final shot done: deactivate fallen, reset standing.
-            for (auto& pin : pins) {
-                if (pin.isFallen()) {
-                    pin.setActive(false);
-                } else if (pin.isActive()) {
-                    if (activeItems.lockPinChangesMidRound) {
-                        pin.resetToOriginalPositionKeepType();
-                    } else {
-                        pin.resetToOriginalPosition();
+            // Keep frame progression shot-based. After a strike (or full clear),
+            // rerack for the next shot in the same frame.
+            bool rackCleared = (physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+            bool shouldRerack = strikeThisShot || rackCleared;
+            if (shouldRerack) {
+                pins = createPins(lane.centerX(), 240.0f);
+                applyPurchasedPinTypes(pins);
+                applyPowerPinLayout(pins);
+            } else {
+                // Non-final shot done: deactivate fallen, reset standing.
+                for (auto& pin : pins) {
+                    if (pin.isFallen()) {
+                        pin.setActive(false);
+                    } else if (pin.isActive()) {
+                        if (activeItems.lockPinChangesMidRound) {
+                            pin.resetToOriginalPositionKeepType();
+                        } else {
+                            pin.resetToOriginalPosition();
+                        }
                     }
                 }
+                // Re-apply purchased types to active pins unless shoes lock pin changes
+                if (!activeItems.lockPinChangesMidRound) {
+                    applyPurchasedPinTypes(pins);
+                }
+                applyPowerPinLayout(pins);
             }
-            // Re-apply purchased types to active pins unless shoes lock pin changes
-            if (!activeItems.lockPinChangesMidRound) {
-                applyPurchasedPinTypes(pins);
-            }
-            applyPowerPinLayout(pins);
         } else {
             // Final shot in frame done: fresh pins with purchased types.
             pins = createPins(lane.centerX(), 240.0f);
@@ -788,6 +1024,7 @@ void Game::doCollisions() {
         sf::Vector2f bvStart = bv;
         float br = ball.getRadius();
         float bm = ball.getMass();  // respects item mass multiplier
+        const float pinFallImpactThreshold = 48.0f;
 
         bool hitAnyPin = false;
 
@@ -820,7 +1057,19 @@ void Game::doCollisions() {
             }
 
             // Pin first contact this shot (impact threshold)
-            bool freshImpact = (!pin.isFallen() && impact > 50.0f);
+            bool freshImpact = (!pin.isFallen() && impact > pinFallImpactThreshold);
+
+            // CopyCat: becomes the type of the first hit pin.
+            // Do this before setFallen so copying Exploding arms correctly.
+            if (freshImpact &&
+                pin.getPinType() == PinType::CopyCat &&
+                activeItems.firstBallHitPinIndex != pi &&
+                activeItems.firstBallHitPinIndex >= 0) {
+                PinType copyFrom = pins[activeItems.firstBallHitPinIndex].getPinType();
+                if (!activeItems.lockPinChangesMidRound && copyFrom != PinType::CopyCat) {
+                    pin.setPinType(copyFrom);
+                }
+            }
 
             // Pin falls
             if (freshImpact) {
@@ -830,23 +1079,13 @@ void Game::doCollisions() {
             }
 
             // ── Item effects on first meaningful contact ──────────────────
-            if (freshImpact || (impact > 50.0f && !pin.isFallen())) {
+            if (freshImpact || (impact > pinFallImpactThreshold && !pin.isFallen())) {
 
                 activeItems.pinsHitThisShot++;
 
                 // Track very first pin hit by ball (for CopyCat)
                 if (activeItems.firstBallHitPinIndex == -1) {
                     activeItems.firstBallHitPinIndex = pi;
-                }
-
-                // CopyCat: becomes the type of the first hit pin
-                if (pin.getPinType() == PinType::CopyCat &&
-                    activeItems.firstBallHitPinIndex != pi &&
-                    activeItems.firstBallHitPinIndex >= 0) {
-                    PinType copyFrom = pins[activeItems.firstBallHitPinIndex].getPinType();
-                    if (!activeItems.lockPinChangesMidRound && copyFrom != PinType::CopyCat) {
-                        pin.setPinType(copyFrom);
-                    }
                 }
 
                 // Upgrade ball: each hit pin gains +1 value
@@ -1005,6 +1244,10 @@ void Game::update(float dt) {
             if (ui.getState() == GameState::Xtreme && xtreme.isShopReady()) {
                 ui.setState(GameState::Shop);
                 xtreme.consumeShopReady();
+                if (activeItems.powerSkip || activeItems.hasPurchasedPower(PowerType::Skip)) {
+                    activeItems.powerSkip = true;
+                    activeItems.skipCharges = 2;
+                }
                 return;
             }
         } else {
@@ -1178,6 +1421,10 @@ void Game::update(float dt) {
         xtreme.isShopReady()) {
         ui.setState(GameState::Shop);
         xtreme.consumeShopReady();
+        if (activeItems.powerSkip || activeItems.hasPurchasedPower(PowerType::Skip)) {
+            activeItems.powerSkip = true;
+            activeItems.skipCharges = 2;
+        }
         return;
     }
 }

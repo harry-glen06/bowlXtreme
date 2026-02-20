@@ -66,6 +66,7 @@ struct ActiveItems {
     bool powerHomeBase = false;
     bool powerConfusion = false;
     bool powerEarthquake = false;
+    bool powerSkip = false;
     bool powerUpgradesForEveryone = false;
     bool powerSales = false;
     bool powerPassedGo = false;
@@ -76,7 +77,7 @@ struct ActiveItems {
     int skipCharges = 0;
     int earthquakeShotCounter = 0;
     int pendingRandomPinUpgrades = 0;
-    int homeBaseComboBonus = 0;
+    float homeBaseComboBonus = 0.0f;
     int pinsStandingAtShotStart = 10;
 
     // Per-shot state
@@ -124,6 +125,7 @@ struct ActiveItems {
         powerHomeBase = false;
         powerConfusion = false;
         powerEarthquake = false;
+        powerSkip = false;
         powerUpgradesForEveryone = false;
         powerSales = false;
         powerPassedGo = false;
@@ -134,7 +136,7 @@ struct ActiveItems {
         skipCharges = 0;
         earthquakeShotCounter = 0;
         pendingRandomPinUpgrades = 0;
-        homeBaseComboBonus = 0;
+        homeBaseComboBonus = 0.0f;
         pinsStandingAtShotStart = 10;
     }
 
@@ -216,7 +218,7 @@ struct ActiveItems {
             case PowerType::HomeBase:           return powerHomeBase;
             case PowerType::Confusion:          return powerConfusion;
             case PowerType::Earthquake:         return powerEarthquake;
-            case PowerType::Skip:               return skipCharges > 0;
+            case PowerType::Skip:               return powerSkip;
             case PowerType::UpgradesForEveryone:return powerUpgradesForEveryone;
             case PowerType::Sales:              return powerSales;
             case PowerType::PassedGo:           return powerPassedGo;
@@ -238,7 +240,10 @@ struct ActiveItems {
             case PowerType::HomeBase:           powerHomeBase = true; break;
             case PowerType::Confusion:          powerConfusion = true; break;
             case PowerType::Earthquake:         powerEarthquake = true; break;
-            case PowerType::Skip:               skipCharges += 2; break;
+            case PowerType::Skip:
+                powerSkip = true;
+                skipCharges = 2;
+                break;
             case PowerType::UpgradesForEveryone:powerUpgradesForEveryone = true; break;
             case PowerType::Sales:              powerSales = true; break;
             case PowerType::PassedGo:           powerPassedGo = true; break;

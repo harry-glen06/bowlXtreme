@@ -30,8 +30,8 @@ void Pin::setPinType(PinType t) {
             break;
         case PinType::Big:
             mass  = baseMass * 2.2f;
-            value = 7;
-            baseValue = 7;
+            value = 10;
+            baseValue = 10;
             break;
         case PinType::LuckyDucky:
             value = 20;

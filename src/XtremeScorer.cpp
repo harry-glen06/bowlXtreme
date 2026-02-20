@@ -1,4 +1,5 @@
 #include "XtremeScorer.h"
+#include <cmath>
 
 void XtremeScorer::reset() {
     round = 1;
@@ -16,8 +17,8 @@ void XtremeScorer::reset() {
     targetScore = targetStart;
 
     lastImpact = baseImpact;
-    lastCombo = baseCombo;
-    lastShotScore = baseImpact * baseCombo;
+    lastCombo = static_cast<int>(std::lround(baseCombo));
+    lastShotScore = static_cast<int>(std::lround(baseImpact * baseCombo));
     lastPinsHit = 0;
     lastPinValueSum = 0;
     roundPassed = false;
@@ -36,10 +37,11 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
     lastPinValueSum = pinValueSum;
 
     lastImpact = baseImpact + pinValueSum;
-    lastCombo = pinsHit + baseCombo;
-    lastShotScore = lastImpact * lastCombo;
+    float comboValue = static_cast<float>(pinsHit) + baseCombo;
+    lastCombo = static_cast<int>(std::lround(comboValue));
+    lastShotScore = static_cast<int>(std::lround(static_cast<float>(lastImpact) * comboValue));
     if (strike) {
-        int strikeBonus = (lastShotScore * 30) / 100;
+        int strikeBonus = (lastShotScore * 40) / 100;
         lastShotScore += strikeBonus;
     }
 
@@ -56,6 +58,15 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
         return;
     }
 
+    auto nextTargetFromPercent = [&]() {
+        int pct = targetIncreasePercent;
+        if (pct < 1) pct = 1;
+        float scaled = static_cast<float>(targetScore) * (100.0f + static_cast<float>(pct)) / 100.0f;
+        int snapped = static_cast<int>(std::round(scaled / 25.0f)) * 25;
+        if (snapped <= targetScore) snapped = targetScore + 25;
+        targetScore = snapped;
+    };
+
     // finished final shot in frame
     shotInFrame = 1;
 
@@ -71,13 +82,13 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
             int interestDivisor = powerMoMoney ? 2 : 3;
             int interest = tokenCounter / interestDivisor;
             int reward = 6;     // 3 base + 3 bonus for early clear
-            if (powerPassedGo) reward += 5;
+            if (powerPassedGo) reward += 3;
             tokenCounter += interest + reward;
 
             shopReady = true; 
 
             round++;
-            targetScore += targetIncrease;
+            nextTargetFromPercent();
             roundScore = 0;
 
             frameInRound = 1;
@@ -106,13 +117,13 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike) {
     int interestDivisor = powerMoMoney ? 2 : 3;
     int interest = tokenCounter / interestDivisor;
     int reward = 3;     // normal clear reward
-    if (powerPassedGo) reward += 5;
+    if (powerPassedGo) reward += 3;
     tokenCounter += interest + reward;
 
     shopReady = true; 
 
     round++;
-    targetScore += targetIncrease;
+    nextTargetFromPercent();
     roundScore = 0;
     roundPassed = false;
 }

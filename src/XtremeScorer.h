@@ -10,7 +10,7 @@ public:
     void reset();
 
     // Pass in how many pins were knocked this shot and the sum of their values.
-    // If strike is true, this shot gains +30% bonus points.
+    // If strike is true, this shot gains +40% bonus points.
     void recordShot(int pinsHit, int pinValueSum, bool strike = false);
 
     // Progress
@@ -39,9 +39,10 @@ public:
 
     // Tuning
     void setBaseImpact(int v) { baseImpact = v; }
-    void setBaseCombo(int v) { baseCombo = v; }
+    void setBaseCombo(float v) { baseCombo = v; }
     void setTargetStart(int v) { targetStart = v; }
-    void setTargetIncrease(int v) { targetIncrease = v; }
+    void setTargetIncrease(int v) { targetIncreasePercent = v; } // percent
+    void setTargetIncreasePercent(int v) { targetIncreasePercent = v; }
     void setExtraBallEnabled(bool enabled) { shotsPerFrame = enabled ? 3 : 2; }
     void setPowerPassedGo(bool enabled) { powerPassedGo = enabled; }
     void setPowerMoMoney(bool enabled) { powerMoMoney = enabled; }
@@ -63,11 +64,11 @@ private:
     bool lost = false;
 
     int baseImpact = 10;
-    int baseCombo = 1;
+    float baseCombo = 1.0f;
 
-    int targetStart = 425;
-    int targetIncrease = 125;
-    int targetScore = 425;
+    int targetStart = 400;
+    int targetIncreasePercent = 25;
+    int targetScore = 400;
 
     // last shot
     int lastImpact = 10;

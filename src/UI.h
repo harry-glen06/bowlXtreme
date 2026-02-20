@@ -60,7 +60,7 @@ public:
 
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
-    // Returns purchase index, -1 = none, -2 = use shop skip
+    // Returns purchase index, -1 = none, -2 = use shop skip, >=10000 = sell index (offset)
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void resetEquippedBall() { selectedBallSlot = 1; }

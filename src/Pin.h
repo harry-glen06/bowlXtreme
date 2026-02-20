@@ -8,7 +8,7 @@ enum class PinType {
     Mischievous,    // Value randomises 1-15 each shot
     Exploding,      // Knocked over -> explodes after 1s, knocks nearby pins
     Light,          // Worth 2, very easy to knock over (low mass)
-    Big,            // Worth 7, hard to knock over (high mass)
+    Big,            // Worth 10, hard to knock over (high mass)
     Ice,            // Slides 15% faster when fallen
     CopyCat,        // Becomes the type of the first ball-hit pin this shot
     LuckyDucky,     // Worth 20, 35% chance to score 0
