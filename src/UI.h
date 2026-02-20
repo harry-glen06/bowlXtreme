@@ -8,6 +8,7 @@
 
 enum class GameState {
     Menu,
+    Settings,
     Playing,
     Xtreme,
     Shop,
@@ -46,6 +47,14 @@ struct ShopOffer {
 
 class UI {
 public:
+    static constexpr int ShopActionNone = -1;
+    static constexpr int ShopActionReroll = -2;
+    static constexpr int ShopActionSellPin = -3;
+    static constexpr int ShopActionSellBallSlot1 = -4;
+    static constexpr int ShopActionSellBallSlot2 = -5;
+    static constexpr int ShopActionSellShoe = -6;
+    static constexpr int ShopActionSellPower = -7;
+
     UI();
     
     void loadFont();
@@ -60,7 +69,7 @@ public:
 
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
-    // Returns purchase index, -1 = none, -2 = use shop skip, >=10000 = sell index (offset)
+    // Returns purchase index (>=0) or one of the ShopAction* constants.
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void resetEquippedBall() { selectedBallSlot = 1; }

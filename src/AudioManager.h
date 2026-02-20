@@ -21,6 +21,7 @@ public:
     void playBackgroundMusic();    // Plays background_music.flac for gameplay
     void stopBackgroundMusic();    // Stops all music (Menu and Game)
     void setMusicVolume(float volume);
+    void setSoundVolume(float volume);
     
     // State Getters
     bool areSoundsLoaded() const { return soundsLoaded; }
@@ -57,4 +58,5 @@ private:
     bool soundsLoaded = false;
     bool ballRolling = false;
     float masterVolume = 0.5f; // Default volume (50%)
+    float sfxVolume = 70.0f;
 };

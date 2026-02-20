@@ -403,14 +403,28 @@ void UI::drawSettings(sf::RenderWindow& window, float windowW, float windowH) {
 }
 
 void UI::handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
-    float windowW = window.getSize().x;
-    float windowH = window.getSize().y;
+    float windowW = 1024.0f;
+    float windowH = 1024.0f;
     
     float panelW = 600;
     float panelH = 500;
     float startX = windowW / 2 - panelW / 2 + 40;
     float startY = windowH / 2 - panelH / 2 + 40;
     
+    // Music slider click
+    if (mousePos.x >= startX && mousePos.x <= startX + 400 &&
+        mousePos.y >= startY + 114 && mousePos.y <= startY + 132) {
+        float t = (mousePos.x - startX) / 400.0f;
+        musicVolume = std::clamp(t * 100.0f, 0.0f, 100.0f);
+    }
+
+    // Sound slider click
+    if (mousePos.x >= startX && mousePos.x <= startX + 400 &&
+        mousePos.y >= startY + 194 && mousePos.y <= startY + 212) {
+        float t = (mousePos.x - startX) / 400.0f;
+        soundVolume = std::clamp(t * 100.0f, 0.0f, 100.0f);
+    }
+
     // Check bumpers checkbox
     if (mousePos.x >= startX + 200 && mousePos.x <= startX + 230 &&
         mousePos.y >= startY + 250 && mousePos.y <= startY + 280) {
@@ -420,7 +434,6 @@ void UI::handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
     // Check back button
     if (mousePos.x >= windowW / 2 - 100 && mousePos.x <= windowW / 2 + 100 &&
         mousePos.y >= startY + 350 && mousePos.y <= startY + 400) {
-        inSettings = false;
         state = GameState::Menu;
     }
     
@@ -957,7 +970,7 @@ static std::string powerShortName(PowerType t) {
         case PowerType::HomeBase:            return "Home Base";
         case PowerType::Confusion:           return "Confusion";
         case PowerType::Earthquake:          return "Earthquake";
-        case PowerType::Skip:                return "Skip";
+        case PowerType::Skip:                return "Reroll";
         case PowerType::UpgradesForEveryone: return "Upgrades+3";
         case PowerType::Sales:               return "Sales";
         case PowerType::PassedGo:            return "Passed Go";
@@ -1282,44 +1295,148 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
     }
 }
 
+struct ShopOwnedPanelLayout {
+    float panelX = 0.f;
+    float panelY = 0.f;
+    float panelW = 0.f;
+    float panelH = 0.f;
+    sf::FloatRect sellBall1;
+    sf::FloatRect sellBall2;
+    sf::FloatRect sellShoe;
+    sf::FloatRect sellPin;
+    sf::FloatRect sellPower;
+    float contentTop = 0.f;
+};
+
+static bool pointInRect(const sf::FloatRect& rect, sf::Vector2i point) {
+    return point.x >= rect.position.x && point.x <= rect.position.x + rect.size.x &&
+           point.y >= rect.position.y && point.y <= rect.position.y + rect.size.y;
+}
+
+static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float windowH, std::size_t offerCount) {
+    ShopOwnedPanelLayout layout;
+    layout.panelW = 280.f;
+    layout.panelH = 420.f;
+    layout.panelX = windowW - layout.panelW - 24.f;
+    layout.panelY = windowH - layout.panelH - 32.f;
+    if (offerCount > 4) {
+        layout.panelW = 240.f;
+        layout.panelH = 440.f;
+        layout.panelX = 16.f;
+        layout.panelY = windowH - layout.panelH - 24.f;
+    }
+
+    const float pad = 8.f;
+    const float gap = 6.f;
+    const float btnH = 30.f;
+    const float actionTop = layout.panelY + 40.f;
+    const float actionW = layout.panelW - pad * 2.f;
+    const float halfW = (actionW - gap) * 0.5f;
+
+    layout.sellBall1 = sf::FloatRect({layout.panelX + pad, actionTop}, {halfW, btnH});
+    layout.sellBall2 = sf::FloatRect({layout.panelX + pad + halfW + gap, actionTop}, {halfW, btnH});
+    layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {halfW, btnH});
+    layout.sellPin   = sf::FloatRect({layout.panelX + pad + halfW + gap, actionTop + btnH + gap}, {halfW, btnH});
+    layout.sellPower = sf::FloatRect({layout.panelX + pad, actionTop + (btnH + gap) * 2.f}, {actionW, btnH});
+    layout.contentTop = actionTop + btnH * 3.f + gap * 2.f + 12.f;
+    return layout;
+}
+
+static int ballTypeCost(BallType t);
+static int pinTypeCost(PinType t);
+static int shoeTypeCost(ShoeType t);
+static int powerTypeCost(PowerType t);
+
+static bool getLastSellablePower(const ActiveItems& items, PowerType& out) {
+    for (auto it = items.purchasedPowers.rbegin(); it != items.purchasedPowers.rend(); ++it) {
+        if (*it < 0 || *it > (int)PowerType::MoMoney) continue;
+        PowerType p = static_cast<PowerType>(*it);
+        if (items.hasPower(p)) {
+            out = p;
+            return true;
+        }
+    }
+    for (int p = 0; p <= (int)PowerType::MoMoney; p++) {
+        PowerType t = static_cast<PowerType>(p);
+        if (items.hasPower(t)) {
+            out = t;
+            return true;
+        }
+    }
+    return false;
+}
+
 // Inventory panel shown inside the shop screen
 void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
                               float windowW, float windowH) {
     if (!fontLoaded) return;
     if (state != GameState::Shop) return;
 
-    float panelW = 280.f;
-    float panelH = 420.f;
-    float panelX = windowW - panelW - 24.f;
-    float panelY = windowH - panelH - 32.f;
-    if (shopOffers.size() > 4) {
-        panelW = 240.f;
-        panelH = 440.f;
-        panelX = 16.f;
-        panelY = windowH - panelH - 24.f;
-    }
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size());
 
-    sf::RectangleShape panel({panelW, panelH});
-    panel.setPosition({panelX, panelY});
+    sf::RectangleShape panel({layout.panelW, layout.panelH});
+    panel.setPosition({layout.panelX, layout.panelY});
     panel.setFillColor({30, 30, 45, 230});
     panel.setOutlineColor({100, 100, 140});
     panel.setOutlineThickness(2.f);
     window.draw(panel);
 
     sf::Text title(font, "OWNED", 22);
-    title.setPosition({panelX + 10.f, panelY + 8.f});
+    title.setPosition({layout.panelX + 10.f, layout.panelY + 8.f});
     title.setFillColor({180, 180, 220});
     window.draw(title);
+
+    BallType slot1Ball = items.getBallForSlot(1);
+    BallType slot2Ball = items.getBallForSlot(2);
+    bool canSellS1 = (slot1Ball != BallType::Normal);
+    bool canSellS2 = (slot2Ball != BallType::Normal);
+    bool canSellShoe = (items.shoeType != ShoeType::None);
+    bool canSellPin = !items.purchasedPinTypes.empty();
+    int s1Value = canSellS1 ? (ballTypeCost(slot1Ball) / 2) : 0;
+    int s2Value = canSellS2 ? (ballTypeCost(slot2Ball) / 2) : 0;
+    int shoeValue = canSellShoe ? (shoeTypeCost(items.shoeType) / 2) : 0;
+    int pinValue = 0;
+    if (canSellPin) {
+        pinValue = pinTypeCost(static_cast<PinType>(items.purchasedPinTypes.back())) / 2;
+    }
+    PowerType powerToSell = PowerType::Greedy;
+    bool canSellPower = getLastSellablePower(items, powerToSell);
+    int powerValue = canSellPower ? (powerTypeCost(powerToSell) / 2) : 0;
+
+    auto drawSellButton = [&](const sf::FloatRect& rect, const std::string& label, bool enabled) {
+        sf::RectangleShape button(rect.size);
+        button.setPosition(rect.position);
+        button.setFillColor(enabled ? sf::Color(170, 110, 70) : sf::Color(70, 70, 80));
+        button.setOutlineColor(sf::Color::Black);
+        button.setOutlineThickness(2.f);
+        window.draw(button);
+
+        sf::Text text(font, label, 14);
+        text.setPosition({rect.position.x + 8.f, rect.position.y + 6.f});
+        text.setFillColor(enabled ? sf::Color::White : sf::Color(170, 170, 170));
+        window.draw(text);
+    };
+
+    drawSellButton(layout.sellBall1, "Sell S1 (+" + std::to_string(s1Value) + ")", canSellS1);
+    drawSellButton(layout.sellBall2, "Sell S2 (+" + std::to_string(s2Value) + ")", canSellS2);
+    drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe);
+    drawSellButton(layout.sellPin, "Sell Pin (+" + std::to_string(pinValue) + ")", canSellPin);
+
+    std::string sellPowerLabel = "Sell Power";
+    if (canSellPower) {
+        sellPowerLabel = "Sell " + powerShortName(powerToSell) +
+                         " (+" + std::to_string(powerValue) + ")";
+    }
+    drawSellButton(layout.sellPower, sellPowerLabel, canSellPower);
 
     // Clip inventory content to the panel interior so large loadouts never
     // draw outside the box.
     const float clipPadX = 6.f;
     const float clipPadBottom = 8.f;
-    const float contentTop = panelY + 40.f;
-    const float clipX = panelX + clipPadX;
-    const float clipY = contentTop;
-    const float clipW = panelW - clipPadX * 2.f;
-    const float clipH = panelH - (contentTop - panelY) - clipPadBottom;
+    const float clipX = layout.panelX + clipPadX;
+    const float clipY = layout.contentTop;
+    const float clipW = layout.panelW - clipPadX * 2.f;
+    const float clipH = layout.panelH - (layout.contentTop - layout.panelY) - clipPadBottom;
 
     if (clipW > 1.f && clipH > 1.f) {
         sf::View prevView = window.getView();
@@ -1335,7 +1452,7 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
         clipView.setViewport(clipVp);
         window.setView(clipView);
 
-        drawInventoryPanel(window, items, panelX + 6.f, contentTop, panelW - 12.f);
+        drawInventoryPanel(window, items, layout.panelX + 6.f, layout.contentTop, layout.panelW - 12.f);
 
         window.setView(prevView);
     }
@@ -1382,6 +1499,53 @@ static int ballTypeCost(BallType t) {
         case BallType::EightBall:  return 4;
         case BallType::Retrigger:  return 4;
         default:                   return 1;
+    }
+}
+
+static int pinTypeCost(PinType t) {
+    switch (t) {
+        case PinType::Gold:        return 2;
+        case PinType::Mischievous: return 2;
+        case PinType::Exploding:   return 4;
+        case PinType::Light:       return 2;
+        case PinType::Big:         return 3;
+        case PinType::Ice:         return 2;
+        case PinType::CopyCat:     return 3;
+        case PinType::LuckyDucky:  return 4;
+        case PinType::ThirdTime:   return 3;
+        default:                   return 1;
+    }
+}
+
+static int shoeTypeCost(ShoeType t) {
+    switch (t) {
+        case ShoeType::Clown:    return 0;
+        case ShoeType::Running:  return 3;
+        case ShoeType::Moon:     return 4;
+        case ShoeType::Slippers: return 3;
+        case ShoeType::SteelCap: return 4;
+        default:                 return 0;
+    }
+}
+
+static int powerTypeCost(PowerType t) {
+    switch (t) {
+        case PowerType::Greedy:              return 5;
+        case PowerType::RandomUpgrade:       return 3;
+        case PowerType::ExtraPins:           return 5;
+        case PowerType::ExtraBall:           return 7;
+        case PowerType::Duplicate:           return 2;
+        case PowerType::Bumpers:             return 5;
+        case PowerType::SwapPins:            return 2;
+        case PowerType::HomeBase:            return 5;
+        case PowerType::Confusion:           return 3;
+        case PowerType::Earthquake:          return 6;
+        case PowerType::Skip:                return 1;
+        case PowerType::UpgradesForEveryone: return 4;
+        case PowerType::Sales:               return 4;
+        case PowerType::PassedGo:            return 4;
+        case PowerType::MoMoney:             return 4;
+        default:                             return 0;
     }
 }
 
@@ -1488,7 +1652,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Pin, BallType::Normal, PinType::LuckyDucky, ShoeType::None, PowerType::Greedy,
          "Lucky Ducky",  "Worth 20 pts.\n35% chance to score 0.",             4},
         {ShopItemCategory::Pin, BallType::Normal, PinType::ThirdTime, ShoeType::None, PowerType::Greedy,
-         "3rd Time",     "Every 3rd knock\ndoubles combo.",                    3},
+         "3rd Time",     "Every 3rd 3rd-Time\nknock doubles combo.",           3},
         // Shoes
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Clown, PowerType::Greedy,
          "Clown Shoes",  "Funny wobble:\nlaunch angle shifts a bit but gain 10 dollars.", 0},
@@ -1508,7 +1672,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
          "Extra Pins",   "Adds two extra pins\nto the rack.",                   5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraBall,
-         "Extra Ball",   "Adds one extra shot\nper frame.",                     6},
+         "Extra Ball",   "Adds one extra shot\nper frame.",                     7},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Duplicate,
          "Duplicate",    "Copy one random pin\ntype to another. 1 use.",        2},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Bumpers,
@@ -1516,13 +1680,13 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::SwapPins,
          "Swap Pins",    "Swap two random\npin spots. 1 use.",                  2},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::HomeBase,
-         "Home Base",    "Each scoring shot\nraises base combo by 0.01.",       5},
+         "Home Base",    "Every 20 pins hit,\nbase combo +1.",                 5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Confusion,
          "Confusion",    "Spares score like\nstrikes.",                         3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Earthquake,
          "Earthquake",   "Every 10 shots,\na free strike.",                     6},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Skip,
-         "Skip",         "Permanent:\n2 shop skips each shop.",                 1},
+         "Reroll",       "Permanent:\n2 rerolls each shop.",                    1},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::UpgradesForEveryone,
          "Upgrades+3",   "Future shops show\nthree extra items.",               4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Sales,
@@ -1545,10 +1709,19 @@ void UI::generateShopOffers(const ActiveItems& items) {
             int discounted = static_cast<int>(std::lround(static_cast<float>(adjusted.cost) * 0.8f));
             adjusted.cost = std::max(1, discounted);
         }
+        if (adjusted.category == ShopItemCategory::Shoe &&
+            adjusted.shoeType == items.shoeType) {
+            continue;
+        }
+        if (adjusted.category == ShopItemCategory::Power &&
+            !powerIsStackable(adjusted.powerType) &&
+            hasOwnedPower(adjusted.powerType)) {
+            continue;
+        }
         filtered.push_back(adjusted);
     }
 
-    // Shuffle pool
+    // Shuffle pool for random slots
     for (int i = (int)filtered.size()-1; i > 0; i--) {
         int j = rand() % (i+1);
         std::swap(filtered[i], filtered[j]);
@@ -1556,6 +1729,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
 
     int maxOffers = hasOwnedPower(PowerType::UpgradesForEveryone) ? 7 : 4;
     int count = std::min(maxOffers, (int)filtered.size());
+
     for (int i = 0; i < count; i++) {
         ShopOffer o;
         o.category    = filtered[i].category;
@@ -1611,7 +1785,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         window.draw(skipBtn);
 
         sf::Text skipText(font,
-                          "SKIP (1) x" + std::to_string(items.skipCharges),
+                          "REROLL (1) x" + std::to_string(items.skipCharges),
                           20);
         skipText.setPosition({skipX + 14.f, skipY + 8.f});
         skipText.setFillColor(sf::Color::White);
@@ -1680,10 +1854,6 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         if (isShoe) isOwned = (items.shoeType == offer.shoeType);
         if (isPower && !isStackablePower) {
             isOwned = items.hasPower(offer.powerType) || items.hasPurchasedPower(offer.powerType);
-        }
-        if (isPower && isStackablePower) {
-            if (offer.powerType == PowerType::Duplicate) isOwned = (items.duplicateCharges > 0);
-            else if (offer.powerType == PowerType::SwapPins) isOwned = (items.swapCharges > 0);
         }
 
         const int maxPermanentPowers = 4;
@@ -1807,8 +1977,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         }
 
         // Buy button
-        int sellValue = offer.cost / 2;
-        sf::Color btnColor = isOwned     ? sf::Color(180, 110, 55) :
+        sf::Color btnColor = isOwned     ? sf::Color(70, 70, 80) :
                              (canAfford && !powerLimitBlocked && !pinLimitBlocked)
                                          ? sf::Color(80, 200, 120) :
                                            sf::Color(80, 80, 80);
@@ -1821,9 +1990,8 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
         std::string btnLabel;
         if (isOwned) {
-            btnLabel = (sellValue > 0)
-                ? ("SELL (+" + std::to_string(sellValue) + " tokens)")
-                : "REMOVE";
+            if (isBall || isShoe) btnLabel = "EQUIPPED";
+            else btnLabel = "OWNED";
         } else if (powerLimitBlocked) {
             btnLabel = "Power limit (4)";
         } else if (pinLimitBlocked) {
@@ -1857,6 +2025,8 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 }
 
 int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items) {
+    (void)window;
+
     // Slot selector buttons
     const float slotY = 70.f;
     const float slotW = 130.f;
@@ -1867,12 +2037,12 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     if (mousePos.x >= slot1X && mousePos.x <= slot1X + slotW &&
         mousePos.y >= slotY  && mousePos.y <= slotY + slotH) {
         selectedBallSlot = 1;
-        return -1;
+        return ShopActionNone;
     }
     if (mousePos.x >= slot2X && mousePos.x <= slot2X + slotW &&
         mousePos.y >= slotY  && mousePos.y <= slotY + slotH) {
         selectedBallSlot = 2;
-        return -1;
+        return ShopActionNone;
     }
 
     const float skipX = 1024.f - 250.f;
@@ -1882,15 +2052,32 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     if (items.skipCharges > 0 &&
         mousePos.x >= skipX && mousePos.x <= skipX + skipW &&
         mousePos.y >= skipY && mousePos.y <= skipY + skipH) {
-        if (tokens >= 1) return -2;
-        return -1;
+        if (tokens >= 1) return ShopActionReroll;
+        return ShopActionNone;
+    }
+
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(1024.f, 1024.f, shopOffers.size());
+    if (pointInRect(layout.sellBall1, mousePos) && items.getBallForSlot(1) != BallType::Normal) {
+        return ShopActionSellBallSlot1;
+    }
+    if (pointInRect(layout.sellBall2, mousePos) && items.getBallForSlot(2) != BallType::Normal) {
+        return ShopActionSellBallSlot2;
+    }
+    if (pointInRect(layout.sellShoe, mousePos) && items.shoeType != ShoeType::None) {
+        return ShopActionSellShoe;
+    }
+    if (pointInRect(layout.sellPin, mousePos) && !items.purchasedPinTypes.empty()) {
+        return ShopActionSellPin;
+    }
+    PowerType powerToSell = PowerType::Greedy;
+    if (pointInRect(layout.sellPower, mousePos) && getLastSellablePower(items, powerToSell)) {
+        return ShopActionSellPower;
     }
 
     const int cardsPerRow = 4;
     float cardW = 210.f, cardH = 340.f;
     float cardGap = 20.f;
     float firstCardY  = 150.f;
-    const int sellReturnOffset = 10000;
     const int maxPermanentPowers = 4;
     bool hasExtraPinsPower =
         items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
@@ -1921,28 +2108,21 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
             } else if (offer.category == ShopItemCategory::Power) {
                 if (!powerIsStackable(offer.powerType)) {
                     isAlreadyOwned = items.hasPower(offer.powerType) || items.hasPurchasedPower(offer.powerType);
-                } else if (offer.powerType == PowerType::Duplicate) {
-                    isAlreadyOwned = items.duplicateCharges > 0;
-                } else if (offer.powerType == PowerType::SwapPins) {
-                    isAlreadyOwned = items.swapCharges > 0;
                 }
             }
 
-            bool canBuy = (tokens >= offer.cost);
+            bool canBuy = (tokens >= offer.cost) && !isAlreadyOwned;
             if (offer.category == ShopItemCategory::Power) {
                 canBuy = canBuy && canBuyPowerWithLimit(items, offer.powerType, maxPermanentPowers);
             }
-            if (offer.category == ShopItemCategory::Pin && !isAlreadyOwned) {
+            if (offer.category == ShopItemCategory::Pin) {
                 canBuy = canBuy && ((int)items.purchasedPinTypes.size() < pinBuyLimit);
             }
 
-            if (isAlreadyOwned) {
-                return sellReturnOffset + i;
-            }
             if (canBuy) {
                 return i;
             }
         }
     }
-    return -1;
+    return ShopActionNone;
 }

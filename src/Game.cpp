@@ -254,13 +254,15 @@ void Game::handleEvents() {
                         audio.playBackgroundMusic();
 
                     } else if (clicked == MenuButton::Settings) {
-                        // Show settings (we'll implement this next)
+                        ui.setState(GameState::Settings);
                     }
+                }
+                if (ui.getState() == GameState::Settings) {
+                    ui.handleSettingsClick(window, sf::Vector2i(worldPos.x, worldPos.y));
                 }
                 if (ui.getState() == GameState::Shop) {
                     sf::Vector2i worldPosI((int)worldPos.x, (int)worldPos.y);
                     int purchased = ui.handleShopClick(window, worldPosI, xtreme.getTokens(), activeItems);
-                    const int sellReturnOffset = 10000;
 
                     auto erasePowerRecord = [&](PowerType p, bool all) {
                         int target = static_cast<int>(p);
@@ -282,6 +284,67 @@ void Game::handleEvents() {
 
                     auto isStackablePower = [](PowerType p) {
                         return p == PowerType::Duplicate || p == PowerType::SwapPins;
+                    };
+
+                    auto pinTypeCost = [](PinType t) {
+                        switch (t) {
+                            case PinType::Gold:        return 2;
+                            case PinType::Mischievous: return 2;
+                            case PinType::Exploding:   return 4;
+                            case PinType::Light:       return 2;
+                            case PinType::Big:         return 3;
+                            case PinType::Ice:         return 2;
+                            case PinType::CopyCat:     return 3;
+                            case PinType::LuckyDucky:  return 4;
+                            case PinType::ThirdTime:   return 3;
+                            default:                   return 1;
+                        }
+                    };
+
+                    auto ballTypeCost = [](BallType t) {
+                        switch (t) {
+                            case BallType::BlackHole: return 4;
+                            case BallType::Midas:     return 5;
+                            case BallType::Upgrade:   return 3;
+                            case BallType::Heavy:     return 2;
+                            case BallType::Fastball:  return 2;
+                            case BallType::OddBall:   return 3;
+                            case BallType::EightBall: return 4;
+                            case BallType::Retrigger: return 4;
+                            default:                  return 1;
+                        }
+                    };
+
+                    auto shoeTypeCost = [](ShoeType t) {
+                        switch (t) {
+                            case ShoeType::Clown:    return 0;
+                            case ShoeType::Running:  return 3;
+                            case ShoeType::Moon:     return 4;
+                            case ShoeType::Slippers: return 3;
+                            case ShoeType::SteelCap: return 4;
+                            default:                 return 0;
+                        }
+                    };
+
+                    auto powerTypeCost = [](PowerType t) {
+                        switch (t) {
+                            case PowerType::Greedy:              return 5;
+                            case PowerType::RandomUpgrade:       return 3;
+                            case PowerType::ExtraPins:           return 5;
+                            case PowerType::ExtraBall:           return 7;
+                            case PowerType::Duplicate:           return 2;
+                            case PowerType::Bumpers:             return 5;
+                            case PowerType::SwapPins:            return 2;
+                            case PowerType::HomeBase:            return 5;
+                            case PowerType::Confusion:           return 3;
+                            case PowerType::Earthquake:          return 6;
+                            case PowerType::Skip:                return 1;
+                            case PowerType::UpgradesForEveryone: return 4;
+                            case PowerType::Sales:               return 4;
+                            case PowerType::PassedGo:            return 4;
+                            case PowerType::MoMoney:             return 4;
+                            default:                             return 0;
+                        }
                     };
 
                     auto ownedPermanentPowerCount = [&]() {
@@ -310,135 +373,158 @@ void Game::handleEvents() {
                         if (activeItems.powerBumpers) lane.bumpersOn = true;
                     };
 
-                    if (purchased == -2) {
+                    auto getLastSellablePower = [&](PowerType& out) {
+                        for (auto it = activeItems.purchasedPowers.rbegin();
+                             it != activeItems.purchasedPowers.rend(); ++it) {
+                            if (*it < 0 || *it > (int)PowerType::MoMoney) continue;
+                            PowerType p = static_cast<PowerType>(*it);
+                            if (activeItems.hasPower(p)) {
+                                out = p;
+                                return true;
+                            }
+                        }
+                        for (int i = 0; i <= (int)PowerType::MoMoney; i++) {
+                            PowerType p = static_cast<PowerType>(i);
+                            if (activeItems.hasPower(p)) {
+                                out = p;
+                                return true;
+                            }
+                        }
+                        return false;
+                    };
+
+                    auto sellOnePower = [&](PowerType p) {
+                        bool sold = false;
+                        switch (p) {
+                            case PowerType::Duplicate:
+                                if (activeItems.duplicateCharges > 0) {
+                                    activeItems.duplicateCharges--;
+                                    erasePowerRecord(PowerType::Duplicate, false);
+                                    sold = true;
+                                }
+                                break;
+                            case PowerType::SwapPins:
+                                if (activeItems.swapCharges > 0) {
+                                    activeItems.swapCharges--;
+                                    erasePowerRecord(PowerType::SwapPins, false);
+                                    sold = true;
+                                }
+                                break;
+                            case PowerType::Greedy:
+                                activeItems.powerGreedy = false;
+                                erasePowerRecord(PowerType::Greedy, true);
+                                sold = true;
+                                break;
+                            case PowerType::RandomUpgrade:
+                                activeItems.powerRandomUpgrade = false;
+                                erasePowerRecord(PowerType::RandomUpgrade, true);
+                                sold = true;
+                                break;
+                            case PowerType::ExtraPins:
+                                activeItems.powerExtraPins = false;
+                                erasePowerRecord(PowerType::ExtraPins, true);
+                                sold = true;
+                                break;
+                            case PowerType::ExtraBall:
+                                activeItems.powerExtraBall = false;
+                                erasePowerRecord(PowerType::ExtraBall, true);
+                                sold = true;
+                                break;
+                            case PowerType::Bumpers:
+                                activeItems.powerBumpers = false;
+                                lane.bumpersOn = ui.getBumpersDefault();
+                                erasePowerRecord(PowerType::Bumpers, true);
+                                sold = true;
+                                break;
+                            case PowerType::HomeBase:
+                                activeItems.powerHomeBase = false;
+                                activeItems.homeBaseComboBonus = 0.0f;
+                                activeItems.homeBasePinsTowardNextCombo = 0;
+                                erasePowerRecord(PowerType::HomeBase, true);
+                                sold = true;
+                                break;
+                            case PowerType::Confusion:
+                                activeItems.powerConfusion = false;
+                                erasePowerRecord(PowerType::Confusion, true);
+                                sold = true;
+                                break;
+                            case PowerType::Earthquake:
+                                activeItems.powerEarthquake = false;
+                                activeItems.earthquakeShotCounter = 0;
+                                erasePowerRecord(PowerType::Earthquake, true);
+                                sold = true;
+                                break;
+                            case PowerType::Skip:
+                                activeItems.powerSkip = false;
+                                activeItems.skipCharges = 0;
+                                erasePowerRecord(PowerType::Skip, true);
+                                sold = true;
+                                break;
+                            case PowerType::UpgradesForEveryone:
+                                activeItems.powerUpgradesForEveryone = false;
+                                erasePowerRecord(PowerType::UpgradesForEveryone, true);
+                                sold = true;
+                                break;
+                            case PowerType::Sales:
+                                activeItems.powerSales = false;
+                                erasePowerRecord(PowerType::Sales, true);
+                                sold = true;
+                                break;
+                            case PowerType::PassedGo:
+                                activeItems.powerPassedGo = false;
+                                erasePowerRecord(PowerType::PassedGo, true);
+                                sold = true;
+                                break;
+                            case PowerType::MoMoney:
+                                activeItems.powerMoMoney = false;
+                                erasePowerRecord(PowerType::MoMoney, true);
+                                sold = true;
+                                break;
+                        }
+                        if (sold) {
+                            int sellValue = powerTypeCost(p) / 2;
+                            if (sellValue > 0) xtreme.addTokens(sellValue);
+                            syncRunPowersToScorer();
+                            ui.generateShopOffers(activeItems);
+                        }
+                    };
+
+                    if (purchased == UI::ShopActionReroll) {
                         if (activeItems.skipCharges > 0 && xtreme.getTokens() >= 1) {
                             xtreme.addTokens(-1);
                             activeItems.skipCharges--;
                             ui.generateShopOffers(activeItems);
                         }
-                    } else if (purchased >= sellReturnOffset) {
-                        int sellIndex = purchased - sellReturnOffset;
-                        const auto& offers = ui.getShopOffers();
-                        if (sellIndex >= 0 && sellIndex < (int)offers.size()) {
-                            const auto& offer = offers[sellIndex];
-                            int sellValue = offer.cost / 2;
-                            bool sold = false;
-
-                            if (offer.category == ShopItemCategory::Ball) {
-                                int slot = ui.getSelectedBallSlot();
-                                if (activeItems.getBallForSlot(slot) == offer.ballType) {
-                                    activeItems.setBallForSlot(slot, BallType::Normal);
-                                    sold = true;
-                                }
-                            } else if (offer.category == ShopItemCategory::Shoe) {
-                                if (activeItems.shoeType == offer.shoeType) {
-                                    activeItems.applyShoeType(ShoeType::None);
-                                    sold = true;
-                                }
-                            } else if (offer.category == ShopItemCategory::Pin) {
-                                int target = static_cast<int>(offer.pinType);
-                                auto it = std::find(activeItems.purchasedPinTypes.begin(),
-                                                    activeItems.purchasedPinTypes.end(),
-                                                    target);
-                                if (it != activeItems.purchasedPinTypes.end()) {
-                                    activeItems.purchasedPinTypes.erase(it);
-                                    sold = true;
-                                }
-                            } else if (offer.category == ShopItemCategory::Power) {
-                                switch (offer.powerType) {
-                                    case PowerType::Duplicate:
-                                        if (activeItems.duplicateCharges > 0) {
-                                            activeItems.duplicateCharges--;
-                                            erasePowerRecord(PowerType::Duplicate, false);
-                                            sold = true;
-                                        }
-                                        break;
-                                    case PowerType::SwapPins:
-                                        if (activeItems.swapCharges > 0) {
-                                            activeItems.swapCharges--;
-                                            erasePowerRecord(PowerType::SwapPins, false);
-                                            sold = true;
-                                        }
-                                        break;
-                                    case PowerType::Greedy:
-                                        activeItems.powerGreedy = false;
-                                        erasePowerRecord(PowerType::Greedy, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::RandomUpgrade:
-                                        activeItems.powerRandomUpgrade = false;
-                                        erasePowerRecord(PowerType::RandomUpgrade, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::ExtraPins:
-                                        activeItems.powerExtraPins = false;
-                                        erasePowerRecord(PowerType::ExtraPins, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::ExtraBall:
-                                        activeItems.powerExtraBall = false;
-                                        erasePowerRecord(PowerType::ExtraBall, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::Bumpers:
-                                        activeItems.powerBumpers = false;
-                                        lane.bumpersOn = ui.getBumpersDefault();
-                                        erasePowerRecord(PowerType::Bumpers, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::HomeBase:
-                                        activeItems.powerHomeBase = false;
-                                        activeItems.homeBaseComboBonus = 0.0f;
-                                        erasePowerRecord(PowerType::HomeBase, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::Confusion:
-                                        activeItems.powerConfusion = false;
-                                        erasePowerRecord(PowerType::Confusion, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::Earthquake:
-                                        activeItems.powerEarthquake = false;
-                                        activeItems.earthquakeShotCounter = 0;
-                                        erasePowerRecord(PowerType::Earthquake, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::Skip:
-                                        activeItems.powerSkip = false;
-                                        activeItems.skipCharges = 0;
-                                        erasePowerRecord(PowerType::Skip, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::UpgradesForEveryone:
-                                        activeItems.powerUpgradesForEveryone = false;
-                                        erasePowerRecord(PowerType::UpgradesForEveryone, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::Sales:
-                                        activeItems.powerSales = false;
-                                        erasePowerRecord(PowerType::Sales, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::PassedGo:
-                                        activeItems.powerPassedGo = false;
-                                        erasePowerRecord(PowerType::PassedGo, true);
-                                        sold = true;
-                                        break;
-                                    case PowerType::MoMoney:
-                                        activeItems.powerMoMoney = false;
-                                        erasePowerRecord(PowerType::MoMoney, true);
-                                        sold = true;
-                                        break;
-                                }
-                                if (sold) {
-                                    syncRunPowersToScorer();
-                                }
-                            }
-
-                            if (sold) {
-                                if (sellValue > 0) xtreme.addTokens(sellValue);
-                                ui.generateShopOffers(activeItems);
-                            }
+                    } else if (purchased == UI::ShopActionSellPin) {
+                        if (!activeItems.purchasedPinTypes.empty()) {
+                            int raw = activeItems.purchasedPinTypes.back();
+                            activeItems.purchasedPinTypes.pop_back();
+                            int sellValue = pinTypeCost(static_cast<PinType>(raw)) / 2;
+                            if (sellValue > 0) xtreme.addTokens(sellValue);
+                            ui.generateShopOffers(activeItems);
+                        }
+                    } else if (purchased == UI::ShopActionSellBallSlot1 ||
+                               purchased == UI::ShopActionSellBallSlot2) {
+                        int slot = (purchased == UI::ShopActionSellBallSlot2) ? 2 : 1;
+                        BallType owned = activeItems.getBallForSlot(slot);
+                        if (owned != BallType::Normal) {
+                            activeItems.setBallForSlot(slot, BallType::Normal);
+                            int sellValue = ballTypeCost(owned) / 2;
+                            if (sellValue > 0) xtreme.addTokens(sellValue);
+                            ui.generateShopOffers(activeItems);
+                        }
+                    } else if (purchased == UI::ShopActionSellShoe) {
+                        if (activeItems.shoeType != ShoeType::None) {
+                            ShoeType owned = activeItems.shoeType;
+                            activeItems.applyShoeType(ShoeType::None);
+                            int sellValue = shoeTypeCost(owned) / 2;
+                            if (sellValue > 0) xtreme.addTokens(sellValue);
+                            ui.generateShopOffers(activeItems);
+                        }
+                    } else if (purchased == UI::ShopActionSellPower) {
+                        PowerType toSell = PowerType::Greedy;
+                        if (getLastSellablePower(toSell)) {
+                            sellOnePower(toSell);
                         }
                     } else if (purchased >= 0) {
                         const auto& offers = ui.getShopOffers();
@@ -448,10 +534,24 @@ void Game::handleEvents() {
                         const auto& offer = offers[purchased];
                         bool canBuy = true;
 
+                        if (offer.category == ShopItemCategory::Ball) {
+                            int slot = ui.getSelectedBallSlot();
+                            if (activeItems.getBallForSlot(slot) == offer.ballType) {
+                                canBuy = false;
+                            }
+                        }
+                        if (offer.category == ShopItemCategory::Shoe) {
+                            if (activeItems.shoeType == offer.shoeType) {
+                                canBuy = false;
+                            }
+                        }
                         if (offer.category == ShopItemCategory::Power) {
                             const int maxPermanentPowers = 4;
                             bool alreadyOwned = activeItems.hasPower(offer.powerType) ||
                                                 activeItems.hasPurchasedPower(offer.powerType);
+                            if (!isStackablePower(offer.powerType) && alreadyOwned) {
+                                canBuy = false;
+                            }
                             if (!isStackablePower(offer.powerType) &&
                                 !alreadyOwned &&
                                 ownedPermanentPowerCount() >= maxPermanentPowers) {
@@ -476,21 +576,8 @@ void Game::handleEvents() {
                             xtreme.addTokens(-offer.cost);
                             int slot = ui.getSelectedBallSlot();
                             BallType oldBall = activeItems.getBallForSlot(slot);
-                            auto ballBaseCost = [](BallType t) {
-                                switch (t) {
-                                    case BallType::BlackHole: return 4;
-                                    case BallType::Midas:     return 5;
-                                    case BallType::Upgrade:   return 3;
-                                    case BallType::Heavy:     return 2;
-                                    case BallType::Fastball:  return 2;
-                                    case BallType::OddBall:   return 3;
-                                    case BallType::EightBall: return 4;
-                                    case BallType::Retrigger: return 4;
-                                    default:                  return 1;
-                                }
-                            };
                             if (oldBall != BallType::Normal && oldBall != offer.ballType) {
-                                xtreme.addTokens(ballBaseCost(oldBall) / 2);
+                                xtreme.addTokens(ballTypeCost(oldBall) / 2);
                             }
                             activeItems.setBallForSlot(slot, offer.ballType);
                         } else if (offer.category == ShopItemCategory::Shoe) {
@@ -744,12 +831,12 @@ void Game::finishPendingResetIfReady(float dt) {
         }
     }
 
-    // ThirdTime: increment counter for each ThirdTime pin knocked.
-    // Every 3rd score event on that pin grants one combo doubling.
+    // ThirdTime: track total ThirdTime knocks across the run.
+    // Every 3rd ThirdTime knock grants one combo doubling.
     for (int idx : hitPinIndices) {
         if (pins[idx].getPinType() == PinType::ThirdTime) {
-            pins[idx].incrementTimesScored();
-            if (pins[idx].getTimesScored() % 3 == 0) {
+            activeItems.thirdTimeGlobalKnocks++;
+            if (activeItems.thirdTimeGlobalKnocks % 3 == 0) {
                 activeItems.thirdTimeComboBonus += 1; // +1 to pinsHit (combo) count
             }
         }
@@ -814,7 +901,11 @@ void Game::finishPendingResetIfReady(float dt) {
         xtreme.recordShot(knockedThisBall, pinValueSumThisBall, strikeThisShot);
 
         if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
-            activeItems.homeBaseComboBonus += 0.01f;
+            activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
+            while (activeItems.homeBasePinsTowardNextCombo >= 20) {
+                activeItems.homeBasePinsTowardNextCombo -= 20;
+                activeItems.homeBaseComboBonus += 1.0f;
+            }
             xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
         }
 
@@ -980,11 +1071,18 @@ void Game::applyGuttersAndBumpers() {
     float playR = lane.playRight();
 
     if (inGutter) {
-        if (gutterSide == -1) p.x = lane.left + lane.gutterWidth * 0.5f;
-        if (gutterSide ==  1) p.x = lane.right - lane.gutterWidth * 0.5f;
+        float targetX = p.x;
+        if (gutterSide == -1) targetX = lane.left + lane.gutterWidth * 0.5f;
+        if (gutterSide ==  1) targetX = lane.right - lane.gutterWidth * 0.5f;
 
-        v.x = 0.0f;
-        v.y = -420.0f;
+        // Smooth drift into gutter lane instead of hard snapping.
+        p.x += (targetX - p.x) * 0.18f;
+        v.x *= 0.75f;
+        if (std::abs(v.x) < 6.0f) v.x = 0.0f;
+
+        // Keep rolling forward, with gentle speed-up to drain naturally.
+        float targetVy = -420.0f;
+        v.y += (targetVy - v.y) * 0.14f;
     } else {
         bool bumpersActive = lane.bumpersOn || activeItems.powerBumpers;
         if (bumpersActive) {
@@ -1023,7 +1121,7 @@ void Game::doCollisions() {
         sf::Vector2f bv = ball.getVel();
         sf::Vector2f bvStart = bv;
         float br = ball.getRadius();
-        float bm = ball.getMass();  // respects item mass multiplier
+        float bm = ball.getMass() * 1.07f;  // slight bias so pins affect ball a bit less
         const float pinFallImpactThreshold = 48.0f;
 
         bool hitAnyPin = false;
@@ -1116,7 +1214,7 @@ void Game::doCollisions() {
 
         // Limit pin redirection
         if (hitAnyPin && rollLocked) {
-            float maxDeltaSide = 120.0f;
+            float maxDeltaSide = 110.0f;
             float dx = bv.x - bvStart.x;
             bv.x = bvStart.x + std::clamp(dx, -maxDeltaSide, maxDeltaSide);
             bv.x = std::clamp(bv.x, -180.0f, 180.0f);
@@ -1181,11 +1279,16 @@ void Game::doCollisions() {
 }
 
 void Game::update(float dt) {
-    // If in menu, don't update game logic
-    if (ui.getState() == GameState::Menu) {
+    // If in menu/settings, don't update game logic
+    if (ui.getState() == GameState::Menu || ui.getState() == GameState::Settings) {
         audio.playMenuMusic();
+        audio.setMusicVolume(ui.getMusicVolume());
+        audio.setSoundVolume(ui.getSoundVolume());
         return;
     }
+
+    audio.setMusicVolume(ui.getMusicVolume());
+    audio.setSoundVolume(ui.getSoundVolume());
     
     // Handle game over state
     if (gameOver) {
@@ -1436,6 +1539,14 @@ void Game::draw() {
     if (ui.getState() == GameState::Menu) {
         float dt = clock.getElapsedTime().asSeconds();
         ui.drawMenu(window, windowW, windowH, dt);
+        window.display();
+        return;
+    }
+
+    if (ui.getState() == GameState::Settings) {
+        float dt = clock.getElapsedTime().asSeconds();
+        ui.drawMenu(window, windowW, windowH, dt);
+        ui.drawSettings(window, windowW, windowH);
         window.display();
         return;
     }

@@ -78,6 +78,8 @@ struct ActiveItems {
     int earthquakeShotCounter = 0;
     int pendingRandomPinUpgrades = 0;
     float homeBaseComboBonus = 0.0f;
+    int homeBasePinsTowardNextCombo = 0;
+    int thirdTimeGlobalKnocks = 0;
     int pinsStandingAtShotStart = 10;
 
     // Per-shot state
@@ -137,6 +139,8 @@ struct ActiveItems {
         earthquakeShotCounter = 0;
         pendingRandomPinUpgrades = 0;
         homeBaseComboBonus = 0.0f;
+        homeBasePinsTowardNextCombo = 0;
+        thirdTimeGlobalKnocks = 0;
         pinsStandingAtShotStart = 10;
     }
 

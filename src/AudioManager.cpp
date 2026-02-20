@@ -1,5 +1,6 @@
 #include "AudioManager.h"
 #include <cstdlib>
+#include <algorithm>
 
 AudioManager::AudioManager() {
     loadSounds();
@@ -106,6 +107,10 @@ void AudioManager::setMusicVolume(float volume) {
     gameMusic.setVolume(volume);
 }
 
+void AudioManager::setSoundVolume(float volume) {
+    sfxVolume = std::clamp(volume, 0.0f, 100.0f);
+}
+
 // --- Sound Effect Logic ---
 
 void AudioManager::playRandomPinHit(float volume) {
@@ -120,7 +125,7 @@ void AudioManager::playRandomPinHit(float volume) {
         case 5: sound = pinHitSound5.get(); break;
     }
     if (sound && sound->getStatus() != sf::SoundSource::Status::Playing) {
-        sound->setVolume(volume);
+        sound->setVolume(volume * (sfxVolume / 100.0f));
         sound->play();
     }
 }
@@ -128,7 +133,7 @@ void AudioManager::playRandomPinHit(float volume) {
 void AudioManager::playPinCollision(float volume) {
     if (!soundsLoaded || !pinCollisionSound) return;
     if (pinCollisionSound->getStatus() != sf::SoundSource::Status::Playing) {
-        pinCollisionSound->setVolume(volume);
+        pinCollisionSound->setVolume(volume * (sfxVolume / 100.0f));
         pinCollisionSound->play();
     }
 }
@@ -136,7 +141,7 @@ void AudioManager::playPinCollision(float volume) {
 void AudioManager::playExplodingPin(float volume) {
     if (!soundsLoaded || !explodingPinSound) return;
     if (explodingPinSound->getStatus() != sf::SoundSource::Status::Playing) {
-        explodingPinSound->setVolume(volume);
+        explodingPinSound->setVolume(volume * (sfxVolume / 100.0f));
         explodingPinSound->play();
     }
 }
@@ -144,6 +149,7 @@ void AudioManager::playExplodingPin(float volume) {
 void AudioManager::startBallRoll() {
     if (!soundsLoaded || !ballRollSound) return;
     if (ballRollSound->getStatus() != sf::SoundSource::Status::Playing) {
+        ballRollSound->setVolume(95.0f * (sfxVolume / 100.0f));
         ballRollSound->play();
         ballRolling = true;
     }
