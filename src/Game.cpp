@@ -161,7 +161,14 @@ void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
             int dst = targets[rand() % targets.size()];
             while (dst == src) dst = targets[rand() % targets.size()];
 
-            pinSet[dst].setPinType(pinSet[src].getPinType());
+            PinType copiedType = pinSet[src].getPinType();
+            pinSet[dst].setPinType(copiedType);
+
+            // Duplicate is now persistent: add the copied pin type to owned pins
+            // so it keeps appearing on future racks in this run.
+            if (copiedType != PinType::Normal) {
+                activeItems.purchasedPinTypes.push_back(static_cast<int>(copiedType));
+            }
             activeItems.duplicateCharges--;
         }
     }
@@ -266,7 +273,7 @@ void Game::handleEvents() {
                         activeItems.resetAll();
                         ui.resetEquippedBall();
                         ui.generateShopOffers(activeItems);
-                        lane.bumpersOn = ui.getBumpersDefault();
+                        lane.bumpersOn = false;
                         pins = createPins(lane.centerX(), 240.0f);
                         resetBall();
                         audio.playBackgroundMusic();
@@ -475,7 +482,7 @@ void Game::handleEvents() {
                                 break;
                             case PowerType::Bumpers:
                                 activeItems.powerBumpers = false;
-                                lane.bumpersOn = ui.getBumpersDefault();
+                                lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
                                 erasePowerRecord(PowerType::Bumpers, true);
                                 sold = true;
                                 break;
@@ -636,6 +643,7 @@ void Game::handleEvents() {
                                 xtreme.addTokens(ballTypeCost(oldBall) / 2);
                             }
                             activeItems.setBallForSlot(slot, offer.ballType);
+                            ui.recordOfferPicked(offer);
                         } else if (offer.category == ShopItemCategory::Shoe) {
                             xtreme.addTokens(-offer.cost);
                             bool changedShoes = (activeItems.shoeType != offer.shoeType);
@@ -646,11 +654,13 @@ void Game::handleEvents() {
                                 xtreme.addTokens(10);
                                 activeItems.clownBonusClaimed = true;
                             }
+                            ui.recordOfferPicked(offer);
                         } else if (offer.category == ShopItemCategory::Pin) {
                             xtreme.addTokens(-offer.cost);
                             // Pin purchase: store type, will be applied next frame
                             activeItems.purchasedPinTypes.push_back(
                                 static_cast<int>(offer.pinType));
+                            ui.recordOfferPicked(offer);
                         } else {
                             xtreme.addTokens(-offer.cost);
                             activeItems.applyPower(offer.powerType);
@@ -658,6 +668,7 @@ void Game::handleEvents() {
                                 lane.bumpersOn = true;
                             }
                             syncRunPowersToScorer();
+                            ui.recordOfferPicked(offer);
                         }
                     }
 
@@ -920,9 +931,9 @@ void Game::finishPendingResetIfReady(float dt) {
     }
     if (pinValueSumThisBall < 0) pinValueSumThisBall = 0;
 
-    // Greedy: every current dollar/token adds +5 score contribution.
+    int greedyComboBonus = 0;
     if (ui.getState() == GameState::Xtreme && activeItems.powerGreedy) {
-        pinValueSumThisBall += xtreme.getTokens() * 5;
+        greedyComboBonus = std::max(0, xtreme.getTokens() / 6);
     }
 
     // Midas ball: gold-marked pins grant +1 token each
@@ -965,7 +976,8 @@ void Game::finishPendingResetIfReady(float dt) {
             knockedThisBall,
             pinValueSumThisBall,
             strikeThisShot,
-            static_cast<float>(thirdTimeComboMultiplier));
+            static_cast<float>(thirdTimeComboMultiplier),
+            greedyComboBonus);
 
         if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
             activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
@@ -1403,6 +1415,7 @@ void Game::update(float dt) {
             equipBall(BallType::Normal);
             activeItems.resetAll();
             ui.resetEquippedBall();
+            lane.bumpersOn = ui.getBumpersDefault();
             audio.playMenuMusic();
         }
         
@@ -1424,6 +1437,7 @@ void Game::update(float dt) {
             equipBall(BallType::Normal);
             activeItems.resetAll();
             ui.resetEquippedBall();
+            lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
             pins = createPins(lane.centerX(), 240.0f);
             resetBall();
         }
@@ -1512,10 +1526,8 @@ void Game::update(float dt) {
     bool nowC = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C);
 
     if (nowB && !prevB) {
-        if (!activeItems.powerBumpers) {
+        if (ui.getState() == GameState::Playing) {
             lane.bumpersOn = !lane.bumpersOn;
-        } else {
-            lane.bumpersOn = true;
         }
     }
 
@@ -1537,6 +1549,7 @@ void Game::update(float dt) {
         equipBall(BallType::Normal);
         activeItems.resetAll();
         ui.resetEquippedBall();
+        lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
         if (ui.getState() == GameState::Xtreme) {
             ui.generateShopOffers(activeItems);
         }
@@ -1545,7 +1558,7 @@ void Game::update(float dt) {
     }
 
     // C key - change ball color
-    if (nowC && !prevC) {
+    if (nowC && !prevC && ui.getState() == GameState::Playing) {
         int colorChoice = rand() % 8;
         sf::Color ballColor;
         

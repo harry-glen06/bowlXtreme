@@ -3,6 +3,9 @@
 #include <cstdint>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <sstream>
 
 // Helper functions
 sf::ConvexShape createRoundedRect(sf::Vector2f size, float radius, sf::Color color, int pointsPerCorner = 10) {
@@ -42,10 +45,110 @@ sf::ConvexShape createRoundedRect(sf::Vector2f size, float radius, sf::Color col
 
 UI::UI() {
     loadFont();
+    loadPickRateStats();
 }
 
 void UI::loadFont() {
     fontLoaded = font.openFromFile("assets/arial.ttf");
+}
+
+bool UI::shouldTrackOfferCategory(ShopItemCategory category) {
+    return category == ShopItemCategory::Ball ||
+           category == ShopItemCategory::Pin ||
+           category == ShopItemCategory::Power;
+}
+
+std::string UI::offerCategoryLabel(ShopItemCategory category) {
+    switch (category) {
+        case ShopItemCategory::Ball:  return "BALL";
+        case ShopItemCategory::Pin:   return "PIN";
+        case ShopItemCategory::Power: return "POWER";
+        case ShopItemCategory::Shoe:  return "SHOE";
+        default:                      return "ITEM";
+    }
+}
+
+std::string UI::offerStatKey(const ShopOffer& offer) {
+    return offerCategoryLabel(offer.category) + "|" + offer.name;
+}
+
+void UI::recordOfferShown(const ShopOffer& offer) {
+    if (!shouldTrackOfferCategory(offer.category)) return;
+    std::string key = offerStatKey(offer);
+    PickRateEntry& entry = pickRateStats[key];
+    if (entry.itemName.empty()) {
+        entry.category = offerCategoryLabel(offer.category);
+        entry.itemName = offer.name;
+    }
+    entry.shown++;
+    savePickRateStats();
+}
+
+void UI::recordOfferPicked(const ShopOffer& offer) {
+    if (!shouldTrackOfferCategory(offer.category)) return;
+    std::string key = offerStatKey(offer);
+    PickRateEntry& entry = pickRateStats[key];
+    if (entry.itemName.empty()) {
+        entry.category = offerCategoryLabel(offer.category);
+        entry.itemName = offer.name;
+    }
+    entry.picked++;
+    savePickRateStats();
+}
+
+void UI::loadPickRateStats() {
+    pickRateStats.clear();
+    std::ifstream in("pick_rates.csv");
+    if (!in.is_open()) {
+        savePickRateStats();
+        return;
+    }
+
+    std::string line;
+    bool firstLine = true;
+    while (std::getline(in, line)) {
+        if (line.empty()) continue;
+        if (firstLine) {
+            firstLine = false;
+            if (line.rfind("category,item,shown,picked,pick_rate_percent", 0) == 0) {
+                continue;
+            }
+        }
+
+        std::stringstream ss(line);
+        std::string category, itemName, shownStr, pickedStr;
+        if (!std::getline(ss, category, ',')) continue;
+        if (!std::getline(ss, itemName, ',')) continue;
+        if (!std::getline(ss, shownStr, ',')) continue;
+        if (!std::getline(ss, pickedStr, ',')) continue;
+
+        PickRateEntry entry;
+        entry.category = category;
+        entry.itemName = itemName;
+        entry.shown = std::max(0, std::atoi(shownStr.c_str()));
+        entry.picked = std::max(0, std::atoi(pickedStr.c_str()));
+
+        std::string key = category + "|" + itemName;
+        pickRateStats[key] = entry;
+    }
+}
+
+void UI::savePickRateStats() const {
+    std::ofstream out("pick_rates.csv");
+    if (!out.is_open()) return;
+
+    out << "category,item,shown,picked,pick_rate_percent\n";
+    for (const auto& kv : pickRateStats) {
+        const PickRateEntry& entry = kv.second;
+        double pct = (entry.shown > 0)
+            ? (100.0 * static_cast<double>(entry.picked) / static_cast<double>(entry.shown))
+            : 0.0;
+        out << entry.category << ","
+            << entry.itemName << ","
+            << entry.shown << ","
+            << entry.picked << ","
+            << std::fixed << std::setprecision(2) << pct << "\n";
+    }
 }
 
 void UI::initClouds(float windowW, float windowH) {
@@ -1929,7 +2032,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "Steel Caps",   "Pins cannot change\nduring a round.",                4},
         // Powers
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Greedy",       "Every dollar adds\n+5 score each shot.",             5},
+         "Greedy",       "Gain +1 combo for\nevery 6 dollars.",                5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::RandomUpgrade,
          "Random Upgrade","After each frame,\na random pin gains +1 value.",    3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
@@ -2004,6 +2107,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         o.description = filtered[i].description;
         o.cost        = filtered[i].cost;
         shopOffers.push_back(o);
+        recordOfferShown(o);
     }
 }
 

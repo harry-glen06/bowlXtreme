@@ -1,6 +1,8 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <array>
+#include <map>
+#include <string>
 #include <vector>
 #include "BowlingScorer.h"
 #include "Items.h"
@@ -76,6 +78,7 @@ public:
     // Per-item sell actions use ShopActionSellPinByIndexBase / ShopActionSellPowerByIndexBase.
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
+    void recordOfferPicked(const ShopOffer& offer);
     void resetEquippedBall() { selectedBallSlot = 1; }
     int  getSelectedBallSlot() const { return selectedBallSlot; }
     const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
@@ -186,6 +189,20 @@ private:
     float hudBigTimer = 0.0f;
     sf::Clock hudAnimClock;
     bool hudAnimClockPrimed = false;
+
+    struct PickRateEntry {
+        std::string category;
+        std::string itemName;
+        int shown = 0;
+        int picked = 0;
+    };
+    std::map<std::string, PickRateEntry> pickRateStats;
+    void recordOfferShown(const ShopOffer& offer);
+    void loadPickRateStats();
+    void savePickRateStats() const;
+    static bool shouldTrackOfferCategory(ShopItemCategory category);
+    static std::string offerCategoryLabel(ShopItemCategory category);
+    static std::string offerStatKey(const ShopOffer& offer);
 
     // Shared inventory rendering core
     void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);
