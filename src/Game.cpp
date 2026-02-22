@@ -119,50 +119,7 @@ void Game::applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet) {
 }
 
 void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
-    if (activeItems.swapCharges > 0) {
-        std::vector<int> active;
-        for (int i = 0; i < (int)pinSet.size(); i++) {
-            if (pinSet[i].isActive()) active.push_back(i);
-        }
-        if (active.size() >= 2) {
-            int a = rand() % active.size();
-            int b = rand() % active.size();
-            while (b == a) b = rand() % active.size();
-            std::swap(pinSet[active[a]], pinSet[active[b]]);
-            activeItems.swapCharges--;
-        }
-    }
-
-    if (activeItems.duplicateCharges > 0) {
-        std::vector<int> sourcesSpecial;
-        std::vector<int> sourcesAny;
-        std::vector<int> targets;
-        for (int i = 0; i < (int)pinSet.size(); i++) {
-            if (!pinSet[i].isActive()) continue;
-            sourcesAny.push_back(i);
-            if (pinSet[i].getPinType() != PinType::Normal) sourcesSpecial.push_back(i);
-            targets.push_back(i);
-        }
-
-        if (sourcesAny.size() >= 2) {
-            std::vector<int>& sourcePool = sourcesSpecial.empty() ? sourcesAny : sourcesSpecial;
-            int src = sourcePool[rand() % sourcePool.size()];
-
-            int dst = targets[rand() % targets.size()];
-            while (dst == src) dst = targets[rand() % targets.size()];
-
-            PinType copiedType = pinSet[src].getPinType();
-            pinSet[dst].setPinType(copiedType);
-
-            // Duplicate is now persistent: add the copied pin type to owned pins
-            // so it keeps appearing on future racks in this run.
-            if (copiedType != PinType::Normal) {
-                activeItems.setPinAssignment(dst + 1, copiedType);
-            }
-            activeItems.duplicateCharges--;
-        }
-    }
-
+    // Duplicate and Swap are now manual (player-chosen), not random-on-rerack.
     applyPendingRandomPinUpgrades(pinSet);
     updatePinSlotValueSnapshot(pinSet);
 }
@@ -172,6 +129,93 @@ void Game::updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet) {
     int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
     for (int i = 0; i < maxSlot; i++) {
         activeItems.pinSlotCurrentValues[i] = pinSet[i].getValue();
+    }
+}
+
+void Game::cancelPinPowerSelection() {
+    pinPowerSelectionMode = PinPowerSelectionMode::None;
+    pinPowerFirstIndex = -1;
+}
+
+int Game::findPinAtWorldPos(sf::Vector2f worldPos) const {
+    int best = -1;
+    float bestDist2 = 1.0e30f;
+    for (int i = 0; i < (int)pins.size(); i++) {
+        const Pin& pin = pins[i];
+        if (!pin.isActive()) continue;
+        if (pin.isFallen()) continue;
+        sf::Vector2f d = pin.getPos() - worldPos;
+        float dist2 = d.x * d.x + d.y * d.y;
+        float hitR = std::max(20.0f, pin.getRadius() * 2.8f);
+        if (dist2 <= hitR * hitR && dist2 < bestDist2) {
+            bestDist2 = dist2;
+            best = i;
+        }
+    }
+    return best;
+}
+
+void Game::applyManualDuplicate(int sourceIndex, int targetIndex) {
+    if (sourceIndex < 0 || sourceIndex >= (int)pins.size()) return;
+    if (targetIndex < 0 || targetIndex >= (int)pins.size()) return;
+    if (!pins[sourceIndex].isActive() || !pins[targetIndex].isActive()) return;
+    if (sourceIndex == targetIndex) return;
+    if (activeItems.duplicateCharges <= 0) return;
+
+    PinType copiedType = pins[sourceIndex].getPinType();
+    pins[targetIndex].setPinType(copiedType);
+
+    if (copiedType != PinType::Normal) {
+        activeItems.setPinAssignment(targetIndex + 1, copiedType);
+    } else {
+        activeItems.removePinAssignmentAtSlot(targetIndex + 1);
+    }
+    activeItems.duplicateCharges--;
+    updatePinSlotValueSnapshot(pins);
+}
+
+void Game::applyManualSwap(int firstIndex, int secondIndex) {
+    if (firstIndex < 0 || firstIndex >= (int)pins.size()) return;
+    if (secondIndex < 0 || secondIndex >= (int)pins.size()) return;
+    if (!pins[firstIndex].isActive() || !pins[secondIndex].isActive()) return;
+    if (firstIndex == secondIndex) return;
+    if (activeItems.swapCharges <= 0) return;
+
+    std::swap(pins[firstIndex], pins[secondIndex]);
+    activeItems.swapCharges--;
+    updatePinSlotValueSnapshot(pins);
+}
+
+bool Game::handlePinPowerSelectionClick(sf::Vector2f worldPos) {
+    if (pinPowerSelectionMode == PinPowerSelectionMode::None) return false;
+
+    int clicked = findPinAtWorldPos(worldPos);
+    if (clicked < 0) return true;
+
+    switch (pinPowerSelectionMode) {
+        case PinPowerSelectionMode::DuplicatePickSource:
+            pinPowerFirstIndex = clicked;
+            pinPowerSelectionMode = PinPowerSelectionMode::DuplicatePickTarget;
+            return true;
+        case PinPowerSelectionMode::DuplicatePickTarget:
+            if (pinPowerFirstIndex >= 0 && clicked != pinPowerFirstIndex) {
+                applyManualDuplicate(pinPowerFirstIndex, clicked);
+                cancelPinPowerSelection();
+            }
+            return true;
+        case PinPowerSelectionMode::SwapPickFirst:
+            pinPowerFirstIndex = clicked;
+            pinPowerSelectionMode = PinPowerSelectionMode::SwapPickSecond;
+            return true;
+        case PinPowerSelectionMode::SwapPickSecond:
+            if (pinPowerFirstIndex >= 0 && clicked != pinPowerFirstIndex) {
+                applyManualSwap(pinPowerFirstIndex, clicked);
+                cancelPinPowerSelection();
+            }
+            return true;
+        case PinPowerSelectionMode::None:
+        default:
+            return false;
     }
 }
 
@@ -233,6 +277,12 @@ void Game::handleEvents() {
                 
                 // Convert to world coordinates
                 sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+
+                if (ui.getState() == GameState::Xtreme && !gameOver) {
+                    if (!rollLocked && !pendingReset && handlePinPowerSelectionClick(worldPos)) {
+                        continue;
+                    }
+                }
                 
                 if (ui.getState() == GameState::Menu) {
                     MenuButton clicked = ui.handleMenuClick(window, sf::Vector2i(worldPos.x, worldPos.y));
@@ -251,6 +301,7 @@ void Game::handleEvents() {
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
                         ui.resetEquippedBall();
+                        cancelPinPowerSelection();
                         lane.bumpersOn = ui.getBumpersDefault();
                         pins = createPins(lane.centerX(), 240.0f);
                         resetBall();
@@ -271,6 +322,7 @@ void Game::handleEvents() {
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
                         ui.resetEquippedBall();
+                        cancelPinPowerSelection();
                         ui.generateShopOffers(activeItems);
                         lane.bumpersOn = false;
                         pins = createPins(lane.centerX(), 240.0f);
@@ -301,6 +353,7 @@ void Game::handleEvents() {
                             }
                         }
                         roundSummaryLeadsToGameOver = false;
+                        cancelPinPowerSelection();
                         continue;
                     }
                 }
@@ -695,6 +748,7 @@ void Game::handleEvents() {
                         pins = createPins(lane.centerX(), 240.0f);
                         applyPurchasedPinTypes(pins);
                         applyPowerPinLayout(pins);
+                        cancelPinPowerSelection();
                         resetBall();
                     }
                 }
@@ -1132,6 +1186,7 @@ void Game::finishPendingResetIfReady(float dt) {
             roundSummaryPassed = false;
             roundSummaryLeadsToGameOver = true;
             ui.setState(GameState::RoundSummary);
+            cancelPinPowerSelection();
             pendingGameOverFromScore = false;
             postScorePauseTimer = 0.0f;
 
@@ -1150,6 +1205,7 @@ void Game::finishPendingResetIfReady(float dt) {
             roundSummaryPassed = true;
             roundSummaryLeadsToGameOver = false;
             ui.setState(GameState::RoundSummary);
+            cancelPinPowerSelection();
             pendingGameOverFromScore = false;
             postScorePauseTimer = 0.0f;
         }
@@ -1430,6 +1486,7 @@ void Game::update(float dt) {
             equipBall(BallType::Normal);
             activeItems.resetAll();
             ui.resetEquippedBall();
+            cancelPinPowerSelection();
             lane.bumpersOn = ui.getBumpersDefault();
             audio.playMenuMusic();
         }
@@ -1452,6 +1509,7 @@ void Game::update(float dt) {
             equipBall(BallType::Normal);
             activeItems.resetAll();
             ui.resetEquippedBall();
+            cancelPinPowerSelection();
             lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
             pins = createPins(lane.centerX(), 240.0f);
             resetBall();
@@ -1475,6 +1533,7 @@ void Game::update(float dt) {
 
             if (ui.getState() == GameState::Xtreme && xtreme.isShopReady()) {
                 ui.setState(GameState::Shop);
+                cancelPinPowerSelection();
                 xtreme.consumeShopReady();
                 if (activeItems.powerSkip || activeItems.hasPurchasedPower(PowerType::Skip)) {
                     activeItems.powerSkip = true;
@@ -1516,6 +1575,7 @@ void Game::update(float dt) {
 
     // Launch
     if (!rollLocked && !pendingReset &&
+        pinPowerSelectionMode == PinPowerSelectionMode::None &&
         sf::Keyboard::isKeyPressed(sf::Keyboard::Key::Space)) {
         float launchAim = aimDeg;
         if (activeItems.shoeType == ShoeType::Clown) {
@@ -1533,12 +1593,14 @@ void Game::update(float dt) {
     }
 
     // Toggle keys
-    static bool prevB = false, prevR = false, prevM = false, prevC = false;
+    static bool prevB = false, prevR = false, prevM = false, prevC = false, prevN = false, prevV = false;
 
     bool nowB = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::B);
     bool nowR = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::R);
     bool nowM = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::M);
     bool nowC = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::C);
+    bool nowN = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::N);
+    bool nowV = sf::Keyboard::isKeyPressed(sf::Keyboard::Key::V);
 
     if (nowB && !prevB) {
         if (ui.getState() == GameState::Playing) {
@@ -1564,6 +1626,7 @@ void Game::update(float dt) {
         equipBall(BallType::Normal);
         activeItems.resetAll();
         ui.resetEquippedBall();
+        cancelPinPowerSelection();
         lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
         if (ui.getState() == GameState::Xtreme) {
             ui.generateShopOffers(activeItems);
@@ -1592,10 +1655,44 @@ void Game::update(float dt) {
         ball.setColor(ballColor);
     }
 
+    bool canChoosePinPowers = (ui.getState() == GameState::Xtreme &&
+                               !rollLocked &&
+                               !pendingReset &&
+                               !gameOver);
+    if (!canChoosePinPowers && pinPowerSelectionMode != PinPowerSelectionMode::None) {
+        cancelPinPowerSelection();
+    }
+    if (canChoosePinPowers) {
+        if (nowN && !prevN) {
+            bool duplicateModeActive =
+                (pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickSource ||
+                 pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickTarget);
+            if (duplicateModeActive) {
+                cancelPinPowerSelection();
+            } else if (activeItems.duplicateCharges > 0) {
+                pinPowerSelectionMode = PinPowerSelectionMode::DuplicatePickSource;
+                pinPowerFirstIndex = -1;
+            }
+        }
+        if (nowV && !prevV) {
+            bool swapModeActive =
+                (pinPowerSelectionMode == PinPowerSelectionMode::SwapPickFirst ||
+                 pinPowerSelectionMode == PinPowerSelectionMode::SwapPickSecond);
+            if (swapModeActive) {
+                cancelPinPowerSelection();
+            } else if (activeItems.swapCharges > 0) {
+                pinPowerSelectionMode = PinPowerSelectionMode::SwapPickFirst;
+                pinPowerFirstIndex = -1;
+            }
+        }
+    }
+
     prevB = nowB; 
     prevR = nowR; 
     prevM = nowM; 
     prevC = nowC;
+    prevN = nowN;
+    prevV = nowV;
 
     // Update physics
     ball.update(dt);
@@ -1657,6 +1754,7 @@ void Game::update(float dt) {
         ui.getState() == GameState::Xtreme &&
         xtreme.isShopReady()) {
         ui.setState(GameState::Shop);
+        cancelPinPowerSelection();
         xtreme.consumeShopReady();
         if (activeItems.powerSkip || activeItems.hasPurchasedPower(PowerType::Skip)) {
             activeItems.powerSkip = true;
@@ -1693,6 +1791,24 @@ void Game::draw() {
     // Draw game
     lane.draw(window);
     for (const auto& pin : pins) pin.draw(window);
+    if (pinPowerFirstIndex >= 0 &&
+        pinPowerFirstIndex < (int)pins.size() &&
+        pinPowerSelectionMode != PinPowerSelectionMode::None) {
+        const Pin& selectedPin = pins[pinPowerFirstIndex];
+        if (selectedPin.isActive()) {
+            float highlightRadius = std::max(22.0f, selectedPin.getRadius() * 2.2f);
+            sf::CircleShape ring(highlightRadius);
+            ring.setOrigin({highlightRadius, highlightRadius});
+            ring.setPosition(selectedPin.getPos());
+            ring.setFillColor(sf::Color(0, 0, 0, 0));
+            bool duplicateMode =
+                (pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickSource ||
+                 pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickTarget);
+            ring.setOutlineColor(duplicateMode ? sf::Color(155, 210, 255) : sf::Color(165, 255, 180));
+            ring.setOutlineThickness(3.0f);
+            window.draw(ring);
+        }
+    }
 
     // Draw aim line
     if (!rollLocked && !pendingReset && ui.getState() != GameState::RoundSummary) {
@@ -1709,6 +1825,31 @@ void Game::draw() {
 
     // Draw UI and check for actions (like exiting to menu)
     GameAction action = GameAction::None;
+    std::string pinPowerHintLine1;
+    std::string pinPowerHintLine2;
+    if (ui.getState() == GameState::Xtreme) {
+        if (activeItems.duplicateCharges > 0 || activeItems.swapCharges > 0) {
+            pinPowerHintLine1 = "N Duplicate(" + std::to_string(activeItems.duplicateCharges) +
+                                ")   V Swap(" + std::to_string(activeItems.swapCharges) + ")";
+        }
+        switch (pinPowerSelectionMode) {
+            case PinPowerSelectionMode::DuplicatePickSource:
+                pinPowerHintLine2 = "Duplicate: click source pin";
+                break;
+            case PinPowerSelectionMode::DuplicatePickTarget:
+                pinPowerHintLine2 = "Duplicate: click target pin";
+                break;
+            case PinPowerSelectionMode::SwapPickFirst:
+                pinPowerHintLine2 = "Swap: click first pin";
+                break;
+            case PinPowerSelectionMode::SwapPickSecond:
+                pinPowerHintLine2 = "Swap: click second pin";
+                break;
+            case PinPowerSelectionMode::None:
+            default:
+                break;
+        }
+    }
     if (ui.getState() == GameState::Xtreme) {
         action = ui.drawXtremeHUD(
             window,
@@ -1724,7 +1865,9 @@ void Game::draw() {
             xtreme.getLastShotScore(),
             windowW,
             windowH,
-            activeItems
+            activeItems,
+            pinPowerHintLine1,
+            pinPowerHintLine2
         );
     } else if (ui.getState() == GameState::Playing) {
         action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),
@@ -1782,6 +1925,7 @@ void Game::draw() {
         equipBall(BallType::Normal);
         activeItems.resetAll();
         ui.resetEquippedBall();
+        cancelPinPowerSelection();
         resetBall();
         pins = createPins(lane.centerX(), 240.0f);
         audio.stopBackgroundMusic();

@@ -682,7 +682,9 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              int lastShotScore,
                              float windowW,
                              float windowH,
-                             const ActiveItems& items) {
+                             const ActiveItems& items,
+                             const std::string& pinPowerHintLine1,
+                             const std::string& pinPowerHintLine2) {
     if (!fontLoaded) return GameAction::None;
     if (state != GameState::Xtreme) return GameAction::None;
 
@@ -842,6 +844,21 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     tokenText.setPosition(sf::Vector2f(lx, y));
     tokenText.setFillColor(sf::Color(255, 215, 0));
     window.draw(tokenText);
+
+    if (!pinPowerHintLine1.empty()) {
+        y += 38.f;
+        sf::Text hint1(font, pinPowerHintLine1, 18);
+        hint1.setPosition(sf::Vector2f(lx, y));
+        hint1.setFillColor(sf::Color(230, 240, 255));
+        window.draw(hint1);
+    }
+    if (!pinPowerHintLine2.empty()) {
+        y += 24.f;
+        sf::Text hint2(font, pinPowerHintLine2, 18);
+        hint2.setPosition(sf::Vector2f(lx, y));
+        hint2.setFillColor(sf::Color(255, 210, 140));
+        window.draw(hint2);
+    }
 
     if (hudShowBigScore && hudCountTarget > 0) {
         float t = std::clamp(hudBigTimer / 0.9f, 0.0f, 1.0f);
@@ -1576,6 +1593,9 @@ static ShopCardLayout computeShopCardLayout(float windowW,
                                             const ShopOwnedPanelLayout& ownedLayout,
                                             std::size_t offerCount) {
     ShopCardLayout out;
+    // Reserve the left control column (ball slot + pin slot controls), so cards
+    // never cover it in smaller windowed layouts.
+    out.areaMinX = std::max(out.areaMinX, 250.f);
     out.areaMaxX = windowW - 28.f;
 
     float panelMid = ownedLayout.panelX + ownedLayout.panelW * 0.5f;
@@ -2037,11 +2057,11 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraBall,
          "Extra Ball",   "Adds one extra shot\nper frame.",                     7},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Duplicate,
-         "Duplicate",    "Copy one random pin\ntype to another. 1 use.",        2},
+         "Duplicate",    "Press N, then choose\nsource and target. 1 use.",     2},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Bumpers,
          "Bumpers",      "No gutter balls\nfor the rest of run.",               5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::SwapPins,
-         "Swap Pins",    "Swap two random\npin spots. 1 use.",                  2},
+         "Swap Pins",    "Press V, then choose\ntwo pins to swap. 1 use.",      2},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::HomeBase,
          "Home Base",    "Every 20 pins hit,\nbase combo +1.",                 5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Confusion,
@@ -2492,12 +2512,12 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     const float pinNextX = pinBadgeX + pinBadgeW + 8.f;
     if (mousePos.x >= pinPrevX && mousePos.x <= pinPrevX + pinBtnW &&
         mousePos.y >= pinSlotY && mousePos.y <= pinSlotY + pinBtnH) {
-        selectedPinSlot = std::max(1, selectedPinSlot - 1);
+        selectedPinSlot = (selectedPinSlot <= 1) ? pinBuyLimit : (selectedPinSlot - 1);
         return ShopActionNone;
     }
     if (mousePos.x >= pinNextX && mousePos.x <= pinNextX + pinBtnW &&
         mousePos.y >= pinSlotY && mousePos.y <= pinSlotY + pinBtnH) {
-        selectedPinSlot = std::min(pinBuyLimit, selectedPinSlot + 1);
+        selectedPinSlot = (selectedPinSlot >= pinBuyLimit) ? 1 : (selectedPinSlot + 1);
         return ShopActionNone;
     }
     if (mousePos.x >= pinBadgeX && mousePos.x <= pinBadgeX + pinBadgeW &&

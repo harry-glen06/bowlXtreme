@@ -111,7 +111,9 @@ public:
                              int lastShotScore,
                              float windowW,
                              float windowH,
-                             const ActiveItems& items);
+                             const ActiveItems& items,
+                             const std::string& pinPowerHintLine1,
+                             const std::string& pinPowerHintLine2);
     
     void drawGameOverScreen(sf::RenderWindow& window,
                            GameOverMode mode,

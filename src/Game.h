@@ -19,6 +19,14 @@ public:
     void run();
 
 private:
+    enum class PinPowerSelectionMode {
+        None,
+        DuplicatePickSource,
+        DuplicatePickTarget,
+        SwapPickFirst,
+        SwapPickSecond
+    };
+
     void handleEvents();
     void update(float dt);
     void draw();
@@ -39,6 +47,11 @@ private:
     int countStandingPins() const;
     void processExplosions();
     void prepareNewShot();
+    void cancelPinPowerSelection();
+    int  findPinAtWorldPos(sf::Vector2f worldPos) const;
+    bool handlePinPowerSelectionClick(sf::Vector2f worldPos);
+    void applyManualDuplicate(int sourceIndex, int targetIndex);
+    void applyManualSwap(int firstIndex, int secondIndex);
 
     sf::View view;
     void applyLetterbox(unsigned winW, unsigned winH);
@@ -119,6 +132,8 @@ private:
 
     bool xtremeMode = false;
     int bestRound = 0;
+    PinPowerSelectionMode pinPowerSelectionMode = PinPowerSelectionMode::None;
+    int pinPowerFirstIndex = -1;
     
     // High score
     int highScore = 0;
