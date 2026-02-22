@@ -12,6 +12,7 @@ enum class GameState {
     Playing,
     Xtreme,
     Shop,
+    RoundSummary,
     GameOver
 };
 
@@ -112,8 +113,21 @@ public:
                            GameOverMode mode,
                            int finalScore, 
                            int highScore, 
-                           float windowW, 
-                           float windowH);
+                           float windowW,
+                           float windowH,
+                           int progressScore = -1,
+                           int progressTarget = -1);
+    void drawRoundSummaryPopup(sf::RenderWindow& window,
+                               int roundNumber,
+                               int roundScore,
+                               int targetScore,
+                               int tokensEarned,
+                               int tokensTotal,
+                               bool passed,
+                               bool leadsToGameOver,
+                               float windowW,
+                               float windowH);
+    bool handleRoundSummaryClick(sf::Vector2i mousePos) const;
     
     // State management
     GameState getState() const { return state; }
@@ -175,4 +189,5 @@ private:
 
     // Shared inventory rendering core
     void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);
+    sf::FloatRect roundSummaryContinueRect{};
 };

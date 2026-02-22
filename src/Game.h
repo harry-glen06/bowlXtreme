@@ -102,6 +102,16 @@ private:
     float postScorePauseDurationShop = 1.8f;
     float postScorePauseDurationGameOver = 1.0f;
     bool pendingGameOverFromScore = false;
+    int xtremeRoundStartTokens = 0;
+    int xtremeLastRoundScoreProgress = 0;
+    int xtremeLastRoundTargetProgress = 0;
+    bool roundSummaryLeadsToGameOver = false;
+    bool roundSummaryPassed = false;
+    int roundSummaryRoundNumber = 1;
+    int roundSummaryScore = 0;
+    int roundSummaryTarget = 0;
+    int roundSummaryTokensEarned = 0;
+    int roundSummaryTokensTotal = 0;
 
     // Game over state
     bool gameOver = false;

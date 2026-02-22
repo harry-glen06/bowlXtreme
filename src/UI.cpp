@@ -808,7 +808,9 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
                             int finalScore, 
                             int highScore,
                             float windowW, 
-                            float windowH) {
+                            float windowH,
+                            int progressScore,
+                            int progressTarget) {
     if (!fontLoaded) return;
     
     // Semi-transparent overlay
@@ -839,6 +841,21 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
         windowH / 2 - 100
     ));
     window.draw(scoreText);
+
+    if (mode == GameOverMode::Xtreme && progressTarget > 0) {
+        bool passed = progressScore >= progressTarget;
+        sf::Text progressText(font,
+                              "Score: " + std::to_string(progressScore) + "/" + std::to_string(progressTarget) +
+                                  (passed ? "  PASSED" : "  FAILED"),
+                              34);
+        progressText.setFillColor(passed ? sf::Color(110, 255, 140) : sf::Color(255, 140, 140));
+        sf::FloatRect pb = progressText.getLocalBounds();
+        progressText.setPosition(sf::Vector2f(
+            windowW / 2 - pb.size.x / 2,
+            windowH / 2 - 38
+        ));
+        window.draw(progressText);
+    }
 
     // High score
     std::string bestLabel = (mode == GameOverMode::Xtreme)
@@ -876,6 +893,99 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
         windowH / 2 + 140
     ));
     window.draw(menuText);
+}
+
+void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
+                               int roundNumber,
+                               int roundScore,
+                               int targetScore,
+                               int tokensEarned,
+                               int tokensTotal,
+                               bool passed,
+                               bool leadsToGameOver,
+                               float windowW,
+                               float windowH) {
+    if (!fontLoaded) return;
+
+    sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
+    overlay.setFillColor(sf::Color(0, 0, 0, 170));
+    window.draw(overlay);
+
+    const float panelW = 620.f;
+    const float panelH = 420.f;
+    const float panelX = windowW * 0.5f - panelW * 0.5f;
+    const float panelY = windowH * 0.5f - panelH * 0.5f;
+
+    sf::RectangleShape panel(sf::Vector2f(panelW, panelH));
+    panel.setPosition(sf::Vector2f(panelX, panelY));
+    panel.setFillColor(sf::Color(30, 32, 45, 245));
+    panel.setOutlineColor(sf::Color(180, 190, 235));
+    panel.setOutlineThickness(3.f);
+    window.draw(panel);
+
+    sf::Text title(font, "ROUND " + std::to_string(roundNumber) + " SUMMARY", 42);
+    sf::FloatRect titleBounds = title.getLocalBounds();
+    title.setPosition(sf::Vector2f(panelX + panelW * 0.5f - titleBounds.size.x * 0.5f, panelY + 18.f));
+    title.setFillColor(sf::Color(245, 245, 255));
+    window.draw(title);
+
+    sf::Text status(font, passed ? "PASSED" : "FAILED", 44);
+    sf::FloatRect statusBounds = status.getLocalBounds();
+    status.setPosition(sf::Vector2f(panelX + panelW * 0.5f - statusBounds.size.x * 0.5f, panelY + 72.f));
+    status.setFillColor(passed ? sf::Color(100, 255, 140) : sf::Color(255, 130, 130));
+    window.draw(status);
+
+    sf::RectangleShape divider(sf::Vector2f(panelW - 70.f, 2.f));
+    divider.setPosition(sf::Vector2f(panelX + 35.f, panelY + 132.f));
+    divider.setFillColor(sf::Color(110, 120, 165, 180));
+    window.draw(divider);
+
+    sf::Text ratio(font,
+                   "Score: " + std::to_string(roundScore) + "/" + std::to_string(targetScore),
+                   40);
+    ratio.setPosition(sf::Vector2f(panelX + 36.f, panelY + 150.f));
+    ratio.setFillColor(sf::Color(255, 220, 110));
+    window.draw(ratio);
+
+    std::string tokenEarnedText = "Tokens earned: ";
+    if (tokensEarned >= 0) tokenEarnedText += "+";
+    tokenEarnedText += std::to_string(tokensEarned);
+    sf::Text earned(font, tokenEarnedText, 34);
+    earned.setPosition(sf::Vector2f(panelX + 36.f, panelY + 222.f));
+    earned.setFillColor(sf::Color(120, 235, 255));
+    window.draw(earned);
+
+    sf::Text total(font, "Tokens total: " + std::to_string(tokensTotal), 30);
+    total.setPosition(sf::Vector2f(panelX + 36.f, panelY + 274.f));
+    total.setFillColor(sf::Color(230, 230, 240));
+    window.draw(total);
+
+    const float btnW = 320.f;
+    const float btnH = 62.f;
+    const float btnX = panelX + panelW * 0.5f - btnW * 0.5f;
+    const float btnY = panelY + panelH - 86.f;
+    roundSummaryContinueRect = sf::FloatRect(sf::Vector2f(btnX, btnY), sf::Vector2f(btnW, btnH));
+
+    sf::RectangleShape btn(sf::Vector2f(btnW, btnH));
+    btn.setPosition(sf::Vector2f(btnX, btnY));
+    btn.setFillColor(leadsToGameOver ? sf::Color(180, 80, 80) : sf::Color(80, 190, 220));
+    btn.setOutlineColor(sf::Color::Black);
+    btn.setOutlineThickness(3.f);
+    window.draw(btn);
+
+    sf::Text btnText(font, leadsToGameOver ? "CONTINUE" : "CONTINUE TO SHOP", 32);
+    sf::FloatRect bb = btnText.getLocalBounds();
+    btnText.setPosition(sf::Vector2f(btnX + btnW * 0.5f - bb.size.x * 0.5f,
+                                     btnY + btnH * 0.5f - bb.size.y * 0.5f - 6.f));
+    btnText.setFillColor(sf::Color::Black);
+    window.draw(btnText);
+}
+
+bool UI::handleRoundSummaryClick(sf::Vector2i mousePos) const {
+    return mousePos.x >= roundSummaryContinueRect.position.x &&
+           mousePos.x <= roundSummaryContinueRect.position.x + roundSummaryContinueRect.size.x &&
+           mousePos.y >= roundSummaryContinueRect.position.y &&
+           mousePos.y <= roundSummaryContinueRect.position.y + roundSummaryContinueRect.size.y;
 }
 
 // ─── Inventory helpers ────────────────────────────────────────────────────────
@@ -1316,6 +1426,17 @@ struct ShopOwnedDynamicLayout {
     float contentTop = 0.f;
 };
 
+struct ShopCardLayout {
+    float cardW = 210.f;
+    float cardH = 340.f;
+    float cardGap = 20.f;
+    float firstCardY = 150.f;
+    float areaMinX = 28.f;
+    float areaMaxX = 28.f;
+    float areaW = 210.f;
+    int cardsPerRow = 1;
+};
+
 static bool pointInRect(const sf::FloatRect& rect, sf::Vector2i point) {
     return point.x >= rect.position.x && point.x <= rect.position.x + rect.size.x &&
            point.y >= rect.position.y && point.y <= rect.position.y + rect.size.y;
@@ -1323,21 +1444,24 @@ static bool pointInRect(const sf::FloatRect& rect, sf::Vector2i point) {
 
 static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float windowH, std::size_t offerCount) {
     ShopOwnedPanelLayout layout;
-    layout.panelW = 280.f;
-    layout.panelH = 420.f;
-    layout.panelX = windowW - layout.panelW - 24.f;
-    layout.panelY = windowH - layout.panelH - 32.f;
+    layout.panelW = std::clamp(windowW * 0.24f, 270.f, 330.f);
+    layout.panelH = std::min(620.f, windowH - 170.f);
+    if (layout.panelH < 430.f) layout.panelH = 430.f;
+    layout.panelX = windowW - layout.panelW - 22.f;
+    layout.panelY = 132.f;
     if (offerCount > 4) {
-        layout.panelW = 240.f;
-        layout.panelH = 440.f;
+        // Extra item rows need a slightly narrower panel to keep card space readable.
+        layout.panelW = std::clamp(windowW * 0.22f, 250.f, 290.f);
+        layout.panelH = std::min(600.f, windowH - 160.f);
+        if (layout.panelH < 420.f) layout.panelH = 420.f;
         layout.panelX = 16.f;
-        layout.panelY = windowH - layout.panelH - 24.f;
+        layout.panelY = 118.f;
     }
 
-    const float pad = 8.f;
-    const float gap = 6.f;
-    const float btnH = 30.f;
-    const float actionTop = layout.panelY + 40.f;
+    const float pad = 12.f;
+    const float gap = 8.f;
+    const float btnH = 34.f;
+    const float actionTop = layout.panelY + 52.f;
     const float actionW = layout.panelW - pad * 2.f;
     const float halfW = (actionW - gap) * 0.5f;
 
@@ -1345,6 +1469,42 @@ static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float win
     layout.sellBall2 = sf::FloatRect({layout.panelX + pad + halfW + gap, actionTop}, {halfW, btnH});
     layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {actionW, btnH});
     return layout;
+}
+
+static ShopCardLayout computeShopCardLayout(float windowW,
+                                            const ShopOwnedPanelLayout& ownedLayout,
+                                            std::size_t offerCount) {
+    ShopCardLayout out;
+    out.areaMaxX = windowW - 28.f;
+
+    float panelMid = ownedLayout.panelX + ownedLayout.panelW * 0.5f;
+    if (panelMid >= windowW * 0.5f) {
+        // Inventory panel on right.
+        out.areaMaxX = std::min(out.areaMaxX, ownedLayout.panelX - 22.f);
+    } else {
+        // Inventory panel on left.
+        out.areaMinX = std::max(out.areaMinX, ownedLayout.panelX + ownedLayout.panelW + 22.f);
+    }
+
+    if (out.areaMaxX < out.areaMinX + out.cardW) {
+        out.areaMaxX = out.areaMinX + out.cardW;
+    }
+    out.areaW = out.areaMaxX - out.areaMinX;
+    if (out.areaW < out.cardW) out.areaW = out.cardW;
+
+    int maxCardsPerRow = 4;
+    if (panelMid >= windowW * 0.5f && windowW < 1550.f) {
+        // Keep windowed layout cleaner when the panel is on the right.
+        maxCardsPerRow = 3;
+    }
+
+    if (out.areaW > out.cardW) {
+        out.cardsPerRow = std::min(maxCardsPerRow,
+            std::max(1, static_cast<int>((out.areaW + out.cardGap) / (out.cardW + out.cardGap))));
+    }
+    int offerCountInt = static_cast<int>(std::max<std::size_t>(1, offerCount));
+    out.cardsPerRow = std::min(out.cardsPerRow, offerCountInt);
+    return out;
 }
 
 static int ballTypeCost(BallType t);
@@ -1384,13 +1544,13 @@ static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanel
     ShopOwnedDynamicLayout out;
     out.sellablePowers = buildSellablePowerList(items);
 
-    const float pad = 8.f;
-    const float gap = 6.f;
-    const float headerH = 16.f;
-    const float rowH = 22.f;
+    const float pad = 12.f;
+    const float gap = 8.f;
+    const float headerH = 18.f;
+    const float rowH = 28.f;
     const float listW = layout.panelW - pad * 2.f;
     const float colW = (listW - gap) * 0.5f;
-    float y = layout.sellShoe.position.y + layout.sellShoe.size.y + 10.f;
+    float y = layout.sellShoe.position.y + layout.sellShoe.size.y + 12.f;
 
     out.pinHeaderY = y;
     y += headerH;
@@ -1403,7 +1563,7 @@ static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanel
         float ry = y + row * rowH;
         out.pinSellRects.emplace_back(sf::FloatRect({x, ry}, {colW, rowH}));
     }
-    y += ((pinCount + 1) / 2) * rowH + 6.f;
+    y += ((pinCount + 1) / 2) * rowH + 10.f;
 
     out.powerHeaderY = y;
     y += headerH;
@@ -1416,10 +1576,10 @@ static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanel
         float ry = y + row * rowH;
         out.powerSellRects.emplace_back(sf::FloatRect({x, ry}, {colW, rowH}));
     }
-    y += ((powerCount + 1) / 2) * rowH + 10.f;
+    y += ((powerCount + 1) / 2) * rowH + 12.f;
 
     out.contentTop = y;
-    float minContentTop = layout.panelY + 120.f;
+    float minContentTop = layout.panelY + 240.f;
     float maxContentTop = layout.panelY + layout.panelH - 40.f;
     if (out.contentTop < minContentTop) out.contentTop = minContentTop;
     if (out.contentTop > maxContentTop) out.contentTop = maxContentTop;
@@ -1436,17 +1596,33 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::RectangleShape panel({layout.panelW, layout.panelH});
     panel.setPosition({layout.panelX, layout.panelY});
-    panel.setFillColor({30, 30, 45, 230});
-    panel.setOutlineColor({100, 100, 140});
-    panel.setOutlineThickness(2.f);
+    panel.setFillColor({20, 22, 40, 250});
+    panel.setOutlineColor({120, 128, 175});
+    panel.setOutlineThickness(2.2f);
     window.draw(panel);
 
-    sf::Text title(font, "OWNED", 22);
-    title.setPosition({layout.panelX + 10.f, layout.panelY + 8.f});
-    title.setFillColor({180, 180, 220});
+    sf::RectangleShape head({layout.panelW, 36.f});
+    head.setPosition({layout.panelX, layout.panelY});
+    head.setFillColor({38, 44, 78, 245});
+    window.draw(head);
+
+    sf::Text title(font, "OWNED INVENTORY", 24);
+    title.setPosition({layout.panelX + 12.f, layout.panelY + 4.f});
+    title.setFillColor({210, 218, 245});
     window.draw(title);
 
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
+
+    const float actionAreaY = layout.sellBall1.position.y - 8.f;
+    const float actionAreaH = (dynamic.contentTop - actionAreaY) - 8.f;
+    if (actionAreaH > 20.f) {
+        sf::RectangleShape actionArea({layout.panelW - 14.f, actionAreaH});
+        actionArea.setPosition({layout.panelX + 7.f, actionAreaY});
+        actionArea.setFillColor({30, 33, 56, 232});
+        actionArea.setOutlineColor({96, 104, 150, 180});
+        actionArea.setOutlineThickness(1.4f);
+        window.draw(actionArea);
+    }
 
     BallType slot1Ball = items.getBallForSlot(1);
     BallType slot2Ball = items.getBallForSlot(2);
@@ -1457,57 +1633,62 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     int s2Value = canSellS2 ? (ballTypeCost(slot2Ball) / 2) : 0;
     int shoeValue = canSellShoe ? (shoeTypeCost(items.shoeType) / 2) : 0;
 
-    auto drawSellButton = [&](const sf::FloatRect& rect, const std::string& label, bool enabled) {
+    sf::Text quick(font, "QUICK SELL", 14);
+    quick.setPosition({layout.panelX + 14.f, layout.sellBall1.position.y - 20.f});
+    quick.setFillColor({170, 182, 225});
+    window.draw(quick);
+
+    auto drawSellButton = [&](const sf::FloatRect& rect, const std::string& label, bool enabled, int charSize) {
         sf::RectangleShape button(rect.size);
         button.setPosition(rect.position);
-        button.setFillColor(enabled ? sf::Color(170, 110, 70) : sf::Color(70, 70, 80));
-        button.setOutlineColor(sf::Color::Black);
+        button.setFillColor(enabled ? sf::Color(186, 114, 58) : sf::Color(68, 70, 92));
+        button.setOutlineColor(enabled ? sf::Color(242, 180, 132) : sf::Color(92, 95, 122));
         button.setOutlineThickness(2.f);
         window.draw(button);
 
-        sf::Text text(font, label, 14);
-        text.setPosition({rect.position.x + 8.f, rect.position.y + 6.f});
-        text.setFillColor(enabled ? sf::Color::White : sf::Color(170, 170, 170));
+        sf::Text text(font, label, charSize);
+        text.setPosition({rect.position.x + 9.f, rect.position.y + (rect.size.y - (float)charSize) * 0.5f - 2.f});
+        text.setFillColor(enabled ? sf::Color(245, 246, 252) : sf::Color(155, 158, 180));
         window.draw(text);
     };
 
-    drawSellButton(layout.sellBall1, "Sell S1 (+" + std::to_string(s1Value) + ")", canSellS1);
-    drawSellButton(layout.sellBall2, "Sell S2 (+" + std::to_string(s2Value) + ")", canSellS2);
-    drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe);
+    drawSellButton(layout.sellBall1, "Sell S1 (+" + std::to_string(s1Value) + ")", canSellS1, 19);
+    drawSellButton(layout.sellBall2, "Sell S2 (+" + std::to_string(s2Value) + ")", canSellS2, 19);
+    drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe, 18);
 
-    sf::Text pinHeader(font, "SELL PINS", 13);
+    sf::Text pinHeader(font, "SELL PINS", 15);
     pinHeader.setPosition({layout.panelX + 10.f, dynamic.pinHeaderY});
-    pinHeader.setFillColor({180, 180, 210});
+    pinHeader.setFillColor({184, 195, 235});
     window.draw(pinHeader);
 
     for (int i = 0; i < (int)dynamic.pinSellRects.size(); i++) {
         int raw = items.purchasedPinTypes[i];
         int value = pinTypeCost(static_cast<PinType>(raw)) / 2;
         std::string label = pinShortName(raw) + " +" + std::to_string(value);
-        drawSellButton(dynamic.pinSellRects[i], label, true);
+        drawSellButton(dynamic.pinSellRects[i], label, true, 16);
     }
     if (dynamic.pinSellRects.empty()) {
-        sf::Text none(font, "None", 12);
+        sf::Text none(font, "None", 14);
         none.setPosition({layout.panelX + 12.f, dynamic.pinHeaderY + 14.f});
-        none.setFillColor({120, 120, 140});
+        none.setFillColor({132, 136, 160});
         window.draw(none);
     }
 
-    sf::Text powerHeader(font, "SELL POWERS", 13);
+    sf::Text powerHeader(font, "SELL POWERS", 15);
     powerHeader.setPosition({layout.panelX + 10.f, dynamic.powerHeaderY});
-    powerHeader.setFillColor({180, 180, 210});
+    powerHeader.setFillColor({184, 195, 235});
     window.draw(powerHeader);
 
     for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
         PowerType p = dynamic.sellablePowers[i];
         int value = powerTypeCost(p) / 2;
         std::string label = powerShortName(p) + " +" + std::to_string(value);
-        drawSellButton(dynamic.powerSellRects[i], label, true);
+        drawSellButton(dynamic.powerSellRects[i], label, true, 16);
     }
     if (dynamic.powerSellRects.empty()) {
-        sf::Text none(font, "None", 12);
+        sf::Text none(font, "None", 14);
         none.setPosition({layout.panelX + 12.f, dynamic.powerHeaderY + 14.f});
-        none.setFillColor({120, 120, 140});
+        none.setFillColor({132, 136, 160});
         window.draw(none);
     }
 
@@ -1831,6 +2012,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     if (state != GameState::Shop) return;
 
     if (shopOffers.empty()) generateShopOffers(items);
+    ShopOwnedPanelLayout ownedLayout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size());
 
     // Background
     sf::RectangleShape bg(sf::Vector2f(windowW, windowH));
@@ -1909,22 +2091,19 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     slotCurrent.setFillColor({200, 200, 200});
     window.draw(slotCurrent);
 
-    // Card layout (up to 4 per row)
-    const int cardsPerRow = 4;
-    float cardW = 210.f, cardH = 340.f;
-    float cardGap = 20.f;
-    float firstCardY  = 150.f;
+    ShopCardLayout cardLayout = computeShopCardLayout(windowW, ownedLayout, shopOffers.size());
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         const auto& offer = shopOffers[i];
-        int row = i / cardsPerRow;
-        int col = i % cardsPerRow;
-        int remaining = (int)shopOffers.size() - row * cardsPerRow;
-        int cardsInRow = std::min(cardsPerRow, remaining);
-        float rowTotalW = cardsInRow * cardW + (cardsInRow - 1) * cardGap;
-        float rowStartX = (windowW - rowTotalW) / 2.f;
-        float cx = rowStartX + col * (cardW + cardGap);
-        float cardY = firstCardY + row * (cardH + cardGap);
+        int row = i / cardLayout.cardsPerRow;
+        int col = i % cardLayout.cardsPerRow;
+        int remaining = (int)shopOffers.size() - row * cardLayout.cardsPerRow;
+        int cardsInRow = std::min(cardLayout.cardsPerRow, remaining);
+        float rowTotalW = cardsInRow * cardLayout.cardW + (cardsInRow - 1) * cardLayout.cardGap;
+        float rowStartX = cardLayout.areaMinX + (cardLayout.areaW - rowTotalW) * 0.5f;
+        if (rowStartX < cardLayout.areaMinX) rowStartX = cardLayout.areaMinX;
+        float cx = rowStartX + col * (cardLayout.cardW + cardLayout.cardGap);
+        float cardY = cardLayout.firstCardY + row * (cardLayout.cardH + cardLayout.cardGap);
         bool canAfford = tokens >= offer.cost;
         bool isBall = (offer.category == ShopItemCategory::Ball);
         bool isPin  = (offer.category == ShopItemCategory::Pin);
@@ -1964,7 +2143,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
                                 isShoe        ? sf::Color(240, 170, 130):
                                                 sf::Color(255, 210, 120);
 
-        sf::RectangleShape card({cardW, cardH});
+        sf::RectangleShape card({cardLayout.cardW, cardLayout.cardH});
         card.setPosition({cx, cardY});
         card.setFillColor(cardColor);
         card.setOutlineColor(borderColor);
@@ -1972,7 +2151,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         window.draw(card);
 
         // Category badge
-        sf::RectangleShape badge({cardW, 28.f});
+        sf::RectangleShape badge({cardLayout.cardW, 28.f});
         badge.setPosition({cx, cardY});
         badge.setFillColor(isBall ? sf::Color(60,80,150) :
                           isPin  ? sf::Color(40,110,70) :
@@ -1995,7 +2174,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         float pr = 36.f;
         sf::CircleShape preview(pr);
         preview.setOrigin({pr, pr});
-        preview.setPosition({cx + cardW/2.f, cardY + 135.f});
+        preview.setPosition({cx + cardLayout.cardW/2.f, cardY + 135.f});
 
         if (isBall) {
             sf::Color pc;
@@ -2063,8 +2242,8 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
                              (canAfford && !powerLimitBlocked && !pinLimitBlocked)
                                          ? sf::Color(80, 200, 120) :
                                            sf::Color(80, 80, 80);
-        sf::RectangleShape btn({cardW - 20.f, 44.f});
-        btn.setPosition({cx + 10.f, cardY + cardH - 56.f});
+        sf::RectangleShape btn({cardLayout.cardW - 20.f, 44.f});
+        btn.setPosition({cx + 10.f, cardY + cardLayout.cardH - 56.f});
         btn.setFillColor(btnColor);
         btn.setOutlineColor(sf::Color::Black);
         btn.setOutlineThickness(2);
@@ -2084,7 +2263,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
             btnLabel = "Need " + std::to_string(offer.cost) + " tokens";
         }
         sf::Text btnText(font, btnLabel, 20);
-        btnText.setPosition({cx + 18.f, cardY + cardH - 48.f});
+        btnText.setPosition({cx + 18.f, cardY + cardLayout.cardH - 48.f});
         btnText.setFillColor(sf::Color::White);
         window.draw(btnText);
     }
@@ -2162,27 +2341,25 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         }
     }
 
-    const int cardsPerRow = 4;
-    float cardW = 210.f, cardH = 340.f;
-    float cardGap = 20.f;
-    float firstCardY  = 150.f;
+    ShopCardLayout cardLayout = computeShopCardLayout(windowW, layout, shopOffers.size());
     const int maxPermanentPowers = 4;
     bool hasExtraPinsPower =
         items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
     int pinBuyLimit = hasExtraPinsPower ? 12 : 10;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
-        int row = i / cardsPerRow;
-        int col = i % cardsPerRow;
-        int remaining = (int)shopOffers.size() - row * cardsPerRow;
-        int cardsInRow = std::min(cardsPerRow, remaining);
-        float rowTotalW = cardsInRow * cardW + (cardsInRow - 1) * cardGap;
-        float rowStartX = (windowW - rowTotalW) / 2.f;
-        float cardY = firstCardY + row * (cardH + cardGap);
-        float cx  = rowStartX + col * (cardW + cardGap);
+        int row = i / cardLayout.cardsPerRow;
+        int col = i % cardLayout.cardsPerRow;
+        int remaining = (int)shopOffers.size() - row * cardLayout.cardsPerRow;
+        int cardsInRow = std::min(cardLayout.cardsPerRow, remaining);
+        float rowTotalW = cardsInRow * cardLayout.cardW + (cardsInRow - 1) * cardLayout.cardGap;
+        float rowStartX = cardLayout.areaMinX + (cardLayout.areaW - rowTotalW) * 0.5f;
+        if (rowStartX < cardLayout.areaMinX) rowStartX = cardLayout.areaMinX;
+        float cardY = cardLayout.firstCardY + row * (cardLayout.cardH + cardLayout.cardGap);
+        float cx  = rowStartX + col * (cardLayout.cardW + cardLayout.cardGap);
         float btnX = cx + 10.f;
-        float btnY = cardY + cardH - 56.f;
-        float btnW = cardW - 20.f;
+        float btnY = cardY + cardLayout.cardH - 56.f;
+        float btnW = cardLayout.cardW - 20.f;
         float btnH = 44.f;
 
         if (mousePos.x >= btnX && mousePos.x <= btnX + btnW &&

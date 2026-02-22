@@ -236,8 +236,12 @@ void Game::handleEvents() {
                         ui.setState(GameState::Playing);
                         scorer.resetGame();
                         gameOver = false;
+                        roundSummaryLeadsToGameOver = false;
+                        roundSummaryPassed = false;
                         pendingGameOverFromScore = false;
                         postScorePauseTimer = 0.0f;
+                        xtremeLastRoundScoreProgress = 0;
+                        xtremeLastRoundTargetProgress = 0;
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
                         ui.resetEquippedBall();
@@ -251,8 +255,13 @@ void Game::handleEvents() {
                         xtreme.reset();
                         xtremeMode = true;
                         gameOver = false;
+                        roundSummaryLeadsToGameOver = false;
+                        roundSummaryPassed = false;
                         pendingGameOverFromScore = false;
                         postScorePauseTimer = 0.0f;
+                        xtremeRoundStartTokens = xtreme.getTokens();
+                        xtremeLastRoundScoreProgress = 0;
+                        xtremeLastRoundTargetProgress = 0;
                         equipBall(BallType::Normal);
                         activeItems.resetAll();
                         ui.resetEquippedBall();
@@ -268,6 +277,26 @@ void Game::handleEvents() {
                 }
                 if (ui.getState() == GameState::Settings) {
                     ui.handleSettingsClick(window, sf::Vector2i(worldPos.x, worldPos.y));
+                }
+                if (ui.getState() == GameState::RoundSummary) {
+                    if (ui.handleRoundSummaryClick(sf::Vector2i(worldPos.x, worldPos.y))) {
+                        if (roundSummaryLeadsToGameOver) {
+                            ui.setState(GameState::Xtreme);
+                            gameOver = true;
+                            pendingGameOverFromScore = false;
+                            postScorePauseTimer = 0.0f;
+                            pendingReset = false;
+                        } else {
+                            ui.setState(GameState::Shop);
+                            xtreme.consumeShopReady();
+                            if (activeItems.powerSkip || activeItems.hasPurchasedPower(PowerType::Skip)) {
+                                activeItems.powerSkip = true;
+                                activeItems.skipCharges = 2;
+                            }
+                        }
+                        roundSummaryLeadsToGameOver = false;
+                        continue;
+                    }
                 }
                 if (ui.getState() == GameState::Shop) {
                     sf::Vector2i worldPosI((int)worldPos.x, (int)worldPos.y);
@@ -499,7 +528,6 @@ void Game::handleEvents() {
                             int sellValue = powerTypeCost(p) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
                             syncRunPowersToScorer();
-                            ui.generateShopOffers(activeItems);
                         }
                     };
 
@@ -515,7 +543,6 @@ void Game::handleEvents() {
                             activeItems.purchasedPinTypes.pop_back();
                             int sellValue = pinTypeCost(static_cast<PinType>(raw)) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
-                            ui.generateShopOffers(activeItems);
                         }
                     } else if (purchased <= UI::ShopActionSellPinByIndexBase &&
                                purchased > UI::ShopActionSellPowerByIndexBase) {
@@ -527,7 +554,6 @@ void Game::handleEvents() {
                                 activeItems.purchasedPinTypes.begin() + pinIndex);
                             int sellValue = pinTypeCost(static_cast<PinType>(raw)) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
-                            ui.generateShopOffers(activeItems);
                         }
                     } else if (purchased == UI::ShopActionSellBallSlot1 ||
                                purchased == UI::ShopActionSellBallSlot2) {
@@ -537,7 +563,6 @@ void Game::handleEvents() {
                             activeItems.setBallForSlot(slot, BallType::Normal);
                             int sellValue = ballTypeCost(owned) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
-                            ui.generateShopOffers(activeItems);
                         }
                     } else if (purchased == UI::ShopActionSellShoe) {
                         if (activeItems.shoeType != ShoeType::None) {
@@ -545,7 +570,6 @@ void Game::handleEvents() {
                             activeItems.applyShoeType(ShoeType::None);
                             int sellValue = shoeTypeCost(owned) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
-                            ui.generateShopOffers(activeItems);
                         }
                     } else if (purchased == UI::ShopActionSellPower) {
                         std::vector<PowerType> sellable = buildSellablePowerList();
@@ -642,6 +666,7 @@ void Game::handleEvents() {
                         worldPos.y > windowH - 100.f    && worldPos.y < windowH - 40.f) {
                         ui.setState(GameState::Xtreme);
                         postScorePauseTimer = 0.0f;
+                        xtremeRoundStartTokens = xtreme.getTokens();
                         ui.generateShopOffers(activeItems);
                         // Fresh pins for the new round with purchased types applied
                         pins = createPins(lane.centerX(), 240.0f);
@@ -840,6 +865,8 @@ void Game::finishPendingResetIfReady(float dt) {
     }
     int physicalPinsDownThisShot = knockedThisBall;
     int shotBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getShotInFrame() : 0;
+    int roundScoreBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getRoundScore() : 0;
+    int targetBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getTargetScore() : 0;
     bool earthquakeStrikeThisShot = false;
 
     if (ui.getState() == GameState::Xtreme && activeItems.powerEarthquake) {
@@ -1067,17 +1094,37 @@ void Game::finishPendingResetIfReady(float dt) {
     bool needsPostScorePause = false;
     if (ui.getState() == GameState::Xtreme) {
         if (xtreme.isGameOver()) {
-            pendingGameOverFromScore = true;
-            needsPostScorePause = true;
-
             finalXtremeRoundsCleared = std::max(0, xtreme.getRound() - 1);
+            xtremeLastRoundScoreProgress = roundScoreBeforeShot + xtreme.getLastShotScore();
+            xtremeLastRoundTargetProgress = targetBeforeShot;
+            roundSummaryRoundNumber = xtreme.getRound();
+            roundSummaryScore = xtremeLastRoundScoreProgress;
+            roundSummaryTarget = xtremeLastRoundTargetProgress;
+            roundSummaryTokensEarned = xtreme.getTokens() - xtremeRoundStartTokens;
+            roundSummaryTokensTotal = xtreme.getTokens();
+            roundSummaryPassed = false;
+            roundSummaryLeadsToGameOver = true;
+            ui.setState(GameState::RoundSummary);
+            pendingGameOverFromScore = false;
+            postScorePauseTimer = 0.0f;
 
             if (finalXtremeRoundsCleared > xtremeBestRound) {
                 xtremeBestRound = finalXtremeRoundsCleared;
                 saveHighScore();
             }
         } else if (xtreme.isShopReady()) {
-            needsPostScorePause = true;
+            xtremeLastRoundScoreProgress = roundScoreBeforeShot + xtreme.getLastShotScore();
+            xtremeLastRoundTargetProgress = targetBeforeShot;
+            roundSummaryRoundNumber = std::max(1, xtreme.getRound() - 1);
+            roundSummaryScore = xtremeLastRoundScoreProgress;
+            roundSummaryTarget = xtremeLastRoundTargetProgress;
+            roundSummaryTokensEarned = xtreme.getTokens() - xtremeRoundStartTokens;
+            roundSummaryTokensTotal = xtreme.getTokens();
+            roundSummaryPassed = true;
+            roundSummaryLeadsToGameOver = false;
+            ui.setState(GameState::RoundSummary);
+            pendingGameOverFromScore = false;
+            postScorePauseTimer = 0.0f;
         }
     } else {
         if (scorer.isGameOver()) {
@@ -1095,7 +1142,7 @@ void Game::finishPendingResetIfReady(float dt) {
 
     resetBall();
     pendingReset = false;
-    if (needsPostScorePause) {
+    if (needsPostScorePause && ui.getState() != GameState::RoundSummary) {
         postScorePauseTimer = pendingGameOverFromScore
             ? postScorePauseDurationGameOver
             : postScorePauseDurationShop;
@@ -1329,6 +1376,10 @@ void Game::update(float dt) {
 
     audio.setMusicVolume(ui.getMusicVolume());
     audio.setSoundVolume(ui.getSoundVolume());
+
+    if (ui.getState() == GameState::RoundSummary) {
+        return;
+    }
     
     // Handle game over state
     if (gameOver) {
@@ -1342,9 +1393,13 @@ void Game::update(float dt) {
             // Back to menu
             ui.setState(GameState::Menu);
             gameOver = false;
+            roundSummaryLeadsToGameOver = false;
+            roundSummaryPassed = false;
             pendingGameOverFromScore = false;
             postScorePauseTimer = 0.0f;
             pendingReset = false;
+            xtremeLastRoundScoreProgress = 0;
+            xtremeLastRoundTargetProgress = 0;
             equipBall(BallType::Normal);
             activeItems.resetAll();
             ui.resetEquippedBall();
@@ -1354,13 +1409,18 @@ void Game::update(float dt) {
         if (nowR && !prevR) {
             if (ui.getState() == GameState::Xtreme) {
                 xtreme.reset();
+                xtremeRoundStartTokens = xtreme.getTokens();
             } else {
                 scorer.resetGame();
             }
             gameOver = false;
+            roundSummaryLeadsToGameOver = false;
+            roundSummaryPassed = false;
             pendingGameOverFromScore = false;
             postScorePauseTimer = 0.0f;
             pendingReset = false;
+            xtremeLastRoundScoreProgress = 0;
+            xtremeLastRoundTargetProgress = 0;
             equipBall(BallType::Normal);
             activeItems.resetAll();
             ui.resetEquippedBall();
@@ -1462,13 +1522,18 @@ void Game::update(float dt) {
     if (nowR && !prevR) {
         if (ui.getState() == GameState::Xtreme) {
             xtreme.reset();
+            xtremeRoundStartTokens = xtreme.getTokens();
         } else {
             scorer.resetGame();
         }
         gameOver = false;
+        roundSummaryLeadsToGameOver = false;
+        roundSummaryPassed = false;
         pendingGameOverFromScore = false;
         postScorePauseTimer = 0.0f;
         pendingReset = false;
+        xtremeLastRoundScoreProgress = 0;
+        xtremeLastRoundTargetProgress = 0;
         equipBall(BallType::Normal);
         activeItems.resetAll();
         ui.resetEquippedBall();
@@ -1601,7 +1666,7 @@ void Game::draw() {
     for (const auto& pin : pins) pin.draw(window);
 
     // Draw aim line
-    if (!rollLocked && !pendingReset) {
+    if (!rollLocked && !pendingReset && ui.getState() != GameState::RoundSummary) {
         float a = degToRad(aimDeg);
         sf::Vector2f dir(std::cos(a), std::sin(a));
         sf::Vertex line[2] = { 
@@ -1632,9 +1697,24 @@ void Game::draw() {
             windowH,
             activeItems
         );
-    } else {
+    } else if (ui.getState() == GameState::Playing) {
         action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),
                          scorer.getCurrentBall(), normalHighScore, windowW, windowH);
+    }
+
+    if (ui.getState() == GameState::RoundSummary) {
+        ui.drawRoundSummaryPopup(
+            window,
+            roundSummaryRoundNumber,
+            roundSummaryScore,
+            roundSummaryTarget,
+            roundSummaryTokensEarned,
+            roundSummaryTokensTotal,
+            roundSummaryPassed,
+            roundSummaryLeadsToGameOver,
+            windowW,
+            windowH
+        );
     }
     
     if (gameOver) {
@@ -1644,7 +1724,9 @@ void Game::draw() {
                 finalXtremeRoundsCleared,
                 xtremeBestRound,
                 windowW,
-                windowH);
+                windowH,
+                xtremeLastRoundScoreProgress,
+                xtremeLastRoundTargetProgress);
         } else {
             ui.drawGameOverScreen(window,
                 GameOverMode::NormalBowling,
@@ -1661,8 +1743,13 @@ void Game::draw() {
         scorer.resetGame();
         xtreme.reset();
         xtremeMode = false;
+        roundSummaryLeadsToGameOver = false;
+        roundSummaryPassed = false;
         pendingGameOverFromScore = false;
         postScorePauseTimer = 0.0f;
+        xtremeLastRoundScoreProgress = 0;
+        xtremeLastRoundTargetProgress = 0;
+        xtremeRoundStartTokens = xtreme.getTokens();
         equipBall(BallType::Normal);
         activeItems.resetAll();
         ui.resetEquippedBall();
