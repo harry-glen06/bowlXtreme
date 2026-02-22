@@ -113,7 +113,10 @@ public:
                              float windowH,
                              const ActiveItems& items,
                              const std::string& pinPowerHintLine1,
-                             const std::string& pinPowerHintLine2);
+                             const std::string& pinPowerHintLine2,
+                             bool useLiveFormulaPreview,
+                             int liveImpactPreview,
+                             int liveComboPreview);
     
     void drawGameOverScreen(sf::RenderWindow& window,
                            GameOverMode mode,

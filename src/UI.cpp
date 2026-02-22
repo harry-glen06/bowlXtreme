@@ -684,7 +684,10 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              float windowH,
                              const ActiveItems& items,
                              const std::string& pinPowerHintLine1,
-                             const std::string& pinPowerHintLine2) {
+                             const std::string& pinPowerHintLine2,
+                             bool useLiveFormulaPreview,
+                             int liveImpactPreview,
+                             int liveComboPreview) {
     if (!fontLoaded) return GameAction::None;
     if (state != GameState::Xtreme) return GameAction::None;
 
@@ -808,6 +811,10 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
 
     int shownImpact = std::max(10, (int)std::round(hudImpactValue));
     int shownCombo = std::max(1, (int)std::round(hudComboValue));
+    if (useLiveFormulaPreview) {
+        shownImpact = std::max(10, liveImpactPreview);
+        shownCombo = std::max(1, liveComboPreview);
+    }
     sf::Text big(font, std::to_string(shownImpact) + " X " + std::to_string(shownCombo), 56);
     big.setPosition(sf::Vector2f(lx, y));
     big.setFillColor(sf::Color(120, 240, 255));
@@ -1207,6 +1214,7 @@ static std::string powerShortName(PowerType t) {
         case PowerType::Sales:               return "Sales";
         case PowerType::PassedGo:            return "Passed Go";
         case PowerType::MoMoney:             return "Mo Money";
+        case PowerType::ExtraPowerSlot:      return "Extra Slot";
         default:                             return "Power";
     }
 }
@@ -1349,7 +1357,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         iy += 8.f;
     }
 
-    const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+    const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
     std::vector<int> counts(powerCount, 0);
     for (int raw : items.purchasedPowers) {
         if (raw >= 0 && raw < powerCount) counts[raw]++;
@@ -1373,6 +1381,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     forceOwned(PowerType::Sales, items.powerSales);
     forceOwned(PowerType::PassedGo, items.powerPassedGo);
     forceOwned(PowerType::MoMoney, items.powerMoMoney);
+    forceOwned(PowerType::ExtraPowerSlot, items.powerExtraPowerSlot);
 
     counts[(int)PowerType::Duplicate] = items.duplicateCharges;
     counts[(int)PowerType::SwapPins] = items.swapCharges;
@@ -1630,12 +1639,14 @@ static int shoeTypeCost(ShoeType t);
 static int powerTypeCost(PowerType t);
 
 static std::vector<PowerType> buildSellablePowerList(const ActiveItems& items) {
-    const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+    const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
     std::vector<int> remaining(powerCount, 0);
 
     for (int p = 0; p < powerCount; p++) {
         PowerType t = static_cast<PowerType>(p);
         if (!items.hasPower(t)) continue;
+        // Extra Slot is one-time and cannot be sold in-run.
+        if (t == PowerType::ExtraPowerSlot) continue;
         if (t == PowerType::Duplicate) {
             remaining[p] = std::max(0, items.duplicateCharges);
         } else if (t == PowerType::SwapPins) {
@@ -1864,7 +1875,7 @@ static std::string ballTypeDesc(BallType t) {
         case BallType::Upgrade:    return "Each pin hit gains\n+1 value. 10% lighter,\n5% faster.";
         case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
         case BallType::Fastball:   return "5% lighter, 15% faster.";
-        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.5 score.";
+        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.75 score.";
         case BallType::EightBall:  return "All pins worth 8.";
         case BallType::Retrigger:  return "2nd pin hit scores 3x.";
         default:                   return "A standard bowling ball.";
@@ -1928,6 +1939,7 @@ static int powerTypeCost(PowerType t) {
         case PowerType::Sales:               return 4;
         case PowerType::PassedGo:            return 4;
         case PowerType::MoMoney:             return 4;
+        case PowerType::ExtraPowerSlot:      return 4;
         default:                             return 0;
     }
 }
@@ -1943,12 +1955,14 @@ static bool powerIsStackable(PowerType t) {
 }
 
 static bool powerCountsTowardLimit(PowerType t) {
-    return !powerIsStackable(t);
+    if (powerIsStackable(t)) return false;
+    if (t == PowerType::ExtraPowerSlot) return false;
+    return true;
 }
 
 static int ownedPermanentPowerCount(const ActiveItems& items) {
     int count = 0;
-    for (int i = 0; i <= (int)PowerType::MoMoney; i++) {
+    for (int i = 0; i <= (int)PowerType::ExtraPowerSlot; i++) {
         PowerType p = static_cast<PowerType>(i);
         if (!powerCountsTowardLimit(p)) continue;
         if (items.hasPower(p) || items.hasPurchasedPower(p)) {
@@ -1981,6 +1995,7 @@ static sf::Color powerPreviewColor(PowerType t) {
         case PowerType::Sales:               return {120, 255, 120};
         case PowerType::PassedGo:            return {255, 240, 120};
         case PowerType::MoMoney:             return {255, 200, 70};
+        case PowerType::ExtraPowerSlot:      return {255, 175, 110};
         default:                             return {200, 200, 200};
     }
 }
@@ -2012,7 +2027,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Ball, BallType::Fastball, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Fastball",     "5% lighter.\n15% faster.",                           2},
         {ShopItemCategory::Ball, BallType::OddBall, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Odd Ball",     "Odd pins x2.\nEven pins x0.5.",                      3},
+         "Odd Ball",     "Odd pins x2.\nEven pins x0.75.",                     3},
         {ShopItemCategory::Ball, BallType::EightBall, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "8-Ball",       "All pins worth 8.",                                   4},
         {ShopItemCategory::Ball, BallType::Retrigger, PinType::Normal, ShoeType::None, PowerType::Greedy,
@@ -2049,7 +2064,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "Steel Caps",   "Pins cannot change\nduring a round.",                4},
         // Powers
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Greedy",       "Gain +1 combo for\nevery 6 dollars.",                5},
+         "Greedy",       "Gain +1 combo for\nevery 4 dollars.",                5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::RandomUpgrade,
          "Random Upgrade","After each frame,\na random pin gains +1 value.",    3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
@@ -2078,6 +2093,8 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "Passed Go",    "Round clears pay\n3 more dollars.",                   4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::MoMoney,
          "Mo Money",     "Interest every 2\ndollars, not 3.",                   4},
+        {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPowerSlot,
+         "Extra Slot",   "One-time:\nmax power slots 4 -> 5.",                  4},
     };
 
     auto hasOwnedPower = [&](PowerType p) {
@@ -2304,7 +2321,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
             isOwned = items.hasPower(offer.powerType) || items.hasPurchasedPower(offer.powerType);
         }
 
-        const int maxPermanentPowers = 4;
+        const int maxPermanentPowers = items.getMaxPermanentPowerSlots();
         bool powerLimitBlocked = isPower && !isOwned &&
                                  !canBuyPowerWithLimit(items, offer.powerType, maxPermanentPowers);
 
@@ -2445,7 +2462,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
             if (isBall || isShoe) btnLabel = "EQUIPPED";
             else btnLabel = "OWNED";
         } else if (powerLimitBlocked) {
-            btnLabel = "Power limit (4)";
+            btnLabel = "Power limit (" + std::to_string(maxPermanentPowers) + ")";
         } else if (pinLimitBlocked) {
             btnLabel = "Pin limit reached";
         } else if (canAfford) {
@@ -2559,7 +2576,7 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     }
 
     ShopCardLayout cardLayout = computeShopCardLayout(windowW, layout, shopOffers.size());
-    const int maxPermanentPowers = 4;
+    const int maxPermanentPowers = items.getMaxPermanentPowerSlots();
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         int row = i / cardLayout.cardsPerRow;

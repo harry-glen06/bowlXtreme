@@ -8,6 +8,10 @@
 #include <algorithm>
 #include <fstream>
 
+namespace {
+constexpr float kHomeBaseComboBonusCap = 8.0f;
+}
+
 Game::Game()
 : window(sf::VideoMode(sf::Vector2u((unsigned)windowW, (unsigned)windowH)), "Bowling Prototype")
 , ball(25.0f)
@@ -383,6 +387,12 @@ void Game::handleEvents() {
                         return p == PowerType::Duplicate || p == PowerType::SwapPins;
                     };
 
+                    auto powerCountsTowardLimit = [&](PowerType p) {
+                        if (isStackablePower(p)) return false;
+                        if (p == PowerType::ExtraPowerSlot) return false;
+                        return true;
+                    };
+
                     auto pinTypeCost = [](PinType t) {
                         switch (t) {
                             case PinType::Gold:        return 2;
@@ -440,15 +450,16 @@ void Game::handleEvents() {
                             case PowerType::Sales:               return 4;
                             case PowerType::PassedGo:            return 4;
                             case PowerType::MoMoney:             return 4;
+                            case PowerType::ExtraPowerSlot:      return 4;
                             default:                             return 0;
                         }
                     };
 
                     auto ownedPermanentPowerCount = [&]() {
                         int count = 0;
-                        for (int i = 0; i <= (int)PowerType::MoMoney; i++) {
+                        for (int i = 0; i <= (int)PowerType::ExtraPowerSlot; i++) {
                             PowerType p = static_cast<PowerType>(i);
-                            if (isStackablePower(p)) continue;
+                            if (!powerCountsTowardLimit(p)) continue;
                             if (activeItems.hasPower(p) || activeItems.hasPurchasedPower(p)) {
                                 count++;
                             }
@@ -466,16 +477,19 @@ void Game::handleEvents() {
                         xtreme.setExtraBallEnabled(hasExtraBall);
                         xtreme.setPowerPassedGo(hasPassedGo);
                         xtreme.setPowerMoMoney(hasMoMoney);
-                        xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
+                        float clampedBonus = std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
+                        xtreme.setBaseCombo(1.0f + clampedBonus);
                         if (activeItems.powerBumpers) lane.bumpersOn = true;
                     };
 
                     auto buildSellablePowerList = [&]() {
-                        const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
+                        const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
                         std::vector<int> remaining(powerCount, 0);
                         for (int i = 0; i < powerCount; i++) {
                             PowerType p = static_cast<PowerType>(i);
                             if (!activeItems.hasPower(p)) continue;
+                            // Extra Slot is a one-time unlock and not sellable.
+                            if (p == PowerType::ExtraPowerSlot) continue;
                             if (p == PowerType::Duplicate) {
                                 remaining[i] = std::max(0, activeItems.duplicateCharges);
                             } else if (p == PowerType::SwapPins) {
@@ -582,6 +596,9 @@ void Game::handleEvents() {
                                 erasePowerRecord(PowerType::MoMoney, true);
                                 sold = true;
                                 break;
+                            case PowerType::ExtraPowerSlot:
+                                // One-time power: no selling once purchased.
+                                break;
                         }
                         if (sold) {
                             int sellValue = powerTypeCost(p) / 2;
@@ -663,13 +680,13 @@ void Game::handleEvents() {
                             }
                         }
                         if (offer.category == ShopItemCategory::Power) {
-                            const int maxPermanentPowers = 4;
+                            const int maxPermanentPowers = activeItems.getMaxPermanentPowerSlots();
                             bool alreadyOwned = activeItems.hasPower(offer.powerType) ||
                                                 activeItems.hasPurchasedPower(offer.powerType);
                             if (!isStackablePower(offer.powerType) && alreadyOwned) {
                                 canBuy = false;
                             }
-                            if (!isStackablePower(offer.powerType) &&
+                            if (powerCountsTowardLimit(offer.powerType) &&
                                 !alreadyOwned &&
                                 ownedPermanentPowerCount() >= maxPermanentPowers) {
                                 canBuy = false;
@@ -780,7 +797,8 @@ void Game::resetBall() {
         xtreme.setExtraBallEnabled(hasExtraBall);
         xtreme.setPowerPassedGo(hasPassedGo);
         xtreme.setPowerMoMoney(hasMoMoney);
-                        xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
+        float clampedBonus = std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
+        xtreme.setBaseCombo(1.0f + clampedBonus);
     }
     if (activeItems.powerBumpers) {
         lane.bumpersOn = true;
@@ -845,7 +863,9 @@ int Game::computePinValueWithItems(int pinIndex) const {
     int val = pins[pinIndex].getValue();
     switch (activeItems.ballType) {
         case BallType::EightBall: val = 8; break;
-        case BallType::OddBall: val = (val % 2 != 0) ? val * 2 : val / 2; break;
+        case BallType::OddBall:
+            val = (val % 2 != 0) ? (val * 2) : std::max(1, (val * 3 + 2) / 4);
+            break;
         default: break;
     }
     return val;
@@ -908,6 +928,13 @@ void Game::prepareNewShot() {
 
 void Game::startPendingReset() {
     pendingReset = true;
+    pendingShotScored = false;
+    pendingScoreVisualTimer = 0.0f;
+    pendingScoreVisualDuration = 0.0f;
+    pendingPhysicalPinsDownThisShot = 0;
+    pendingStrikeThisShot = false;
+    pendingRoundScoreBeforeShot = 0;
+    pendingTargetBeforeShot = 0;
     resetTimer = 0.0f;
     shotRollTimer = 0.0f;
     backlineJamTimer = 0.0f;
@@ -917,150 +944,180 @@ void Game::startPendingReset() {
 void Game::finishPendingResetIfReady(float dt) {
     if (!pendingReset) return;
 
-    resetTimer += dt;
+    if (!pendingShotScored) {
+        resetTimer += dt;
 
-    bool pinsStill = true;
-    for (const auto& pin : pins) {
-        if (!pin.isActive()) continue;
-        if (length(pin.getVel()) > pinsStillSpeed) {
-            pinsStill = false;
-            break;
+        bool pinsStill = true;
+        for (const auto& pin : pins) {
+            if (!pin.isActive()) continue;
+            if (length(pin.getVel()) > pinsStillSpeed) {
+                pinsStill = false;
+                break;
+            }
         }
-    }
 
-    bool ready = (pinsStill && resetTimer >= endBuffer) || (resetTimer >= maxResetWait);
-    if (!ready) return;
+        bool ready = (pinsStill && resetTimer >= endBuffer) || (resetTimer >= maxResetWait);
+        if (!ready) return;
 
-    // Count pins knocked THIS ball and apply item modifiers
-    int knockedThisBall = 0;
-    std::vector<int> hitPinIndices;
-    for (int i = 0; i < (int)pins.size(); i++) {
-        if (!pins[i].isActive()) continue;
-        if (pins[i].isFallen()) {
-            knockedThisBall++;
-            hitPinIndices.push_back(i);
-        }
-    }
-    int physicalPinsDownThisShot = knockedThisBall;
-    int shotBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getShotInFrame() : 0;
-    int roundScoreBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getRoundScore() : 0;
-    int targetBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getTargetScore() : 0;
-    bool earthquakeStrikeThisShot = false;
-
-    if (ui.getState() == GameState::Xtreme && activeItems.powerEarthquake) {
-        activeItems.earthquakeShotCounter++;
-        if (activeItems.earthquakeShotCounter >= 10) {
-            activeItems.earthquakeShotCounter = 0;
-            earthquakeStrikeThisShot = true;
-
-            // Force remaining standing pins down and count them in this shot.
-            for (int i = 0; i < (int)pins.size(); i++) {
-                if (!pins[i].isActive() || pins[i].isFallen()) continue;
-                pins[i].setFallen(true);
+        // Count pins knocked THIS ball and apply item modifiers
+        int knockedThisBall = 0;
+        std::vector<int> hitPinIndices;
+        for (int i = 0; i < (int)pins.size(); i++) {
+            if (!pins[i].isActive()) continue;
+            if (pins[i].isFallen()) {
+                knockedThisBall++;
                 hitPinIndices.push_back(i);
-                physicalPinsDownThisShot++;
-            }
-            knockedThisBall = physicalPinsDownThisShot;
-        }
-    }
-
-    // ── Special pin effects at score time ────────────────────────────────────
-
-    // Gold pins: +1 token each when knocked
-    for (int idx : hitPinIndices) {
-        if (pins[idx].getPinType() == PinType::Gold) {
-            xtreme.addTokens(1);
-        }
-    }
-
-    // ThirdTime: track total ThirdTime knocks across the run.
-    // Every 3rd ThirdTime knock grants one combo doubling.
-    for (int idx : hitPinIndices) {
-        if (pins[idx].getPinType() == PinType::ThirdTime) {
-            activeItems.thirdTimeGlobalKnocks++;
-            if (activeItems.thirdTimeGlobalKnocks % 3 == 0) {
-                activeItems.thirdTimeComboBonus += 1; // one extra combo doubling
             }
         }
-    }
+        int physicalPinsDownThisShot = knockedThisBall;
+        int shotBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getShotInFrame() : 0;
+        int roundScoreBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getRoundScore() : 0;
+        int targetBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getTargetScore() : 0;
+        bool earthquakeStrikeThisShot = false;
 
-    // CopyCat: already resolved in doCollisions (type changed on first hit)
+        if (ui.getState() == GameState::Xtreme && activeItems.powerEarthquake) {
+            activeItems.earthquakeShotCounter++;
+            if (activeItems.earthquakeShotCounter >= 10) {
+                activeItems.earthquakeShotCounter = 0;
+                earthquakeStrikeThisShot = true;
 
-    // Compute value sum with ball item effects + pin effects
-    int pinValueSumThisBall = computePinValueSumWithItems(hitPinIndices);
-
-    // LuckyDucky: if luckyZero, subtract that pin's value contribution only.
-    // It still counts as a physically knocked pin for combo/strike handling.
-    for (int idx : hitPinIndices) {
-        if (pins[idx].getPinType() == PinType::LuckyDucky && pins[idx].isLuckyZero()) {
-            pinValueSumThisBall -= computePinValueWithItems(idx);
+                // Force remaining standing pins down and count them in this shot.
+                for (int i = 0; i < (int)pins.size(); i++) {
+                    if (!pins[i].isActive() || pins[i].isFallen()) continue;
+                    pins[i].setFallen(true);
+                    hitPinIndices.push_back(i);
+                    physicalPinsDownThisShot++;
+                }
+                knockedThisBall = physicalPinsDownThisShot;
+            }
         }
-    }
-    if (pinValueSumThisBall < 0) pinValueSumThisBall = 0;
 
-    int greedyComboBonus = 0;
-    if (ui.getState() == GameState::Xtreme && activeItems.powerGreedy) {
-        greedyComboBonus = std::max(0, xtreme.getTokens() / 6);
-    }
-
-    // Midas ball: gold-marked pins grant +1 token each
-    if (activeItems.ballType == BallType::Midas) {
-        for (int idx : activeItems.goldPinIndices) {
-            if (pins[idx].isFallen() && pins[idx].getPinType() != PinType::Gold) {
+        // ── Special pin effects at score time ────────────────────────────────
+        for (int idx : hitPinIndices) {
+            if (pins[idx].getPinType() == PinType::Gold) {
                 xtreme.addTokens(1);
             }
         }
-        activeItems.goldPinIndices.clear();
-    }
 
-    int thirdTimeComboMultiplier = 1;
-    if (activeItems.thirdTimeComboBonus > 0 && knockedThisBall > 0) {
-        int doublings = std::min(activeItems.thirdTimeComboBonus, 4); // cap at x16
-        thirdTimeComboMultiplier = (1 << doublings);
-    }
-
-    // Gutter ball
-    if (inGutter && knockedThisBall == 0) {
-        knockedThisBall = 0;
-    }
-
-    // Record score
-    bool strikeThisShot = false;
-    if (ui.getState() == GameState::Xtreme) {
-        // shotBeforeRecord is intentionally captured before recordShot(),
-        // because recordShot advances the internal shot counter.
-        strikeThisShot = (shotBeforeRecord == 1 &&
-                          physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
-        bool spareThisShot = (shotBeforeRecord > 1 &&
-                              physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
-        if (activeItems.powerConfusion && spareThisShot) {
-            strikeThisShot = true;
-        }
-        if (earthquakeStrikeThisShot) {
-            strikeThisShot = true;
-        }
-        xtreme.recordShot(
-            knockedThisBall,
-            pinValueSumThisBall,
-            strikeThisShot,
-            static_cast<float>(thirdTimeComboMultiplier),
-            greedyComboBonus);
-
-        if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
-            activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
-            while (activeItems.homeBasePinsTowardNextCombo >= 20) {
-                activeItems.homeBasePinsTowardNextCombo -= 20;
-                activeItems.homeBaseComboBonus += 1.0f;
+        for (int idx : hitPinIndices) {
+            if (pins[idx].getPinType() == PinType::ThirdTime) {
+                activeItems.thirdTimeGlobalKnocks++;
+                if (activeItems.thirdTimeGlobalKnocks % 3 == 0) {
+                    activeItems.thirdTimeComboBonus += 1; // one extra combo doubling
+                }
             }
-            xtreme.setBaseCombo(1.0f + activeItems.homeBaseComboBonus);
         }
 
-        // Random upgrade applies once after each completed frame.
-        if (xtreme.getShotInFrame() == 1 && activeItems.powerRandomUpgrade) {
-            activeItems.pendingRandomPinUpgrades += 1;
+        int pinValueSumThisBall = computePinValueSumWithItems(hitPinIndices);
+        for (int idx : hitPinIndices) {
+            if (pins[idx].getPinType() == PinType::LuckyDucky && pins[idx].isLuckyZero()) {
+                pinValueSumThisBall -= computePinValueWithItems(idx);
+            }
+        }
+        if (pinValueSumThisBall < 0) pinValueSumThisBall = 0;
+
+        int greedyComboBonus = 0;
+        if (ui.getState() == GameState::Xtreme && activeItems.powerGreedy) {
+            greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
+        }
+
+        if (activeItems.ballType == BallType::Midas) {
+            for (int idx : activeItems.goldPinIndices) {
+                if (pins[idx].isFallen() && pins[idx].getPinType() != PinType::Gold) {
+                    xtreme.addTokens(1);
+                }
+            }
+            activeItems.goldPinIndices.clear();
+        }
+
+        int thirdTimeComboMultiplier = 1;
+        if (activeItems.thirdTimeComboBonus > 0 && knockedThisBall > 0) {
+            int doublings = std::min(activeItems.thirdTimeComboBonus, 4); // cap at x16
+            thirdTimeComboMultiplier = (1 << doublings);
+        }
+
+        if (inGutter && knockedThisBall == 0) {
+            knockedThisBall = 0;
+        }
+
+        bool strikeThisShot = false;
+        if (ui.getState() == GameState::Xtreme) {
+            // shotBeforeRecord is intentionally captured before recordShot(),
+            // because recordShot advances the internal shot counter.
+            strikeThisShot = (shotBeforeRecord == 1 &&
+                              physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+            bool spareThisShot = (shotBeforeRecord > 1 &&
+                                  physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+            if (activeItems.powerConfusion && spareThisShot) {
+                strikeThisShot = true;
+            }
+            if (earthquakeStrikeThisShot) {
+                strikeThisShot = true;
+            }
+            xtreme.recordShot(
+                knockedThisBall,
+                pinValueSumThisBall,
+                strikeThisShot,
+                static_cast<float>(thirdTimeComboMultiplier),
+                greedyComboBonus);
+
+            if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
+                activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
+                while (activeItems.homeBasePinsTowardNextCombo >= 20) {
+                    activeItems.homeBasePinsTowardNextCombo -= 20;
+                    if (activeItems.homeBaseComboBonus < kHomeBaseComboBonusCap) {
+                        activeItems.homeBaseComboBonus =
+                            std::min(kHomeBaseComboBonusCap, activeItems.homeBaseComboBonus + 1.0f);
+                    }
+                }
+                float clampedBonus = std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
+                xtreme.setBaseCombo(1.0f + clampedBonus);
+            }
+
+            // Random upgrade applies once after each completed frame.
+            if (xtreme.getShotInFrame() == 1 && activeItems.powerRandomUpgrade) {
+                activeItems.pendingRandomPinUpgrades += 1;
+            }
+        } else {
+            scorer.recordBall(knockedThisBall);
+        }
+
+        pendingPhysicalPinsDownThisShot = physicalPinsDownThisShot;
+        pendingStrikeThisShot = strikeThisShot;
+        pendingRoundScoreBeforeShot = roundScoreBeforeShot;
+        pendingTargetBeforeShot = targetBeforeShot;
+        pendingShotScored = true;
+        pendingScoreVisualTimer = 0.0f;
+        pendingScoreVisualDuration = 0.0f;
+
+        if (ui.getState() == GameState::Xtreme) {
+            // Keep shot/frame transitions waiting until the HUD scoring animation finishes.
+            int impactTarget = std::max(10, xtreme.getLastImpact());
+            int comboTarget = std::max(1, xtreme.getLastCombo());
+            int shotTarget = std::max(0, xtreme.getLastShotScore());
+            int formulaDelta = (impactTarget - 10) + (comboTarget - 1) * 3;
+            float formulaDuration = std::clamp(0.25f + (float)formulaDelta * 0.02f, 0.25f, 0.75f);
+            float countDuration = std::clamp(0.30f + (float)shotTarget / 320.0f, 0.30f, 1.10f);
+            float bigDuration = (shotTarget > 0) ? 0.9f : 0.0f;
+            pendingScoreVisualDuration = formulaDuration + countDuration + bigDuration + 0.05f;
+
+            // Freeze motion while score animation is shown.
+            ball.stop();
+            for (auto& pin : pins) {
+                if (!pin.isActive()) continue;
+                pin.setVel({0.0f, 0.0f});
+                pin.setAngularVel(0.0f);
+            }
+        }
+
+        if (pendingScoreVisualDuration > 0.0f) {
+            return;
         }
     } else {
-        scorer.recordBall(knockedThisBall);
+        pendingScoreVisualTimer += dt;
+        if (pendingScoreVisualTimer < pendingScoreVisualDuration) {
+            return;
+        }
     }
 
     // Handle pin resets based on game state
@@ -1068,8 +1125,8 @@ void Game::finishPendingResetIfReady(float dt) {
         if (xtreme.getShotInFrame() > 1) {
             // Keep frame progression shot-based. After a strike (or full clear),
             // rerack for the next shot in the same frame.
-            bool rackCleared = (physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
-            bool shouldRerack = strikeThisShot || rackCleared;
+            bool rackCleared = (pendingPhysicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+            bool shouldRerack = pendingStrikeThisShot || rackCleared;
             if (shouldRerack) {
                 pins = createPins(lane.centerX(), 240.0f);
                 applyPurchasedPinTypes(pins);
@@ -1176,8 +1233,8 @@ void Game::finishPendingResetIfReady(float dt) {
     if (ui.getState() == GameState::Xtreme) {
         if (xtreme.isGameOver()) {
             finalXtremeRoundsCleared = std::max(0, xtreme.getRound() - 1);
-            xtremeLastRoundScoreProgress = roundScoreBeforeShot + xtreme.getLastShotScore();
-            xtremeLastRoundTargetProgress = targetBeforeShot;
+            xtremeLastRoundScoreProgress = pendingRoundScoreBeforeShot + xtreme.getLastShotScore();
+            xtremeLastRoundTargetProgress = pendingTargetBeforeShot;
             roundSummaryRoundNumber = xtreme.getRound();
             roundSummaryScore = xtremeLastRoundScoreProgress;
             roundSummaryTarget = xtremeLastRoundTargetProgress;
@@ -1195,8 +1252,8 @@ void Game::finishPendingResetIfReady(float dt) {
                 saveHighScore();
             }
         } else if (xtreme.isShopReady()) {
-            xtremeLastRoundScoreProgress = roundScoreBeforeShot + xtreme.getLastShotScore();
-            xtremeLastRoundTargetProgress = targetBeforeShot;
+            xtremeLastRoundScoreProgress = pendingRoundScoreBeforeShot + xtreme.getLastShotScore();
+            xtremeLastRoundTargetProgress = pendingTargetBeforeShot;
             roundSummaryRoundNumber = std::max(1, xtreme.getRound() - 1);
             roundSummaryScore = xtremeLastRoundScoreProgress;
             roundSummaryTarget = xtremeLastRoundTargetProgress;
@@ -1225,6 +1282,13 @@ void Game::finishPendingResetIfReady(float dt) {
 
     resetBall();
     pendingReset = false;
+    pendingShotScored = false;
+    pendingScoreVisualTimer = 0.0f;
+    pendingScoreVisualDuration = 0.0f;
+    pendingPhysicalPinsDownThisShot = 0;
+    pendingStrikeThisShot = false;
+    pendingRoundScoreBeforeShot = 0;
+    pendingTargetBeforeShot = 0;
     if (needsPostScorePause && ui.getState() != GameState::RoundSummary) {
         postScorePauseTimer = pendingGameOverFromScore
             ? postScorePauseDurationGameOver
@@ -1750,6 +1814,7 @@ void Game::update(float dt) {
     finishPendingResetIfReady(dt);
 
     if (postScorePauseTimer <= 0.0f &&
+        !pendingReset &&
         !pendingGameOverFromScore &&
         ui.getState() == GameState::Xtreme &&
         xtreme.isShopReady()) {
@@ -1827,7 +1892,42 @@ void Game::draw() {
     GameAction action = GameAction::None;
     std::string pinPowerHintLine1;
     std::string pinPowerHintLine2;
+    bool useLiveFormulaPreview = false;
+    int liveImpactPreview = xtreme.getLastImpact();
+    int liveComboPreview = xtreme.getLastCombo();
+    int displayedRoundScore = xtreme.getRoundScore();
     if (ui.getState() == GameState::Xtreme) {
+        if (rollLocked || pendingReset) {
+            useLiveFormulaPreview = true;
+
+            std::vector<int> liveHitIndices;
+            liveHitIndices.reserve(pins.size());
+            for (int i = 0; i < (int)pins.size(); i++) {
+                if (!pins[i].isActive()) continue;
+                if (pins[i].isFallen()) liveHitIndices.push_back(i);
+            }
+            int livePinsHit = static_cast<int>(liveHitIndices.size());
+            int livePinValueSum = computePinValueSumWithItems(liveHitIndices);
+            for (int idx : liveHitIndices) {
+                if (pins[idx].getPinType() == PinType::LuckyDucky && pins[idx].isLuckyZero()) {
+                    livePinValueSum -= computePinValueWithItems(idx);
+                }
+            }
+            if (livePinValueSum < 0) livePinValueSum = 0;
+
+            int greedyComboBonus = 0;
+            if (activeItems.powerGreedy) greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
+            float liveBaseCombo = 1.0f + std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
+            float liveComboValue = static_cast<float>(livePinsHit + greedyComboBonus) + liveBaseCombo;
+
+            liveImpactPreview = 10 + livePinValueSum;
+            liveComboPreview = std::max(1, static_cast<int>(std::lround(liveComboValue)));
+        }
+        if (pendingReset && pendingShotScored &&
+            pendingScoreVisualTimer < pendingScoreVisualDuration) {
+            displayedRoundScore = pendingRoundScoreBeforeShot;
+        }
+
         if (activeItems.duplicateCharges > 0 || activeItems.swapCharges > 0) {
             pinPowerHintLine1 = "N Duplicate(" + std::to_string(activeItems.duplicateCharges) +
                                 ")   V Swap(" + std::to_string(activeItems.swapCharges) + ")";
@@ -1858,7 +1958,7 @@ void Game::draw() {
             xtreme.getShotInFrame(),
             xtreme.getTotalShots(),
             xtreme.getTargetScore(),
-            xtreme.getRoundScore(),
+            displayedRoundScore,
             xtreme.getTokens(),
             xtreme.getLastImpact(),
             xtreme.getLastCombo(),
@@ -1867,7 +1967,10 @@ void Game::draw() {
             windowH,
             activeItems,
             pinPowerHintLine1,
-            pinPowerHintLine2
+            pinPowerHintLine2,
+            useLiveFormulaPreview,
+            liveImpactPreview,
+            liveComboPreview
         );
     } else if (ui.getState() == GameState::Playing) {
         action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),

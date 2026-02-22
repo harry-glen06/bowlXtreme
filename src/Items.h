@@ -41,6 +41,7 @@ enum class PowerType {
     Sales,
     PassedGo,
     MoMoney,
+    ExtraPowerSlot,
 };
 
 struct ActiveItems {
@@ -79,6 +80,7 @@ struct ActiveItems {
     bool powerSales = false;
     bool powerPassedGo = false;
     bool powerMoMoney = false;
+    bool powerExtraPowerSlot = false;
     bool clownBonusClaimed = false;
 
     int duplicateCharges = 0;
@@ -144,6 +146,7 @@ struct ActiveItems {
         powerSales = false;
         powerPassedGo = false;
         powerMoMoney = false;
+        powerExtraPowerSlot = false;
         clownBonusClaimed = false;
 
         duplicateCharges = 0;
@@ -176,6 +179,11 @@ struct ActiveItems {
 
     int getActivePinSlotCount() const {
         return activePinSlotCount;
+    }
+
+    int getMaxPermanentPowerSlots() const {
+        bool hasBonus = powerExtraPowerSlot || hasPurchasedPower(PowerType::ExtraPowerSlot);
+        return hasBonus ? 5 : 4;
     }
 
     int findPinAssignmentIndexBySlot(int slot) const {
@@ -304,6 +312,7 @@ struct ActiveItems {
             case PowerType::Sales:              return powerSales;
             case PowerType::PassedGo:           return powerPassedGo;
             case PowerType::MoMoney:            return powerMoMoney;
+            case PowerType::ExtraPowerSlot:     return powerExtraPowerSlot;
             default:                            return false;
         }
     }
@@ -329,6 +338,7 @@ struct ActiveItems {
             case PowerType::Sales:              powerSales = true; break;
             case PowerType::PassedGo:           powerPassedGo = true; break;
             case PowerType::MoMoney:            powerMoMoney = true; break;
+            case PowerType::ExtraPowerSlot:     powerExtraPowerSlot = true; break;
             default: break;
         }
     }

@@ -2,6 +2,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <algorithm>
+#include <array>
+#include <cstdint>
 
 static float length(sf::Vector2f v) {
     return std::sqrt(v.x*v.x + v.y*v.y);
@@ -168,62 +170,70 @@ static void drawPinShape(sf::RenderWindow& window, sf::RenderStates st,
                           bool drawStripes, sf::Color stripeColor,
                           bool drawBase,  sf::Color baseColor)
 {
-    struct Slice { float y; float halfW; };
-    static const Slice slices[] = {
-        {-H*.58f,maxW*.127f},{-H*.56f,maxW*.165f},{-H*.54f,maxW*.200f},
-        {-H*.52f,maxW*.235f},{-H*.50f,maxW*.270f},{-H*.48f,maxW*.295f},
-        {-H*.46f,maxW*.315f},{-H*.44f,maxW*.330f},{-H*.42f,maxW*.340f},
-        {-H*.40f,maxW*.345f},{-H*.38f,maxW*.360f},{-H*.36f,maxW*.385f},
-        {-H*.34f,maxW*.420f},{-H*.32f,maxW*.470f},{-H*.30f,maxW*.535f},
-        {-H*.28f,maxW*.610f},{-H*.26f,maxW*.690f},{-H*.24f,maxW*.780f},
-        {-H*.22f,maxW*.870f},{-H*.20f,maxW*.950f},{-H*.18f,maxW*.990f},
-        {-H*.16f,maxW*1.00f},{-H*.14f,maxW*1.00f},{-H*.12f,maxW*.995f},
-        {-H*.10f,maxW*.980f},{-H*.08f,maxW*.960f},{-H*.06f,maxW*.935f},
-        {-H*.04f,maxW*.905f},{-H*.02f,maxW*.875f},{ H*.00f,maxW*.850f},
-        { H*.02f,maxW*.825f},{ H*.04f,maxW*.800f},{ H*.06f,maxW*.780f},
-        { H*.08f,maxW*.765f},{ H*.10f,maxW*.755f},{ H*.12f,maxW*.750f},
-        { H*.14f,maxW*.750f},{ H*.16f,maxW*.755f},{ H*.20f,maxW*.770f},
-        { H*.24f,maxW*.795f},{ H*.28f,maxW*.825f},{ H*.32f,maxW*.855f},
-        { H*.36f,maxW*.880f},{ H*.40f,maxW*.900f},{ H*.44f,maxW*.915f},
-        { H*.48f,maxW*.925f},{ H*.52f,maxW*.930f},{ H*.56f,maxW*.930f},
-        { H*.58f,maxW*.925f}
-    };
-    const int n = (int)(sizeof(slices)/sizeof(slices[0]));
-
-    auto getW = [&](float yPos) -> float {
-        for (int i = 0; i < n-1; i++) {
-            if (yPos >= slices[i].y && yPos <= slices[i+1].y) {
-                float t = (yPos-slices[i].y)/(slices[i+1].y-slices[i].y);
-                return slices[i].halfW*(1-t)+slices[i+1].halfW*t;
+    // Real-pin-inspired profile (top -> bottom), based on regulation pin silhouette.
+    constexpr int n = 96;
+    std::array<float, n> ys{};
+    std::array<float, n> halfWs{};
+    auto profileRatio = [](float t) -> float {
+        static const float tk[] = {0.00f, 0.04f, 0.10f, 0.17f, 0.24f, 0.31f, 0.39f,
+                                   0.49f, 0.59f, 0.68f, 0.77f, 0.86f, 0.94f, 1.00f};
+        static const float wk[] = {0.085f, 0.19f, 0.31f, 0.36f, 0.31f, 0.23f, 0.24f,
+                                   0.43f, 0.61f, 0.59f, 0.50f, 0.39f, 0.29f, 0.23f};
+        constexpr int k = (int)(sizeof(tk) / sizeof(tk[0]));
+        if (t <= tk[0]) return wk[0];
+        if (t >= tk[k - 1]) return wk[k - 1];
+        for (int i = 0; i < k - 1; i++) {
+            if (t >= tk[i] && t <= tk[i + 1]) {
+                float u = (t - tk[i]) / (tk[i + 1] - tk[i]);
+                // Smooth interpolation keeps the neck/belly transitions natural.
+                u = u * u * (3.f - 2.f * u);
+                return wk[i] * (1.f - u) + wk[i + 1] * u;
             }
         }
-        return maxW*0.5f;
+        return wk[k - 1];
+    };
+    for (int i = 0; i < n; i++) {
+        float t = static_cast<float>(i) / static_cast<float>(n - 1);
+        ys[i] = -H * 0.5f + t * H;
+        halfWs[i] = maxW * profileRatio(t);
+    }
+
+    auto getW = [&](float yPos) -> float {
+        if (yPos <= ys[0]) return halfWs[0];
+        if (yPos >= ys[n - 1]) return halfWs[n - 1];
+        for (int i = 0; i < n-1; i++) {
+            if (yPos >= ys[i] && yPos <= ys[i+1]) {
+                float t = (yPos - ys[i]) / (ys[i + 1] - ys[i]);
+                return halfWs[i] * (1.f - t) + halfWs[i + 1] * t;
+            }
+        }
+        return halfWs[0];
     };
 
     // Body gradient
     sf::VertexArray body(sf::PrimitiveType::TriangleStrip);
     for (int i = 0; i < n; i++) {
-        body.append({{-slices[i].halfW, slices[i].y}, bodyColorL});
-        body.append({{ slices[i].halfW, slices[i].y}, bodyColorR});
+        body.append({{-halfWs[i], ys[i]}, bodyColorL});
+        body.append({{ halfWs[i], ys[i]}, bodyColorR});
     }
     window.draw(body, st);
 
     // Left highlight
     sf::VertexArray lhl(sf::PrimitiveType::TriangleStrip);
     for (int i = 0; i < n; i++) {
-        lhl.append({{-slices[i].halfW*0.85f, slices[i].y}, {255,255,255,100}});
-        lhl.append({{-slices[i].halfW,       slices[i].y}, {255,255,255,0}});
+        lhl.append({{-halfWs[i] * 0.82f, ys[i]}, {255,255,255,96}});
+        lhl.append({{-halfWs[i],         ys[i]}, {255,255,255,0}});
     }
     window.draw(lhl, st);
 
     // Specular
     sf::VertexArray spec(sf::PrimitiveType::TriangleStrip);
     for (int i = 0; i < n; i++) {
-        float ny = (slices[i].y + H*.58f)/(H*1.16f);
-        int a = (int)(140 - std::abs(ny-0.4f)*200.f);
+        float ny = (ys[i] + H * 0.5f) / H;
+        int a = (int)(132 - std::abs(ny - 0.42f) * 185.f);
         a = std::max(0, a);
-        spec.append({{-slices[i].halfW*0.45f, slices[i].y}, {255,255,255,(uint8_t)a}});
-        spec.append({{-slices[i].halfW*0.30f, slices[i].y}, {255,255,255,(uint8_t)a}});
+        spec.append({{-halfWs[i] * 0.45f, ys[i]}, {255,255,255,(uint8_t)a}});
+        spec.append({{-halfWs[i] * 0.28f, ys[i]}, {255,255,255,(uint8_t)a}});
     }
     window.draw(spec, st);
 
@@ -231,26 +241,26 @@ static void drawPinShape(sf::RenderWindow& window, sf::RenderStates st,
     if (drawStripes) {
         auto drawStripe = [&](float yc, float thick) {
             sf::VertexArray s(sf::PrimitiveType::TriangleStrip);
-            for (int i = 0; i <= 8; i++) {
-                float t = (float)i/8;
-                float y = yc - thick*.5f + thick*t;
+            for (int i = 0; i <= 10; i++) {
+                float t = static_cast<float>(i) / 10.f;
+                float y = yc - thick * 0.5f + thick * t;
                 float w = getW(y);
                 s.append({{-w, y}, stripeColor});
                 s.append({{ w, y}, stripeColor});
             }
             window.draw(s, st);
         };
-        drawStripe(-H*.285f, maxW*.30f);
-        drawStripe(-H*.195f, maxW*.30f);
+        drawStripe(-H * 0.235f, maxW * 0.22f);
+        drawStripe(-H * 0.175f, maxW * 0.20f);
     }
 
     // Base ring
     if (drawBase) {
-        float by = H*.51f, bt = maxW*.18f;
+        float by = H * 0.445f, bt = maxW * 0.18f;
         sf::VertexArray br(sf::PrimitiveType::TriangleStrip);
-        for (int i = 0; i <= 6; i++) {
-            float t = (float)i/6;
-            float y = by - bt*.5f + bt*t;
+        for (int i = 0; i <= 8; i++) {
+            float t = static_cast<float>(i) / 8.f;
+            float y = by - bt * 0.5f + bt * t;
             float w = getW(y);
             br.append({{-w, y}, baseColor});
             br.append({{ w, y}, baseColor});
@@ -263,20 +273,44 @@ static void drawPinShape(sf::RenderWindow& window, sf::RenderStates st,
 void Pin::draw(sf::RenderWindow& window) const {
     if (!active) return;
 
-    // Shadow
-    float shadowR = radius * 1.4f;
-    for (int i = 0; i < 5; i++) {
-        sf::CircleShape shadow(shadowR - i*3.f);
-        shadow.setOrigin({shadow.getRadius(), shadow.getRadius()});
-        shadow.setPosition({pos.x + radius*.3f, pos.y + radius*.3f});
-        shadow.setFillColor({0,0,0,(uint8_t)(30-i*4)});
-        window.draw(shadow);
-    }
-
     float drawAngle = 0.f;
     if (fallen) {
         drawAngle = angle;
         if (std::abs(drawAngle) < 10.f) drawAngle = 75.f;
+    }
+
+    // Tuned pin profile: 6.5% fatter and ~3% shorter than current.
+    float H    = radius * 7.38f;
+    float maxW = radius * 1.96f;
+
+    // Ground shadow.
+    if (!fallen) {
+        float shadowR = radius * 0.92f;
+        for (int i = 0; i < 4; i++) {
+            float r = shadowR - i * 1.2f;
+            if (r <= 0.5f) continue;
+            sf::CircleShape shadow(r);
+            shadow.setOrigin({r, r});
+            shadow.setPosition({pos.x, pos.y + H * 0.49f});
+            shadow.setScale({1.62f, 0.38f});
+            const auto shadowAlpha = static_cast<std::uint8_t>(30 - i * 5);
+            shadow.setFillColor(sf::Color(0, 0, 0, shadowAlpha));
+            window.draw(shadow);
+        }
+    } else {
+        // Fallen-pin shadow: compact floor contact, avoids long black streaks.
+        float shadowR = radius * 0.72f;
+        for (int i = 0; i < 3; i++) {
+            float r = shadowR - i * 0.55f;
+            if (r <= 0.5f) continue;
+            sf::CircleShape shadow(r);
+            shadow.setOrigin({r, r});
+            shadow.setPosition({pos.x, pos.y + radius * 0.34f});
+            shadow.setScale({1.45f, 0.30f});
+            const auto shadowAlpha = static_cast<std::uint8_t>(18 - i * 4);
+            shadow.setFillColor(sf::Color(0, 0, 0, shadowAlpha));
+            window.draw(shadow);
+        }
     }
 
     sf::Transform t;
@@ -284,9 +318,6 @@ void Pin::draw(sf::RenderWindow& window) const {
     t.rotate(sf::degrees(drawAngle));
     sf::RenderStates st;
     st.transform = t;
-
-    float H    = radius * 5.f;
-    float maxW = radius * 2.f;
 
     switch (pinType) {
 

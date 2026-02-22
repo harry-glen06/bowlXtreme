@@ -108,6 +108,13 @@ private:
 
     // Reset buffering
     bool pendingReset = false;
+    bool pendingShotScored = false;
+    float pendingScoreVisualTimer = 0.0f;
+    float pendingScoreVisualDuration = 0.0f;
+    int pendingPhysicalPinsDownThisShot = 0;
+    bool pendingStrikeThisShot = false;
+    int pendingRoundScoreBeforeShot = 0;
+    int pendingTargetBeforeShot = 0;
     float resetTimer = 0.0f;
     float maxResetWait = 2.0f;
     float pinsStillSpeed = 25.0f;
