@@ -1,29 +1,31 @@
 category,item,shown,picked,pick_rate_percent
-BALL,8-Ball,1,0,0.00
-BALL,Black Hole,4,1,25.00
-BALL,Fastball,1,0,0.00
+BALL,8-Ball,2,0,0.00
+BALL,Black Hole,5,1,20.00
+BALL,Fastball,2,0,0.00
 BALL,Heavy Ball,3,1,33.33
-BALL,Midas Ball,1,0,0.00
-BALL,Odd Ball,1,0,0.00
-PIN,3rd Time,1,1,100.00
+BALL,Midas Ball,2,0,0.00
+BALL,Odd Ball,2,0,0.00
+BALL,Retrigger,1,0,0.00
+PIN,3rd Time,2,3,150.00
 PIN,Big Pin,1,1,100.00
 PIN,Copy Cat,1,1,100.00
-PIN,Exploding Pin,2,2,100.00
+PIN,Exploding Pin,5,2,40.00
 PIN,Gold Pin,1,1,100.00
 PIN,Ice Pin,4,1,25.00
-PIN,Light Pin,1,0,0.00
-PIN,Mischievous,3,0,0.00
-POWER,Bumpers,1,0,0.00
-POWER,Confusion,2,0,0.00
-POWER,Duplicate,3,2,66.67
-POWER,Extra Ball,1,1,100.00
-POWER,Extra Pins,1,1,100.00
+PIN,Light Pin,2,0,0.00
+PIN,Mischievous,5,0,0.00
+POWER,Bumpers,2,0,0.00
+POWER,Confusion,3,1,33.33
+POWER,Duplicate,4,2,50.00
+POWER,Earthquake,1,0,0.00
+POWER,Extra Ball,3,1,33.33
+POWER,Extra Pins,2,2,100.00
 POWER,Greedy,2,0,0.00
-POWER,Home Base,1,1,100.00
-POWER,Mo Money,1,0,0.00
+POWER,Home Base,3,1,33.33
+POWER,Mo Money,3,1,33.33
 POWER,Passed Go,1,1,100.00
 POWER,Random Upgrade,1,0,0.00
-POWER,Reroll,4,0,0.00
+POWER,Reroll,5,1,20.00
 POWER,Sales,2,0,0.00
-POWER,Swap Pins,2,0,0.00
+POWER,Swap Pins,5,2,40.00
 POWER,Upgrades+3,2,0,0.00

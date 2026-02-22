@@ -64,6 +64,7 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
 
     const bool hasExtraPins =
         activeItems.powerExtraPins || activeItems.hasPurchasedPower(PowerType::ExtraPins);
+    activeItems.setActivePinSlotCount(hasExtraPins ? 12 : 10);
     if (hasExtraPins) {
         // Spawn as a wider front row so they stay in-lane and upright.
         float y = startY + spacing * 0.85f;
@@ -71,6 +72,7 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
         out.emplace_back(sf::Vector2f(centerX + spacing, y), radius, pinValue++);
     }
 
+    updatePinSlotValueSnapshot(out);
     return out;
 }
 
@@ -83,29 +85,16 @@ int Game::countStandingPins() const {
 }
 
 void Game::applyPurchasedPinTypes(std::vector<Pin>& pinSet) {
-    if (activeItems.purchasedPinTypes.empty()) return;
+    if (activeItems.pinSlotAssignments.empty()) return;
 
-    // Collect active Normal pins and shuffle them
-    std::vector<int> available;
-    for (int i = 0; i < (int)pinSet.size(); i++) {
-        if (pinSet[i].isActive() && pinSet[i].getPinType() == PinType::Normal)
-            available.push_back(i);
+    int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+    for (const auto& assigned : activeItems.pinSlotAssignments) {
+        if (assigned.slot < 1 || assigned.slot > maxSlot) continue;
+        int idx = assigned.slot - 1;
+        if (!pinSet[idx].isActive()) continue;
+        pinSet[idx].setPinType(assigned.type);
     }
-    bool lockTypesThisRound = activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme;
-    if (!lockTypesThisRound) {
-        for (int i = (int)available.size()-1; i > 0; i--) {
-            int j = rand() % (i+1);
-            std::swap(available[i], available[j]);
-        }
-    }
-
-    // Assign one pin per purchased type
-    int slot = 0;
-    for (int pt : activeItems.purchasedPinTypes) {
-        if (slot >= (int)available.size()) break;
-        pinSet[available[slot]].setPinType(static_cast<PinType>(pt));
-        slot++;
-    }
+    updatePinSlotValueSnapshot(pinSet);
 }
 
 void Game::applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet) {
@@ -126,6 +115,7 @@ void Game::applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet) {
         pinSet[idx].setValue(pinSet[idx].getValue() + 1);
     }
     activeItems.pendingRandomPinUpgrades = 0;
+    updatePinSlotValueSnapshot(pinSet);
 }
 
 void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
@@ -167,13 +157,22 @@ void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
             // Duplicate is now persistent: add the copied pin type to owned pins
             // so it keeps appearing on future racks in this run.
             if (copiedType != PinType::Normal) {
-                activeItems.purchasedPinTypes.push_back(static_cast<int>(copiedType));
+                activeItems.setPinAssignment(dst + 1, copiedType);
             }
             activeItems.duplicateCharges--;
         }
     }
 
     applyPendingRandomPinUpgrades(pinSet);
+    updatePinSlotValueSnapshot(pinSet);
+}
+
+void Game::updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet) {
+    activeItems.pinSlotCurrentValues.fill(0);
+    int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+    for (int i = 0; i < maxSlot; i++) {
+        activeItems.pinSlotCurrentValues[i] = pinSet[i].getValue();
+    }
 }
 
 void Game::loadHighScore() {
@@ -545,21 +544,23 @@ void Game::handleEvents() {
                             ui.generateShopOffers(activeItems);
                         }
                     } else if (purchased == UI::ShopActionSellPin) {
-                        if (!activeItems.purchasedPinTypes.empty()) {
-                            int raw = activeItems.purchasedPinTypes.back();
-                            activeItems.purchasedPinTypes.pop_back();
-                            int sellValue = pinTypeCost(static_cast<PinType>(raw)) / 2;
+                        std::vector<ActiveItems::PinSlotAssignment> sortedPins =
+                            activeItems.getSortedPinAssignments();
+                        if (!sortedPins.empty()) {
+                            ActiveItems::PinSlotAssignment toSell = sortedPins.back();
+                            activeItems.removePinAssignmentAtSlot(toSell.slot);
+                            int sellValue = pinTypeCost(toSell.type) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
                         }
                     } else if (purchased <= UI::ShopActionSellPinByIndexBase &&
                                purchased > UI::ShopActionSellPowerByIndexBase) {
                         int pinIndex = UI::ShopActionSellPinByIndexBase - purchased;
-                        if (pinIndex >= 0 &&
-                            pinIndex < (int)activeItems.purchasedPinTypes.size()) {
-                            int raw = activeItems.purchasedPinTypes[pinIndex];
-                            activeItems.purchasedPinTypes.erase(
-                                activeItems.purchasedPinTypes.begin() + pinIndex);
-                            int sellValue = pinTypeCost(static_cast<PinType>(raw)) / 2;
+                        std::vector<ActiveItems::PinSlotAssignment> sortedPins =
+                            activeItems.getSortedPinAssignments();
+                        if (pinIndex >= 0 && pinIndex < (int)sortedPins.size()) {
+                            ActiveItems::PinSlotAssignment toSell = sortedPins[pinIndex];
+                            activeItems.removePinAssignmentAtSlot(toSell.slot);
+                            int sellValue = pinTypeCost(toSell.type) / 2;
                             if (sellValue > 0) xtreme.addTokens(sellValue);
                         }
                     } else if (purchased == UI::ShopActionSellBallSlot1 ||
@@ -625,7 +626,9 @@ void Game::handleEvents() {
                             bool hasExtraPins = activeItems.powerExtraPins ||
                                                 activeItems.hasPurchasedPower(PowerType::ExtraPins);
                             int pinLimit = hasExtraPins ? 12 : 10;
-                            if ((int)activeItems.purchasedPinTypes.size() >= pinLimit) {
+                            int targetSlot = std::clamp(ui.getSelectedPinSlot(), 1, pinLimit);
+                            bool slotEmpty = !activeItems.hasPinAssignmentAtSlot(targetSlot);
+                            if (slotEmpty && activeItems.getPinAssignmentCount() >= pinLimit) {
                                 canBuy = false;
                             }
                         }
@@ -657,9 +660,18 @@ void Game::handleEvents() {
                             ui.recordOfferPicked(offer);
                         } else if (offer.category == ShopItemCategory::Pin) {
                             xtreme.addTokens(-offer.cost);
-                            // Pin purchase: store type, will be applied next frame
-                            activeItems.purchasedPinTypes.push_back(
-                                static_cast<int>(offer.pinType));
+                            bool hasExtraPins = activeItems.powerExtraPins ||
+                                                activeItems.hasPurchasedPower(PowerType::ExtraPins);
+                            int pinLimit = hasExtraPins ? 12 : 10;
+                            int targetSlot = std::clamp(ui.getSelectedPinSlot(), 1, pinLimit);
+
+                            PinType previous = PinType::Normal;
+                            bool replaced = activeItems.removePinAssignmentAtSlot(targetSlot, &previous);
+                            if (replaced && previous != PinType::Normal) {
+                                int sellValue = pinTypeCost(previous) / 2;
+                                if (sellValue > 0) xtreme.addTokens(sellValue);
+                            }
+                            activeItems.setPinAssignment(targetSlot, offer.pinType);
                             ui.recordOfferPicked(offer);
                         } else {
                             xtreme.addTokens(-offer.cost);
@@ -837,6 +849,7 @@ void Game::prepareNewShot() {
         if (!(activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme))
             pin.randomiseMischievous();
     }
+    updatePinSlotValueSnapshot(pins);
 }
 
 void Game::startPendingReset() {
@@ -1100,7 +1113,9 @@ void Game::finishPendingResetIfReady(float dt) {
             }
         }
     }
-    
+
+    updatePinSlotValueSnapshot(pins);
+
     // Check for transitions (game over / shop) and optionally pause so
     // players can see the score animation before screens change.
     bool needsPostScorePause = false;
@@ -1601,6 +1616,7 @@ void Game::update(float dt) {
     doCollisions();
     applyBlackHoleGravity(dt);
     processExplosions();
+    updatePinSlotValueSnapshot(pins);
 
     // Anti-softlock: if a roll is jammed near the backline (usually pin wedged),
     // or rolling for too long, end the shot so the game can progress.

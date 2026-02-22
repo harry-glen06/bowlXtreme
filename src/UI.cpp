@@ -1299,7 +1299,8 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     window.draw(shoeName);
     iy += 32.f;
 
-    if (!items.purchasedPinTypes.empty()) {
+    std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
+    if (!sortedPins.empty()) {
         // ── Pins section ──────────────────────────────────────────────────────
         sf::Text pinsLabel(font, "PINS", 20);
         pinsLabel.setPosition({x + 10.f, iy});
@@ -1307,33 +1308,28 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         window.draw(pinsLabel);
         iy += 28.f;
 
-        // Draw pins in a grid — up to 3 per row
-        float pinSize  = 18.f;
-        float cellW    = width / 3.f;
-        int   col      = 0;
-        float rowStartY = iy;
+        const float lineH = 20.f;
+        for (const auto& assigned : sortedPins) {
+            int pt = static_cast<int>(assigned.type);
+            float iconX = x + 18.f;
+            float rowY = iy + 8.f;
+            drawMiniPin(window, iconX, rowY, 11.f, pinPreviewColor(pt));
 
-        for (int pt : items.purchasedPinTypes) {
-            float pcx = x + col * cellW + cellW / 2.f;
-            float pcy = rowStartY + pinSize;
-
-            drawMiniPin(window, pcx, pcy, pinSize, pinPreviewColor(pt));
-
-            sf::Text pname(font, pinShortName(pt), 13);
-            sf::FloatRect pb = pname.getLocalBounds();
-            pname.setPosition({pcx - pb.size.x/2.f, pcy + pinSize + 4.f});
-            pname.setFillColor({210, 210, 210});
-            window.draw(pname);
-
-            col++;
-            if (col >= 3) {
-                col = 0;
-                rowStartY += pinSize * 3.f + 28.f;
+            int shownValue = 0;
+            if (assigned.slot >= 1 && assigned.slot <= 12) {
+                shownValue = items.pinSlotCurrentValues[assigned.slot - 1];
             }
-        }
+            std::string valueText = (shownValue > 0) ? std::to_string(shownValue) : "-";
+            std::string label = "P" + std::to_string(assigned.slot) + " " +
+                                pinShortName(pt) + " (" + valueText + ")";
 
-        int pinRows = ((int)items.purchasedPinTypes.size() + 2) / 3;
-        iy += pinRows * (pinSize * 3.f + 28.f) + 8.f;
+            sf::Text pinText(font, label, 14);
+            pinText.setPosition({x + 34.f, iy});
+            pinText.setFillColor({210, 210, 210});
+            window.draw(pinText);
+            iy += lineH;
+        }
+        iy += 8.f;
     }
 
     const int powerCount = static_cast<int>(PowerType::MoMoney) + 1;
@@ -1406,7 +1402,7 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
     bool hasBall = (items.getBallForShot(1) != BallType::Normal) ||
                    (items.getBallForShot(2) != BallType::Normal);
     bool hasShoe = (items.shoeType != ShoeType::None);
-    bool hasPins = !items.purchasedPinTypes.empty();
+    bool hasPins = !items.pinSlotAssignments.empty();
     if (!hasBall && !hasPins && !hasShoe) return;
 
     float barH   = 70.f;
@@ -1497,7 +1493,9 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
     }
 
     // Pin icons
-    for (int pt : items.purchasedPinTypes) {
+    std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
+    for (const auto& assigned : sortedPins) {
+        int pt = static_cast<int>(assigned.type);
         drawMiniPin(window, cx, barY + barH/2.f, iconSize * 0.85f, pinPreviewColor(pt));
 
         sf::Text pn(font, pinShortName(pt), 13);
@@ -1596,10 +1594,6 @@ static ShopCardLayout computeShopCardLayout(float windowW,
     if (out.areaW < out.cardW) out.areaW = out.cardW;
 
     int maxCardsPerRow = 4;
-    if (panelMid >= windowW * 0.5f && windowW < 1550.f) {
-        // Keep windowed layout cleaner when the panel is on the right.
-        maxCardsPerRow = 3;
-    }
 
     if (out.areaW > out.cardW) {
         out.cardsPerRow = std::min(maxCardsPerRow,
@@ -1657,7 +1651,7 @@ static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanel
 
     out.pinHeaderY = y;
     y += headerH;
-    int pinCount = static_cast<int>(items.purchasedPinTypes.size());
+    int pinCount = static_cast<int>(items.getSortedPinAssignments().size());
     out.pinSellRects.reserve(pinCount);
     for (int i = 0; i < pinCount; i++) {
         int row = i / 2;
@@ -1764,10 +1758,13 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     pinHeader.setFillColor({184, 195, 235});
     window.draw(pinHeader);
 
-    for (int i = 0; i < (int)dynamic.pinSellRects.size(); i++) {
-        int raw = items.purchasedPinTypes[i];
-        int value = pinTypeCost(static_cast<PinType>(raw)) / 2;
-        std::string label = pinShortName(raw) + " +" + std::to_string(value);
+    std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
+    for (int i = 0; i < (int)dynamic.pinSellRects.size() && i < (int)sortedPins.size(); i++) {
+        PinType type = sortedPins[i].type;
+        int raw = static_cast<int>(type);
+        int value = pinTypeCost(type) / 2;
+        std::string label = "P" + std::to_string(sortedPins[i].slot) + " " +
+                            pinShortName(raw) + " +" + std::to_string(value);
         drawSellButton(dynamic.pinSellRects[i], label, true, 16);
     }
     if (dynamic.pinSellRects.empty()) {
@@ -2160,6 +2157,11 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         window.draw(skipText);
     }
 
+    bool hasExtraPinsPower =
+        items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
+    int pinBuyLimit = hasExtraPinsPower ? 12 : 10;
+    selectedPinSlot = std::clamp(selectedPinSlot, 1, pinBuyLimit);
+
     // Ball slot selector (which slot a purchased ball should fill)
     sf::Text slotTitle(font, "Ball Slot", 22);
     slotTitle.setPosition({40.f, 38.f});
@@ -2195,6 +2197,67 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     slotCurrent.setFillColor({200, 200, 200});
     window.draw(slotCurrent);
 
+    sf::Text pinSlotTitle(font, "Pin Slot", 20);
+    pinSlotTitle.setPosition({40.f, 150.f});
+    pinSlotTitle.setFillColor({220, 220, 230});
+    window.draw(pinSlotTitle);
+
+    const float pinSlotY = 176.f;
+    const float pinBtnW = 34.f;
+    const float pinBtnH = 34.f;
+    const float pinPrevX = 40.f;
+    const float pinBadgeX = pinPrevX + pinBtnW + 8.f;
+    const float pinBadgeW = 94.f;
+    const float pinNextX = pinBadgeX + pinBadgeW + 8.f;
+
+    sf::RectangleShape pinPrev({pinBtnW, pinBtnH});
+    pinPrev.setPosition({pinPrevX, pinSlotY});
+    pinPrev.setFillColor(sf::Color(55, 55, 70));
+    pinPrev.setOutlineColor(sf::Color(130, 130, 160));
+    pinPrev.setOutlineThickness(2.f);
+    window.draw(pinPrev);
+
+    sf::Text prevText(font, "<", 20);
+    prevText.setPosition({pinPrevX + 10.f, pinSlotY + 4.f});
+    prevText.setFillColor(sf::Color::White);
+    window.draw(prevText);
+
+    bool assigned = items.hasPinAssignmentAtSlot(selectedPinSlot);
+    sf::RectangleShape pinBadge({pinBadgeW, pinBtnH});
+    pinBadge.setPosition({pinBadgeX, pinSlotY});
+    pinBadge.setFillColor(assigned ? sf::Color(70, 90, 120) : sf::Color(52, 52, 70));
+    pinBadge.setOutlineColor(sf::Color(175, 255, 205));
+    pinBadge.setOutlineThickness(2.f);
+    window.draw(pinBadge);
+
+    sf::Text pinBadgeText(font,
+                          "P" + std::to_string(selectedPinSlot) + "/" + std::to_string(pinBuyLimit),
+                          16);
+    pinBadgeText.setPosition({pinBadgeX + 11.f, pinSlotY + 7.f});
+    pinBadgeText.setFillColor(sf::Color::White);
+    window.draw(pinBadgeText);
+
+    sf::RectangleShape pinNext({pinBtnW, pinBtnH});
+    pinNext.setPosition({pinNextX, pinSlotY});
+    pinNext.setFillColor(sf::Color(55, 55, 70));
+    pinNext.setOutlineColor(sf::Color(130, 130, 160));
+    pinNext.setOutlineThickness(2.f);
+    window.draw(pinNext);
+
+    sf::Text nextText(font, ">", 20);
+    nextText.setPosition({pinNextX + 10.f, pinSlotY + 4.f});
+    nextText.setFillColor(sf::Color::White);
+    window.draw(nextText);
+
+    PinType selectedPinType = items.getPinTypeForSlot(selectedPinSlot);
+    sf::Text pinSlotCurrent(font,
+        "Current P" + std::to_string(selectedPinSlot) + ": " +
+        pinShortName(static_cast<int>(selectedPinType)), 18);
+    float pinInfoY = pinSlotY + pinBtnH + 6.f;
+    pinSlotCurrent.setPosition({40.f, pinInfoY});
+    pinSlotCurrent.setFillColor({190, 198, 215});
+    window.draw(pinSlotCurrent);
+
     ShopCardLayout cardLayout = computeShopCardLayout(windowW, ownedLayout, shopOffers.size());
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
@@ -2225,11 +2288,15 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         bool powerLimitBlocked = isPower && !isOwned &&
                                  !canBuyPowerWithLimit(items, offer.powerType, maxPermanentPowers);
 
-        bool hasExtraPinsPower =
-            items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
-        int pinBuyLimit = hasExtraPinsPower ? 12 : 10;
-        bool pinLimitBlocked = isPin && !isOwned &&
-                               ((int)items.purchasedPinTypes.size() >= pinBuyLimit);
+        if (isPin) {
+            PinType selectedType = items.getPinTypeForSlot(selectedPinSlot);
+            isOwned = (selectedType == offer.pinType);
+        }
+        bool pinLimitBlocked = false;
+        if (isPin && !isOwned) {
+            bool slotEmpty = !items.hasPinAssignmentAtSlot(selectedPinSlot);
+            pinLimitBlocked = slotEmpty && (items.getPinAssignmentCount() >= pinBuyLimit);
+        }
 
         // Card background tint by category
         sf::Color cardColor = isOwned         ? sf::Color(40, 100, 40)  :
@@ -2412,6 +2479,32 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         return ShopActionNone;
     }
 
+    bool hasExtraPinsPower =
+        items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
+    int pinBuyLimit = hasExtraPinsPower ? 12 : 10;
+    selectedPinSlot = std::clamp(selectedPinSlot, 1, pinBuyLimit);
+    const float pinSlotY = 176.f;
+    const float pinBtnW = 34.f;
+    const float pinBtnH = 34.f;
+    const float pinPrevX = 40.f;
+    const float pinBadgeX = pinPrevX + pinBtnW + 8.f;
+    const float pinBadgeW = 94.f;
+    const float pinNextX = pinBadgeX + pinBadgeW + 8.f;
+    if (mousePos.x >= pinPrevX && mousePos.x <= pinPrevX + pinBtnW &&
+        mousePos.y >= pinSlotY && mousePos.y <= pinSlotY + pinBtnH) {
+        selectedPinSlot = std::max(1, selectedPinSlot - 1);
+        return ShopActionNone;
+    }
+    if (mousePos.x >= pinNextX && mousePos.x <= pinNextX + pinBtnW &&
+        mousePos.y >= pinSlotY && mousePos.y <= pinSlotY + pinBtnH) {
+        selectedPinSlot = std::min(pinBuyLimit, selectedPinSlot + 1);
+        return ShopActionNone;
+    }
+    if (mousePos.x >= pinBadgeX && mousePos.x <= pinBadgeX + pinBadgeW &&
+        mousePos.y >= pinSlotY && mousePos.y <= pinSlotY + pinBtnH) {
+        return ShopActionNone;
+    }
+
     const float skipX = windowW - 250.f;
     const float skipY = 88.f;
     const float skipW = 220.f;
@@ -2447,9 +2540,6 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
 
     ShopCardLayout cardLayout = computeShopCardLayout(windowW, layout, shopOffers.size());
     const int maxPermanentPowers = 4;
-    bool hasExtraPinsPower =
-        items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
-    int pinBuyLimit = hasExtraPinsPower ? 12 : 10;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         int row = i / cardLayout.cardsPerRow;
@@ -2478,6 +2568,8 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
                 if (!powerIsStackable(offer.powerType)) {
                     isAlreadyOwned = items.hasPower(offer.powerType) || items.hasPurchasedPower(offer.powerType);
                 }
+            } else if (offer.category == ShopItemCategory::Pin) {
+                isAlreadyOwned = (items.getPinTypeForSlot(selectedPinSlot) == offer.pinType);
             }
 
             bool canBuy = (tokens >= offer.cost) && !isAlreadyOwned;
@@ -2485,7 +2577,10 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
                 canBuy = canBuy && canBuyPowerWithLimit(items, offer.powerType, maxPermanentPowers);
             }
             if (offer.category == ShopItemCategory::Pin) {
-                canBuy = canBuy && ((int)items.purchasedPinTypes.size() < pinBuyLimit);
+                bool slotEmpty = !items.hasPinAssignmentAtSlot(selectedPinSlot);
+                if (slotEmpty) {
+                    canBuy = canBuy && (items.getPinAssignmentCount() < pinBuyLimit);
+                }
             }
 
             if (canBuy) {

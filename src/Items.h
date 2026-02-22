@@ -1,5 +1,8 @@
 #pragma once
+#include <algorithm>
+#include <array>
 #include <vector>
+#include "Pin.h"
 
 enum class BallType {
     Normal,
@@ -41,6 +44,11 @@ enum class PowerType {
 };
 
 struct ActiveItems {
+    struct PinSlotAssignment {
+        int slot = 1; // 1-based spawn-order slot
+        PinType type = PinType::Normal;
+    };
+
     // Ball currently active for this shot (set by Game::resetBall)
     BallType ballType = BallType::Normal;
     // Persistent loadout: shot 1 uses slot 1, shot 2 uses slot 2
@@ -91,9 +99,10 @@ struct ActiveItems {
     std::vector<int> goldPinIndices;
     int   thirdTimeComboBonus = 0;
 
-    // Purchased pin types — one pin per type gets assigned each new frame
-    // e.g. if player bought Gold and Exploding, one pin will be Gold and one Exploding each frame
-    std::vector<int> purchasedPinTypes;  // stored as int (cast from PinType)
+    // Purchased/assigned pin types by explicit rack slot (spawn order).
+    std::vector<PinSlotAssignment> pinSlotAssignments;
+    std::array<int, 12> pinSlotCurrentValues{}; // slot 1 -> index 0; 0 means unavailable
+    int activePinSlotCount = 10;
 
     void resetForNewShot() {
         pinsHitThisShot        = 0;
@@ -106,7 +115,9 @@ struct ActiveItems {
     void resetAll() {
         resetForNewShot();
         goldPinIndices.clear();
-        purchasedPinTypes.clear();
+        pinSlotAssignments.clear();
+        pinSlotCurrentValues.fill(0);
+        activePinSlotCount = 10;
         purchasedPowers.clear();
         ballType         = BallType::Normal;
         ballSlot1        = BallType::Normal;
@@ -157,6 +168,70 @@ struct ActiveItems {
     void setBallForSlot(int slot, BallType type) {
         if (slot == 2) ballSlot2 = type;
         else           ballSlot1 = type;
+    }
+
+    void setActivePinSlotCount(int count) {
+        activePinSlotCount = std::clamp(count, 1, 12);
+    }
+
+    int getActivePinSlotCount() const {
+        return activePinSlotCount;
+    }
+
+    int findPinAssignmentIndexBySlot(int slot) const {
+        for (int i = 0; i < (int)pinSlotAssignments.size(); i++) {
+            if (pinSlotAssignments[i].slot == slot) return i;
+        }
+        return -1;
+    }
+
+    PinType getPinTypeForSlot(int slot) const {
+        int idx = findPinAssignmentIndexBySlot(slot);
+        if (idx < 0) return PinType::Normal;
+        return pinSlotAssignments[idx].type;
+    }
+
+    bool hasPinAssignmentAtSlot(int slot) const {
+        return findPinAssignmentIndexBySlot(slot) >= 0;
+    }
+
+    int getPinAssignmentCount() const {
+        return (int)pinSlotAssignments.size();
+    }
+
+    bool removePinAssignmentAtSlot(int slot, PinType* removedType = nullptr) {
+        int idx = findPinAssignmentIndexBySlot(slot);
+        if (idx < 0) return false;
+        if (removedType) *removedType = pinSlotAssignments[idx].type;
+        pinSlotAssignments.erase(pinSlotAssignments.begin() + idx);
+        return true;
+    }
+
+    void setPinAssignment(int slot, PinType type) {
+        if (slot < 1 || slot > 12) return;
+        if (type == PinType::Normal) {
+            removePinAssignmentAtSlot(slot);
+            return;
+        }
+        int idx = findPinAssignmentIndexBySlot(slot);
+        if (idx >= 0) {
+            pinSlotAssignments[idx].type = type;
+        } else {
+            pinSlotAssignments.push_back({slot, type});
+        }
+        std::sort(pinSlotAssignments.begin(), pinSlotAssignments.end(),
+                  [](const PinSlotAssignment& a, const PinSlotAssignment& b) {
+                      return a.slot < b.slot;
+                  });
+    }
+
+    std::vector<PinSlotAssignment> getSortedPinAssignments() const {
+        std::vector<PinSlotAssignment> out = pinSlotAssignments;
+        std::sort(out.begin(), out.end(),
+                  [](const PinSlotAssignment& a, const PinSlotAssignment& b) {
+                      return a.slot < b.slot;
+                  });
+        return out;
     }
 
     void applyBallType(BallType type) {

@@ -79,8 +79,9 @@ public:
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void recordOfferPicked(const ShopOffer& offer);
-    void resetEquippedBall() { selectedBallSlot = 1; }
+    void resetEquippedBall() { selectedBallSlot = 1; selectedPinSlot = 1; }
     int  getSelectedBallSlot() const { return selectedBallSlot; }
+    int  getSelectedPinSlot() const { return selectedPinSlot; }
     const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
 
     // Shared inventory drawing
@@ -170,6 +171,7 @@ private:
 
     std::vector<ShopOffer> shopOffers;
     int selectedBallSlot = 1;
+    int selectedPinSlot = 1;
 
     // Xtreme shot-score animation state
     int  hudLastShotCounter = -1;
