@@ -79,6 +79,8 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
         out.emplace_back(sf::Vector2f(centerX + spacing, y), radius, pinValue++);
     }
 
+    // Preserve previously changed values by pin slot when we rerack/rebuild.
+    applySavedPinSlotValues(out);
     updatePinSlotValueSnapshot(out);
     return out;
 }
@@ -92,15 +94,19 @@ int Game::countStandingPins() const {
 }
 
 void Game::applyPurchasedPinTypes(std::vector<Pin>& pinSet) {
-    if (activeItems.pinSlotAssignments.empty()) return;
-
-    int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
-    for (const auto& assigned : activeItems.pinSlotAssignments) {
-        if (assigned.slot < 1 || assigned.slot > maxSlot) continue;
-        int idx = assigned.slot - 1;
-        if (!pinSet[idx].isActive()) continue;
-        pinSet[idx].setPinType(assigned.type);
+    if (!activeItems.pinSlotAssignments.empty()) {
+        int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+        for (const auto& assigned : activeItems.pinSlotAssignments) {
+            if (assigned.slot < 1 || assigned.slot > maxSlot) continue;
+            int idx = assigned.slot - 1;
+            if (!pinSet[idx].isActive()) continue;
+            pinSet[idx].setPinType(assigned.type);
+        }
     }
+
+    // Always restore saved slot values after type application, so value upgrades
+    // persist even when pins are rebuilt or reset.
+    applySavedPinSlotValues(pinSet);
     updatePinSlotValueSnapshot(pinSet);
 }
 
@@ -129,6 +135,23 @@ void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
     // Duplicate and Swap are now manual (player-chosen), not random-on-rerack.
     applyPendingRandomPinUpgrades(pinSet);
     updatePinSlotValueSnapshot(pinSet);
+}
+
+void Game::applySavedPinSlotValues(std::vector<Pin>& pinSet) {
+    int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+    for (int i = 0; i < maxSlot; i++) {
+        if (!pinSet[i].isActive()) continue;
+        int saved = activeItems.pinSlotCurrentValues[i];
+        if (saved <= 0) continue;
+
+        // Snapshot stores display value (+1 already shown for LevelUp),
+        // but Pin::value stores base value before LevelUp bonus.
+        int internalValue = saved;
+        if (pinSet[i].getPinType() == PinType::LevelUp) {
+            internalValue = std::max(0, saved - 1);
+        }
+        pinSet[i].setValue(internalValue);
+    }
 }
 
 void Game::updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet) {
@@ -340,9 +363,18 @@ void Game::handleEvents() {
                         resetBall();
                         audio.playBackgroundMusic();
 
+                    } else if (clicked == MenuButton::Tutorial) {
+                        ui.setState(GameState::Tutorial);
+
                     } else if (clicked == MenuButton::Settings) {
                         ui.setState(GameState::Settings);
                     }
+                }
+                if (ui.getState() == GameState::Tutorial) {
+                    if (ui.handleTutorialClick(window, sf::Vector2i(worldPos.x, worldPos.y))) {
+                        ui.setState(GameState::Menu);
+                    }
+                    continue;
                 }
                 if (ui.getState() == GameState::Settings) {
                     ui.handleSettingsClick(window, sf::Vector2i(worldPos.x, worldPos.y));
@@ -1613,7 +1645,9 @@ void Game::doCollisions() {
 
 void Game::update(float dt) {
     // If in menu/settings, don't update game logic
-    if (ui.getState() == GameState::Menu || ui.getState() == GameState::Settings) {
+    if (ui.getState() == GameState::Menu ||
+        ui.getState() == GameState::Settings ||
+        ui.getState() == GameState::Tutorial) {
         audio.playMenuMusic();
         audio.setMusicVolume(ui.getMusicVolume());
         audio.setSoundVolume(ui.getSoundVolume());
@@ -1943,6 +1977,14 @@ void Game::draw() {
         float dt = clock.getElapsedTime().asSeconds();
         ui.drawMenu(window, windowW, windowH, dt);
         ui.drawSettings(window, windowW, windowH);
+        window.display();
+        return;
+    }
+
+    if (ui.getState() == GameState::Tutorial) {
+        float dt = clock.getElapsedTime().asSeconds();
+        ui.drawMenu(window, windowW, windowH, dt);
+        ui.drawTutorial(window, windowW, windowH);
         window.display();
         return;
     }

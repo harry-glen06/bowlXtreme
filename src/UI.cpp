@@ -54,6 +54,83 @@ static bool pointInRectPadded(const sf::FloatRect& rect, sf::Vector2i point, flo
     return pointInRectPadded(rect, sf::Vector2f((float)point.x, (float)point.y), pad);
 }
 
+namespace {
+struct TutorialPageData {
+    const char* title;
+    std::array<const char*, 6> lines;
+    int lineCount;
+    sf::Color accent;
+};
+
+const std::array<TutorialPageData, 5> kTutorialPages = {{
+    {
+        "BASICS",
+        {
+            "Move left/right with A and D.",
+            "Aim with Left and Right arrows.",
+            "Press Space to launch the ball.",
+            "Press M for menu, R to reset a run.",
+            "",
+            ""
+        },
+        4,
+        sf::Color(80, 200, 220)
+    },
+    {
+        "XTREME SCORING",
+        {
+            "Impact starts at 10, then adds hit pin values.",
+            "Combo grows with pins hit on the shot.",
+            "Shot score = Impact x Combo.",
+            "Blue numbers on the left count up while scoring.",
+            "",
+            ""
+        },
+        4,
+        sf::Color(80, 230, 255)
+    },
+    {
+        "SHOP AND INVENTORY",
+        {
+            "Buy Balls, Pins, Shoes, and Powers with tokens.",
+            "Balls are assigned per shot slot (S1 and S2).",
+            "Pins are assigned by pin slot (P1..P10/12).",
+            "Hover inventory items to see live status.",
+            "",
+            ""
+        },
+        4,
+        sf::Color(110, 235, 160)
+    },
+    {
+        "ROUND FLOW",
+        {
+            "Hit the target score before the round ends.",
+            "After scoring finishes, a round summary appears.",
+            "Use CONTINUE to move on to shop or game over.",
+            "Reroll and sell are available in the shop.",
+            "",
+            ""
+        },
+        4,
+        sf::Color(250, 210, 90)
+    },
+    {
+        "POWER HOTKEYS",
+        {
+            "N: activate Duplicate charge and pick source/target.",
+            "V: activate Swap charge and pick two pins.",
+            "B and C work in Normal mode only.",
+            "In Xtreme, Bumpers require power/settings rules.",
+            "",
+            ""
+        },
+        4,
+        sf::Color(210, 175, 255)
+    }
+}};
+} // namespace
+
 UI::UI() {
     loadFont();
     loadPickRateStats();
@@ -321,64 +398,47 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
     
     // Menu buttons in rounded gray container
     float buttonY = windowH - 200;
-    float buttonSpacing = 20.0f;
-    float buttonWidth = 160.0f;
+    float buttonSpacing = 18.0f;
+    float buttonWidth = 150.0f;
     float buttonHeight = 60.0f;
-    
-    // Button container background
+    float buttonsSpan = buttonWidth * 4 + buttonSpacing * 3;
+    float startX = windowW / 2 - buttonsSpan / 2.0f;
+
     sf::ConvexShape buttonContainer = createRoundedRect(
-        sf::Vector2f(buttonWidth * 3 + buttonSpacing * 4, buttonHeight + 40), 
-        20.0f, 
-        sf::Color(100, 100, 100, 200)
-    );    
-    buttonContainer.setPosition(sf::Vector2f(windowW / 2 - (buttonWidth * 3 + buttonSpacing * 4) / 2, buttonY - 20));
+        sf::Vector2f(buttonsSpan + 44.0f, buttonHeight + 40.0f),
+        20.0f,
+        sf::Color(100, 100, 100, 200));
+    buttonContainer.setPosition(sf::Vector2f(startX - 22.0f, buttonY - 20.0f));
     buttonContainer.setFillColor(sf::Color(100, 100, 100, 200));
     window.draw(buttonContainer);
-    
-    // Normal button (Red)
-    sf::ConvexShape normalButton = createRoundedRect(
-    sf::Vector2f(buttonWidth, buttonHeight), 
-    15.0f, 
-    sf::Color(220, 50, 50)
-    );
-    normalButton.setPosition(sf::Vector2f(windowW / 2 - buttonWidth * 1.5f - buttonSpacing, buttonY));
-    normalButton.setFillColor(sf::Color(220, 50, 50));
-    window.draw(normalButton);
-    
-    sf::Text normalText(font, "Normal", 32);
-    normalText.setPosition(sf::Vector2f(windowW / 2 - buttonWidth * 1.5f - buttonSpacing + 20, buttonY + 12));
-    normalText.setFillColor(sf::Color::White);
-    window.draw(normalText);
-    
-    // Xtreme button (Cyan)
-    sf::ConvexShape xtremeButton = createRoundedRect(
-    sf::Vector2f(buttonWidth, buttonHeight), 
-    15.0f, 
-    sf::Color(80, 200, 220)
-    );
-    xtremeButton.setPosition(sf::Vector2f(windowW / 2 - buttonWidth / 2, buttonY));
-    xtremeButton.setFillColor(sf::Color(80, 200, 220));
-    window.draw(xtremeButton);
-    
-    sf::Text xtremeButtonText(font, "Xtreme", 32);
-    xtremeButtonText.setPosition(sf::Vector2f(windowW / 2 - buttonWidth / 2 + 15, buttonY + 12));
-    xtremeButtonText.setFillColor(sf::Color::White);
-    window.draw(xtremeButtonText);
-    
-    // Settings button (Yellow)
-    sf::ConvexShape settingsButton = createRoundedRect(
-    sf::Vector2f(buttonWidth, buttonHeight), 
-    15.0f, 
-    sf::Color(240, 220, 50)
-    );
-    settingsButton.setPosition(sf::Vector2f(windowW / 2 + buttonWidth / 2 + buttonSpacing, buttonY));
-    settingsButton.setFillColor(sf::Color(240, 220, 50));
-    window.draw(settingsButton);
-    
-    sf::Text settingsText(font, "Settings", 28);
-    settingsText.setPosition(sf::Vector2f(windowW / 2 + buttonWidth / 2 + buttonSpacing + 15, buttonY + 15));
-    settingsText.setFillColor(sf::Color::Black);
-    window.draw(settingsText);
+
+    auto drawMenuButton = [&](int index,
+                              const std::string& label,
+                              sf::Color fill,
+                              sf::Color textColor,
+                              unsigned textSize) {
+        float x = startX + (buttonWidth + buttonSpacing) * (float)index;
+        sf::ConvexShape button = createRoundedRect(
+            sf::Vector2f(buttonWidth, buttonHeight),
+            15.0f,
+            fill);
+        button.setPosition(sf::Vector2f(x, buttonY));
+        button.setFillColor(fill);
+        window.draw(button);
+
+        sf::Text text(font, label, textSize);
+        sf::FloatRect tb = text.getLocalBounds();
+        text.setPosition(sf::Vector2f(
+            x + buttonWidth * 0.5f - (tb.position.x + tb.size.x * 0.5f),
+            buttonY + buttonHeight * 0.5f - (tb.position.y + tb.size.y * 0.5f) - 1.0f));
+        text.setFillColor(textColor);
+        window.draw(text);
+    };
+
+    drawMenuButton(0, "Normal", sf::Color(220, 50, 50), sf::Color::White, 30);
+    drawMenuButton(1, "Xtreme", sf::Color(80, 200, 220), sf::Color::White, 30);
+    drawMenuButton(2, "Tutorial", sf::Color(110, 150, 255), sf::Color::White, 28);
+    drawMenuButton(3, "Settings", sf::Color(240, 220, 50), sf::Color::Black, 27);
 }
 
 MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
@@ -387,19 +447,24 @@ MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) 
     float windowH = v.getSize().y;
     
     float buttonY = windowH - 200;
-    float buttonSpacing = 20.0f;
-    float buttonWidth = 160.0f;
+    float buttonSpacing = 18.0f;
+    float buttonWidth = 150.0f;
     float buttonHeight = 60.0f;
     const float clickPad = 10.0f;
+    float buttonsSpan = buttonWidth * 4 + buttonSpacing * 3;
+    float startX = windowW / 2 - buttonsSpan / 2.0f;
 
     sf::FloatRect normalRect(
-        sf::Vector2f(windowW / 2 - buttonWidth * 1.5f - buttonSpacing, buttonY),
+        sf::Vector2f(startX, buttonY),
         sf::Vector2f(buttonWidth, buttonHeight));
     sf::FloatRect xtremeRect(
-        sf::Vector2f(windowW / 2 - buttonWidth / 2, buttonY),
+        sf::Vector2f(startX + (buttonWidth + buttonSpacing), buttonY),
+        sf::Vector2f(buttonWidth, buttonHeight));
+    sf::FloatRect tutorialRect(
+        sf::Vector2f(startX + (buttonWidth + buttonSpacing) * 2.0f, buttonY),
         sf::Vector2f(buttonWidth, buttonHeight));
     sf::FloatRect settingsRect(
-        sf::Vector2f(windowW / 2 + buttonWidth / 2 + buttonSpacing, buttonY),
+        sf::Vector2f(startX + (buttonWidth + buttonSpacing) * 3.0f, buttonY),
         sf::Vector2f(buttonWidth, buttonHeight));
     
     // Check Normal button
@@ -411,6 +476,11 @@ MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) 
     if (pointInRectPadded(xtremeRect, mousePos, clickPad)) {
         return MenuButton::Xtreme;
     }
+
+    // Check Tutorial button
+    if (pointInRectPadded(tutorialRect, mousePos, clickPad)) {
+        return MenuButton::Tutorial;
+    }
     
     // Check Settings button
     if (pointInRectPadded(settingsRect, mousePos, clickPad)) {
@@ -418,6 +488,150 @@ MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) 
     }
     
     return MenuButton::None;
+}
+
+void UI::drawTutorial(sf::RenderWindow& window, float windowW, float windowH) {
+    if (!fontLoaded) return;
+
+    if (tutorialPage < 0) tutorialPage = 0;
+    if (tutorialPage >= (int)kTutorialPages.size()) tutorialPage = (int)kTutorialPages.size() - 1;
+    const TutorialPageData& page = kTutorialPages[(size_t)tutorialPage];
+
+    sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
+    overlay.setFillColor(sf::Color(0, 0, 0, 190));
+    window.draw(overlay);
+
+    float panelW = std::min(900.0f, windowW * 0.84f);
+    float panelH = std::min(680.0f, windowH * 0.82f);
+    float panelX = windowW * 0.5f - panelW * 0.5f;
+    float panelY = windowH * 0.5f - panelH * 0.5f;
+
+    sf::RectangleShape panel(sf::Vector2f(panelW, panelH));
+    panel.setPosition(sf::Vector2f(panelX, panelY));
+    panel.setFillColor(sf::Color(18, 22, 40, 240));
+    panel.setOutlineColor(sf::Color(170, 190, 255));
+    panel.setOutlineThickness(3.0f);
+    window.draw(panel);
+
+    sf::RectangleShape accentBar(sf::Vector2f(panelW, 8.0f));
+    accentBar.setPosition(sf::Vector2f(panelX, panelY));
+    accentBar.setFillColor(page.accent);
+    window.draw(accentBar);
+
+    sf::Text header(font, "TUTORIAL", 56);
+    header.setPosition(sf::Vector2f(panelX + 42.0f, panelY + 30.0f));
+    header.setFillColor(sf::Color::White);
+    window.draw(header);
+
+    sf::Text pageIndex(
+        font,
+        "Page " + std::to_string(tutorialPage + 1) + "/" + std::to_string((int)kTutorialPages.size()),
+        26);
+    sf::FloatRect pageBounds = pageIndex.getLocalBounds();
+    pageIndex.setPosition(sf::Vector2f(panelX + panelW - pageBounds.size.x - 46.0f, panelY + 44.0f));
+    pageIndex.setFillColor(sf::Color(170, 190, 255));
+    window.draw(pageIndex);
+
+    sf::Text title(font, page.title, 40);
+    title.setPosition(sf::Vector2f(panelX + 42.0f, panelY + 120.0f));
+    title.setFillColor(page.accent);
+    window.draw(title);
+
+    float lineY = panelY + 200.0f;
+    for (int i = 0; i < page.lineCount; i++) {
+        sf::Text line(font, std::string("- ") + page.lines[(size_t)i], 30);
+        line.setPosition(sf::Vector2f(panelX + 50.0f, lineY));
+        line.setFillColor(sf::Color(230, 235, 255));
+        window.draw(line);
+        lineY += 62.0f;
+    }
+
+    sf::Text helper(font, "Read each page, then press DONE.", 24);
+    helper.setPosition(sf::Vector2f(panelX + 50.0f, panelY + panelH - 170.0f));
+    helper.setFillColor(sf::Color(160, 175, 220));
+    window.draw(helper);
+
+    float buttonY = panelY + panelH - 108.0f;
+    sf::FloatRect menuRect(sf::Vector2f(panelX + 40.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+    sf::FloatRect backRect(sf::Vector2f(panelX + panelW * 0.5f - 85.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+    sf::FloatRect nextRect(sf::Vector2f(panelX + panelW - 210.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+
+    sf::RectangleShape menuButton(menuRect.size);
+    menuButton.setPosition(menuRect.position);
+    menuButton.setFillColor(sf::Color(110, 110, 130));
+    menuButton.setOutlineColor(sf::Color(210, 210, 240));
+    menuButton.setOutlineThickness(2.0f);
+    window.draw(menuButton);
+
+    sf::RectangleShape backButton(backRect.size);
+    backButton.setPosition(backRect.position);
+    backButton.setFillColor(tutorialPage > 0 ? sf::Color(85, 120, 180) : sf::Color(70, 75, 95));
+    backButton.setOutlineColor(sf::Color(210, 210, 240));
+    backButton.setOutlineThickness(2.0f);
+    window.draw(backButton);
+
+    sf::RectangleShape nextButton(nextRect.size);
+    nextButton.setPosition(nextRect.position);
+    nextButton.setFillColor(tutorialPage + 1 < (int)kTutorialPages.size()
+        ? sf::Color(60, 185, 110)
+        : sf::Color(75, 215, 170));
+    nextButton.setOutlineColor(sf::Color(210, 210, 240));
+    nextButton.setOutlineThickness(2.0f);
+    window.draw(nextButton);
+
+    auto drawCenteredButtonText = [&](const sf::FloatRect& rect, const std::string& text, unsigned size) {
+        sf::Text label(font, text, size);
+        sf::FloatRect b = label.getLocalBounds();
+        label.setPosition(sf::Vector2f(
+            rect.position.x + rect.size.x * 0.5f - (b.position.x + b.size.x * 0.5f),
+            rect.position.y + rect.size.y * 0.5f - (b.position.y + b.size.y * 0.5f) - 1.0f));
+        label.setFillColor(sf::Color::White);
+        window.draw(label);
+    };
+    drawCenteredButtonText(menuRect, "MENU", 30);
+    drawCenteredButtonText(backRect, "BACK", 30);
+    drawCenteredButtonText(nextRect, (tutorialPage + 1 < (int)kTutorialPages.size()) ? "NEXT" : "DONE", 30);
+}
+
+bool UI::handleTutorialClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
+    sf::View v = window.getView();
+    float windowW = v.getSize().x;
+    float windowH = v.getSize().y;
+
+    if (tutorialPage < 0) tutorialPage = 0;
+    if (tutorialPage >= (int)kTutorialPages.size()) tutorialPage = (int)kTutorialPages.size() - 1;
+
+    float panelW = std::min(900.0f, windowW * 0.84f);
+    float panelH = std::min(680.0f, windowH * 0.82f);
+    float panelX = windowW * 0.5f - panelW * 0.5f;
+    float panelY = windowH * 0.5f - panelH * 0.5f;
+
+    float buttonY = panelY + panelH - 108.0f;
+    sf::FloatRect menuRect(sf::Vector2f(panelX + 40.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+    sf::FloatRect backRect(sf::Vector2f(panelX + panelW * 0.5f - 85.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+    sf::FloatRect nextRect(sf::Vector2f(panelX + panelW - 210.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+    const float clickPad = 12.0f;
+
+    if (pointInRectPadded(menuRect, mousePos, clickPad)) {
+        tutorialPage = 0;
+        return true;
+    }
+
+    if (pointInRectPadded(backRect, mousePos, clickPad) && tutorialPage > 0) {
+        tutorialPage--;
+        return false;
+    }
+
+    if (pointInRectPadded(nextRect, mousePos, clickPad)) {
+        if (tutorialPage + 1 < (int)kTutorialPages.size()) {
+            tutorialPage++;
+            return false;
+        }
+        tutorialPage = 0;
+        return true;
+    }
+
+    return false;
 }
 
 void UI::drawSettings(sf::RenderWindow& window, float windowW, float windowH) {

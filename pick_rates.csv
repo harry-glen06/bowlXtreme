@@ -1,37 +1,39 @@
 category,item,shown,picked,pick_rate_percent
 BALL,8-Ball,14,3,21.43
-BALL,Black Hole,10,1,10.00
-BALL,Fastball,7,0,0.00
-BALL,Heavy Ball,18,6,33.33
-BALL,Midas Ball,11,1,9.09
+BALL,Black Hole,11,1,9.09
+BALL,Fastball,8,0,0.00
+BALL,Heavy Ball,19,6,31.58
+BALL,Icy Ball,1,0,0.00
+BALL,Midas Ball,13,1,7.69
 BALL,Odd Ball,17,0,0.00
 BALL,Retrigger,7,0,0.00
 BALL,Upgrade Ball,11,5,45.45
-PIN,3rd Time,12,4,33.33
+PIN,3rd Time,13,4,30.77
 PIN,Big Pin,17,7,41.18
+PIN,Change Is Good,1,1,100.00
 PIN,Copy Cat,8,2,25.00
 PIN,Exploding Pin,15,4,26.67
-PIN,Gold Pin,12,6,50.00
+PIN,Gold Pin,13,7,53.85
 PIN,Ice Pin,15,2,13.33
-PIN,Level Up,1,1,100.00
+PIN,Level Up,2,1,50.00
 PIN,Light Pin,15,2,13.33
-PIN,Lover,1,0,0.00
-PIN,Lucky Ducky,8,4,50.00
-PIN,Mischievous,13,2,15.38
-POWER,7 8 9,1,0,0.00
-POWER,Bumpers,14,1,7.14
-POWER,Confusion,14,4,28.57
-POWER,Duplicate,14,2,14.29
-POWER,Earthquake,10,1,10.00
-POWER,Extra Ball,16,1,6.25
-POWER,Extra Pins,16,7,43.75
+PIN,Lover,2,1,50.00
+PIN,Lucky Ducky,10,5,50.00
+PIN,Mischievous,15,2,13.33
+POWER,7 8 9,3,2,66.67
+POWER,Bumpers,16,1,6.25
+POWER,Confusion,15,4,26.67
+POWER,Duplicate,15,2,13.33
+POWER,Earthquake,11,1,9.09
+POWER,Extra Ball,18,1,5.56
+POWER,Extra Pins,17,7,41.18
 POWER,Extra Slot,7,1,14.29
-POWER,Greedy,17,0,0.00
-POWER,Home Base,15,2,13.33
-POWER,Mo Money,11,2,18.18
-POWER,Passed Go,10,3,30.00
-POWER,Random Upgrade,8,0,0.00
-POWER,Reroll,13,1,7.69
-POWER,Sales,13,4,30.77
+POWER,Greedy,18,0,0.00
+POWER,Home Base,16,2,12.50
+POWER,Mo Money,12,2,16.67
+POWER,Passed Go,12,4,33.33
+POWER,Random Upgrade,10,0,0.00
+POWER,Reroll,15,1,6.67
+POWER,Sales,14,4,28.57
 POWER,Swap Pins,15,3,20.00
-POWER,Upgrades+3,17,0,0.00
+POWER,Upgrades+3,21,0,0.00

@@ -43,6 +43,7 @@ private:
     void applyPurchasedPinTypes(std::vector<Pin>& pinSet);
     void applyPowerPinLayout(std::vector<Pin>& pinSet);
     void applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet);
+    void applySavedPinSlotValues(std::vector<Pin>& pinSet);
     void updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet);
     int countStandingPins() const;
     void processExplosions();

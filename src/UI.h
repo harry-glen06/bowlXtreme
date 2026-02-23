@@ -11,6 +11,7 @@
 enum class GameState {
     Menu,
     Settings,
+    Tutorial,
     Playing,
     Xtreme,
     Shop,
@@ -27,6 +28,7 @@ enum class MenuButton {
     None,
     Normal,
     Xtreme,
+    Tutorial,
     Settings,
 };
 
@@ -67,6 +69,10 @@ public:
     // Menu
     void drawMenu(sf::RenderWindow& window, float windowW, float windowH, float dt);
     MenuButton handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos);
+
+    // Tutorial
+    void drawTutorial(sf::RenderWindow& window, float windowW, float windowH);
+    bool handleTutorialClick(sf::RenderWindow& window, sf::Vector2i mousePos);
     
     // Settings
     void drawSettings(sf::RenderWindow& window, float windowW, float windowH);
@@ -177,6 +183,7 @@ private:
     std::vector<ShopOffer> shopOffers;
     int selectedBallSlot = 1;
     int selectedPinSlot = 1;
+    int tutorialPage = 0;
 
     // Xtreme shot-score animation state
     int  hudLastShotCounter = -1;
