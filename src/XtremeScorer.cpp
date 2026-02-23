@@ -26,7 +26,8 @@ void XtremeScorer::reset() {
     powerMoMoney = false;
 }
 
-void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, float comboMultiplier, int comboAdd) {
+void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, bool spare,
+                              float comboMultiplier, int comboAdd) {
     if (lost) return;
 
     if (pinsHit < 0) pinsHit = 0;
@@ -45,6 +46,9 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, float c
     if (strike) {
         int strikeBonus = (lastShotScore * 40) / 100;
         lastShotScore += strikeBonus;
+    } else if (spare) {
+        int spareBonus = (lastShotScore * spareBonusPercent) / 100;
+        lastShotScore += spareBonus;
     }
 
     roundScore += lastShotScore;
@@ -62,6 +66,11 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, float c
 
     auto nextTargetFromPercent = [&]() {
         int pct = targetIncreasePercent;
+        if (round >= 15) {
+            pct = targetIncreasePercentRound15Plus;
+        } else if (round >= 10) {
+            pct = targetIncreasePercentRound10Plus;
+        }
         if (pct < 1) pct = 1;
         float scaled = static_cast<float>(targetScore) * (100.0f + static_cast<float>(pct)) / 100.0f;
         int snapped = static_cast<int>(std::round(scaled / 25.0f)) * 25;
@@ -83,6 +92,7 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, float c
             // token reward
             int interestDivisor = powerMoMoney ? 2 : 3;
             int interest = tokenCounter / interestDivisor;
+            if (interest > interestCap) interest = interestCap;
             int reward = 6;     // 3 base + 3 bonus for early clear
             if (powerPassedGo) reward += 3;
             tokenCounter += interest + reward;
@@ -118,6 +128,7 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, float c
     // passed round normally
     int interestDivisor = powerMoMoney ? 2 : 3;
     int interest = tokenCounter / interestDivisor;
+    if (interest > interestCap) interest = interestCap;
     int reward = 3;     // normal clear reward
     if (powerPassedGo) reward += 3;
     tokenCounter += interest + reward;

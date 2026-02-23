@@ -73,10 +73,10 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
         activeItems.powerExtraPins || activeItems.hasPurchasedPower(PowerType::ExtraPins);
     activeItems.setActivePinSlotCount(hasExtraPins ? 12 : 10);
     if (hasExtraPins) {
-        // Spawn as a wider front row so they stay in-lane and upright.
-        float y = startY + spacing * 0.85f;
-        out.emplace_back(sf::Vector2f(centerX - spacing, y), radius, pinValue++);
-        out.emplace_back(sf::Vector2f(centerX + spacing, y), radius, pinValue++);
+        // Spawn directly next to pin 1 (front-center), not deeper in the rack.
+        float y = startY;
+        out.emplace_back(sf::Vector2f(centerX - spacing * 1.02f, y), radius, pinValue++);
+        out.emplace_back(sf::Vector2f(centerX + spacing * 1.02f, y), radius, pinValue++);
     }
 
     // Preserve previously changed values by pin slot when we rerack/rebuild.
@@ -180,7 +180,7 @@ int Game::findPinAtWorldPos(sf::Vector2f worldPos) const {
         if (pin.isFallen()) continue;
         sf::Vector2f d = pin.getPos() - worldPos;
         float dist2 = d.x * d.x + d.y * d.y;
-        float hitR = std::max(20.0f, pin.getRadius() * 2.8f);
+        float hitR = std::max(24.0f, pin.getRadius() * 3.2f);
         if (dist2 <= hitR * hitR && dist2 < bestDist2) {
             bestDist2 = dist2;
             best = i;
@@ -215,7 +215,31 @@ void Game::applyManualSwap(int firstIndex, int secondIndex) {
     if (firstIndex == secondIndex) return;
     if (activeItems.swapCharges <= 0) return;
 
-    std::swap(pins[firstIndex], pins[secondIndex]);
+    // Swap pin state by slot (type + value), then persist the swapped slots.
+    // Swapping full Pin objects can desync slot-assignment state for special pins.
+    PinType firstType = pins[firstIndex].getPinType();
+    PinType secondType = pins[secondIndex].getPinType();
+    int firstValue = pins[firstIndex].getValue();
+    int secondValue = pins[secondIndex].getValue();
+
+    pins[firstIndex].setPinType(secondType);
+    pins[secondIndex].setPinType(firstType);
+    pins[firstIndex].setValue(secondValue);
+    pins[secondIndex].setValue(firstValue);
+
+    int firstSlot = firstIndex + 1;
+    int secondSlot = secondIndex + 1;
+    if (secondType == PinType::Normal) {
+        activeItems.removePinAssignmentAtSlot(firstSlot);
+    } else {
+        activeItems.setPinAssignment(firstSlot, secondType);
+    }
+    if (firstType == PinType::Normal) {
+        activeItems.removePinAssignmentAtSlot(secondSlot);
+    } else {
+        activeItems.setPinAssignment(secondSlot, firstType);
+    }
+
     activeItems.swapCharges--;
     updatePinSlotValueSnapshot(pins);
 }
@@ -531,29 +555,20 @@ void Game::handleEvents() {
 
                     auto buildSellablePowerList = [&]() {
                         const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
-                        std::vector<int> remaining(powerCount, 0);
+                        std::vector<PowerType> out;
+                        out.reserve(powerCount);
                         for (int i = 0; i < powerCount; i++) {
                             PowerType p = static_cast<PowerType>(i);
                             if (!activeItems.hasPower(p)) continue;
                             // Extra Slot is a one-time unlock and not sellable.
                             if (p == PowerType::ExtraPowerSlot) continue;
-                            if (p == PowerType::Duplicate) {
-                                remaining[i] = std::max(0, activeItems.duplicateCharges);
-                            } else if (p == PowerType::SwapPins) {
-                                remaining[i] = std::max(0, activeItems.swapCharges);
-                            } else if (p == PowerType::SevenEightNine) {
-                                remaining[i] = std::max(0, activeItems.sevenEightNineCharges);
-                            } else {
-                                remaining[i] = 1;
-                            }
-                        }
-                        std::vector<PowerType> out;
-                        out.reserve(activeItems.purchasedPowers.size());
-                        for (int raw : activeItems.purchasedPowers) {
-                            if (raw < 0 || raw >= powerCount) continue;
-                            if (remaining[raw] <= 0) continue;
-                            out.push_back(static_cast<PowerType>(raw));
-                            remaining[raw]--;
+
+                            int count = 1;
+                            if (p == PowerType::Duplicate) count = std::max(0, activeItems.duplicateCharges);
+                            else if (p == PowerType::SwapPins) count = std::max(0, activeItems.swapCharges);
+                            else if (p == PowerType::SevenEightNine) count = std::max(0, activeItems.sevenEightNineCharges);
+
+                            for (int n = 0; n < count; n++) out.push_back(p);
                         }
                         return out;
                     };
@@ -734,12 +749,21 @@ void Game::handleEvents() {
                             if (activeItems.shoeType == offer.shoeType) {
                                 canBuy = false;
                             }
+                            if (offer.shoeType == ShoeType::Clown &&
+                                activeItems.clownShoesPurchased) {
+                                canBuy = false;
+                            }
                         }
                         if (offer.category == ShopItemCategory::Power) {
                             const int maxPermanentPowers = activeItems.getMaxPermanentPowerSlots();
                             bool alreadyOwned = activeItems.hasPower(offer.powerType) ||
                                                 activeItems.hasPurchasedPower(offer.powerType);
                             if (!isStackablePower(offer.powerType) && alreadyOwned) {
+                                canBuy = false;
+                            }
+                            if (offer.powerType == PowerType::Duplicate &&
+                                activeItems.duplicateCharges > 0) {
+                                // Duplicate is now forced-use; don't allow stockpiling.
                                 canBuy = false;
                             }
                             if (powerCountsTowardLimit(offer.powerType) &&
@@ -754,6 +778,15 @@ void Game::handleEvents() {
                             int pinLimit = hasExtraPins ? 12 : 10;
                             int targetSlot = std::clamp(ui.getSelectedPinSlot(), 1, pinLimit);
                             bool slotEmpty = !activeItems.hasPinAssignmentAtSlot(targetSlot);
+                            if (!slotEmpty &&
+                                activeItems.getPinTypeForSlot(targetSlot) == offer.pinType) {
+                                canBuy = false;
+                            }
+                            if (!slotEmpty &&
+                                activeItems.getPinTypeForSlot(targetSlot) != offer.pinType) {
+                                // Slot is locked until the player explicitly sells it.
+                                canBuy = false;
+                            }
                             if (slotEmpty && activeItems.getPinAssignmentCount() >= pinLimit) {
                                 canBuy = false;
                             }
@@ -783,6 +816,9 @@ void Game::handleEvents() {
                                 xtreme.addTokens(10);
                                 activeItems.clownBonusClaimed = true;
                             }
+                            if (offer.shoeType == ShoeType::Clown) {
+                                activeItems.clownShoesPurchased = true;
+                            }
                             ui.recordOfferPicked(offer);
                         } else if (offer.category == ShopItemCategory::Pin) {
                             xtreme.addTokens(-offer.cost);
@@ -790,14 +826,9 @@ void Game::handleEvents() {
                                                 activeItems.hasPurchasedPower(PowerType::ExtraPins);
                             int pinLimit = hasExtraPins ? 12 : 10;
                             int targetSlot = std::clamp(ui.getSelectedPinSlot(), 1, pinLimit);
-
-                            PinType previous = PinType::Normal;
-                            bool replaced = activeItems.removePinAssignmentAtSlot(targetSlot, &previous);
-                            if (replaced && previous != PinType::Normal) {
-                                int sellValue = pinTypeCost(previous) / 2;
-                                if (sellValue > 0) xtreme.addTokens(sellValue);
+                            if (!activeItems.hasPinAssignmentAtSlot(targetSlot)) {
+                                activeItems.setPinAssignment(targetSlot, offer.pinType);
                             }
-                            activeItems.setPinAssignment(targetSlot, offer.pinType);
                             ui.recordOfferPicked(offer);
                         } else {
                             xtreme.addTokens(-offer.cost);
@@ -1174,10 +1205,12 @@ void Game::finishPendingResetIfReady(float dt) {
             if (earthquakeStrikeThisShot) {
                 strikeThisShot = true;
             }
+            bool spareBonusThisShot = spareThisShot && !strikeThisShot;
             xtreme.recordShot(
                 knockedThisBall,
                 pinValueSumThisBall,
                 strikeThisShot,
+                spareBonusThisShot,
                 static_cast<float>(thirdTimeComboMultiplier),
                 greedyComboBonus);
 
@@ -1476,7 +1509,7 @@ void Game::doCollisions() {
         sf::Vector2f bvStart = bv;
         float br = ball.getRadius();
         float bm = ball.getMass() * 1.07f;  // slight bias so pins affect ball a bit less
-        const float pinFallImpactThreshold = 48.0f;
+        const float pinFallImpactThreshold = 57.0f;
 
         bool hitAnyPin = false;
 
@@ -1488,11 +1521,12 @@ void Game::doCollisions() {
             sf::Vector2f pv = pin.getVel();
             sf::Vector2f pvBefore = pv;
 
+            float pinCollisionRadius = pin.getRadius() * (pin.isFallen() ? 0.86f : 1.00f);
             resolveCircleCollision(
                 bp, bv, bm, br,
                 pp, pv,
                 (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f) * activeItems.pinMassMultiplier,
-                pin.getRadius(),
+                pinCollisionRadius,
                 0.12f
             );
 
@@ -1508,8 +1542,10 @@ void Game::doCollisions() {
                 audio.playRandomPinHit(impactVolume);
             }
 
-            // Pin first contact this shot (impact threshold)
-            bool freshImpact = (!pin.isFallen() && impact > pinFallImpactThreshold);
+            // Pin first contact this shot with a small random threshold variance.
+            float randomThreshold =
+                pinFallImpactThreshold + static_cast<float>((rand() % 5) - 2); // +/-2
+            bool freshImpact = (!pin.isFallen() && impact > randomThreshold);
 
             // CopyCat: becomes the type of the first hit pin.
             // Do this before setFallen so copying Exploding arms correctly.
@@ -1532,8 +1568,15 @@ void Game::doCollisions() {
             // Pin falls
             if (freshImpact) {
                 pin.setFallen(true);
-                float spin = (bv.x - pv.x) * 0.01f;
-                pin.setAngularVel(std::clamp(spin, -6.0f, 6.0f));
+                float randomSpin = static_cast<float>((rand() % 401) - 200) * 0.01f;
+                float spin = (bv.x - pv.x) * 0.011f + randomSpin;
+                pin.setAngularVel(std::clamp(spin, -7.5f, 7.5f));
+
+                // Small random tumble kick keeps pin-fall motion from looking mirrored.
+                sf::Vector2f tumbleVel = pin.getVel();
+                tumbleVel.x += static_cast<float>((rand() % 401) - 200) * 0.03f;
+                tumbleVel.y += static_cast<float>((rand() % 201) - 100) * 0.02f;
+                pin.setVel(tumbleVel);
             }
 
             // ── Item effects on first meaningful contact ──────────────────
@@ -1601,10 +1644,12 @@ void Game::doCollisions() {
                 sf::Vector2f p2 = pins[j].getPos(), v2 = pins[j].getVel();
                 sf::Vector2f v1B = v1, v2B = v2;
 
+                float r1 = pins[i].getRadius() * (pins[i].isFallen() ? 0.86f : 1.00f);
+                float r2 = pins[j].getRadius() * (pins[j].isFallen() ? 0.86f : 1.00f);
                 resolveCircleCollision(p1, v1,
-                                       pins[i].getMass() * activeItems.pinMassMultiplier, pins[i].getRadius(),
+                                       pins[i].getMass() * activeItems.pinMassMultiplier, r1,
                                        p2, v2,
-                                       pins[j].getMass() * activeItems.pinMassMultiplier, pins[j].getRadius(),
+                                       pins[j].getMass() * activeItems.pinMassMultiplier, r2,
                                        0.50f);
                 
                 // Play collision sound
@@ -1860,22 +1905,39 @@ void Game::update(float dt) {
         cancelPinPowerSelection();
     }
     if (canChoosePinPowers) {
+        bool duplicateModeActive =
+            (pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickSource ||
+             pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickTarget);
+        bool swapModeActive =
+            (pinPowerSelectionMode == PinPowerSelectionMode::SwapPickFirst ||
+             pinPowerSelectionMode == PinPowerSelectionMode::SwapPickSecond);
+
+        // Duplicate is forced-use now: if you have a charge, selection mode is
+        // automatically enabled and must be resolved before launch.
+        if (activeItems.duplicateCharges > 0 && !duplicateModeActive) {
+            pinPowerSelectionMode = PinPowerSelectionMode::DuplicatePickSource;
+            pinPowerFirstIndex = -1;
+            duplicateModeActive = true;
+            swapModeActive = false;
+        }
+
         if (nowN && !prevN) {
-            bool duplicateModeActive =
-                (pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickSource ||
-                 pinPowerSelectionMode == PinPowerSelectionMode::DuplicatePickTarget);
             if (duplicateModeActive) {
-                cancelPinPowerSelection();
+                // Duplicate cannot be cancelled while charges remain.
+                if (activeItems.duplicateCharges <= 0) {
+                    cancelPinPowerSelection();
+                }
             } else if (activeItems.duplicateCharges > 0) {
                 pinPowerSelectionMode = PinPowerSelectionMode::DuplicatePickSource;
                 pinPowerFirstIndex = -1;
             }
         }
         if (nowV && !prevV) {
-            bool swapModeActive =
-                (pinPowerSelectionMode == PinPowerSelectionMode::SwapPickFirst ||
-                 pinPowerSelectionMode == PinPowerSelectionMode::SwapPickSecond);
-            if (swapModeActive) {
+            if (activeItems.duplicateCharges > 0) {
+                // Must spend Duplicate before Swap can be selected.
+                // Ignore swap toggle while duplicate is pending.
+            }
+            else if (swapModeActive) {
                 cancelPinPowerSelection();
             } else if (activeItems.swapCharges > 0) {
                 pinPowerSelectionMode = PinPowerSelectionMode::SwapPickFirst;
@@ -2022,7 +2084,7 @@ void Game::draw() {
         sf::Vector2f dir(std::cos(a), std::sin(a));
         sf::Vertex line[2] = { 
             {ball.getPos(), sf::Color::Yellow}, 
-            {ball.getPos() + dir * 100.0f, sf::Color::Yellow} 
+            {ball.getPos() + dir * 114.0f, sf::Color::Yellow} 
         };
         window.draw(line, 2, sf::PrimitiveType::Lines);
     }
@@ -2069,9 +2131,11 @@ void Game::draw() {
             displayedRoundScore = pendingRoundScoreBeforeShot;
         }
 
-        if (activeItems.duplicateCharges > 0 || activeItems.swapCharges > 0) {
-            pinPowerHintLine1 = "N Duplicate(" + std::to_string(activeItems.duplicateCharges) +
-                                ")   V Swap(" + std::to_string(activeItems.swapCharges) + ")";
+        if (activeItems.duplicateCharges > 0) {
+            pinPowerHintLine1 = "Duplicate(" + std::to_string(activeItems.duplicateCharges) +
+                                ") must be used before roll";
+        } else if (activeItems.swapCharges > 0) {
+            pinPowerHintLine1 = "V Swap(" + std::to_string(activeItems.swapCharges) + ")";
         }
         switch (pinPowerSelectionMode) {
             case PinPowerSelectionMode::DuplicatePickSource:

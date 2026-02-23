@@ -54,6 +54,8 @@ static bool pointInRectPadded(const sf::FloatRect& rect, sf::Vector2i point, flo
     return pointInRectPadded(rect, sf::Vector2f((float)point.x, (float)point.y), pad);
 }
 
+static std::string formatCompactScore(int value);
+
 namespace {
 struct TutorialPageData {
     const char* title;
@@ -93,7 +95,7 @@ const std::array<TutorialPageData, 5> kTutorialPages = {{
         "SHOP AND INVENTORY",
         {
             "Buy Balls, Pins, Shoes, and Powers with tokens.",
-            "Balls are assigned per shot slot (S1 and S2).",
+            "Balls are assigned per shot slot (Ball 1 and Ball 2).",
             "Pins are assigned by pin slot (P1..P10/12).",
             "Hover inventory items to see live status.",
             "",
@@ -1031,6 +1033,12 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
 
     float lx = leftPanelX + 22.0f;
     float y = leftPanelY + 20.0f;
+    const float leftTextMaxW = leftPanelW - 36.0f;
+    auto fitTextToPanel = [&](sf::Text& text, float maxW, unsigned minSize) {
+        while (text.getCharacterSize() > minSize && text.getLocalBounds().size.x > maxW) {
+            text.setCharacterSize(text.getCharacterSize() - 1);
+        }
+    };
 
     sf::Text t1(font, "round " + std::to_string(round), 42);
     t1.setPosition(sf::Vector2f(lx, y));
@@ -1050,7 +1058,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     window.draw(t3);
     y += 58;
 
-    sf::Text target(font, "score at least " + std::to_string(targetScore), 24);
+    sf::Text target(font, "score at least " + formatCompactScore(targetScore), 24);
+    fitTextToPanel(target, leftTextMaxW, 16);
     target.setPosition(sf::Vector2f(lx, y));
     target.setFillColor(sf::Color(245, 224, 138));
     window.draw(target);
@@ -1062,7 +1071,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         shownImpact = std::max(10, liveImpactPreview);
         shownCombo = std::max(1, liveComboPreview);
     }
-    sf::Text big(font, std::to_string(shownImpact) + " X " + std::to_string(shownCombo), 60);
+    sf::Text big(font, formatCompactScore(shownImpact) + " X " + formatCompactScore(shownCombo), 60);
+    fitTextToPanel(big, leftTextMaxW, 28);
     big.setPosition(sf::Vector2f(lx, y));
     big.setFillColor(sf::Color(120, 240, 255));
     big.setOutlineColor(sf::Color(8, 12, 18));
@@ -1082,19 +1092,22 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     } else if (hudShowBigScore) {
         shownShotAdd = hudCountTarget;
     }
-    sf::Text shotScore(font, "shot add: " + std::to_string(shownShotAdd), 24);
+    sf::Text shotScore(font, "shot add: " + formatCompactScore(shownShotAdd), 24);
+    fitTextToPanel(shotScore, leftTextMaxW, 16);
     shotScore.setPosition(sf::Vector2f(lx, y));
     shotScore.setFillColor(hudCounting ? sf::Color(100, 255, 170) : sf::Color(235, 236, 245));
     window.draw(shotScore);
     y += 38;
 
-    sf::Text roundScoreText(font, "round score: " + std::to_string(roundScore), 32);
+    sf::Text roundScoreText(font, "round score: " + formatCompactScore(roundScore), 32);
+    fitTextToPanel(roundScoreText, leftTextMaxW, 18);
     roundScoreText.setPosition(sf::Vector2f(lx, y));
     roundScoreText.setFillColor(sf::Color(246, 247, 255));
     window.draw(roundScoreText);
 
     y += 46;
-    sf::Text tokenText(font, "tokens: " + std::to_string(tokens), 30);
+    sf::Text tokenText(font, "tokens: " + formatCompactScore(tokens), 30);
+    fitTextToPanel(tokenText, leftTextMaxW, 16);
     tokenText.setPosition(sf::Vector2f(lx, y));
     tokenText.setFillColor(sf::Color(255, 215, 0));
     window.draw(tokenText);
@@ -1121,7 +1134,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         fade = std::clamp(fade, 0.0f, 1.0f);
         std::uint8_t alpha = (std::uint8_t)(255.0f * fade);
 
-        sf::Text bigShot(font, "+" + std::to_string(hudCountTarget), 88);
+        sf::Text bigShot(font, "+" + formatCompactScore(hudCountTarget), 88);
+        fitTextToPanel(bigShot, leftPanelW * 0.82f, 40);
         bigShot.setStyle(sf::Text::Bold);
         bigShot.setScale({pulse, pulse});
         bigShot.setFillColor(sf::Color(255, 230, 110, alpha));
@@ -1526,14 +1540,14 @@ static std::string inventoryPinDesc(PinType t) {
         case PinType::LevelUp:     return "This pin is always\nworth +1 extra point.";
         case PinType::Lover:       return "When hit, adds +1 value\nto the next slot pin.";
         case PinType::ChangeIsGood:return "Whenever another pin changes,\nthis pin gains +2 value.";
-        case PinType::ThirdTime:   return "Every 3rd 3rd-Time knock\ndoubles combo.";
+        case PinType::ThirdTime:   return "Every 3rd time this pin is hit:\ncombo x2 this shot.";
         default:                   return "Normal pin.";
     }
 }
 
 static std::string inventoryShoeDesc(ShoeType t) {
     switch (t) {
-        case ShoeType::Clown:    return "Funny wobble:\nlaunch angle shifts a bit.";
+        case ShoeType::Clown:    return "Wobble launch angle.\n8% slower.\nFirst buy: +10 dollars.";
         case ShoeType::Running:  return "Ball launches 18% faster.";
         case ShoeType::Moon:     return "All pins are 26% lighter.";
         case ShoeType::Slippers: return "Everything slides 18% more.";
@@ -1546,7 +1560,7 @@ static std::string inventoryShoeDesc(ShoeType t) {
 static std::string inventoryPowerDesc(PowerType t) {
     switch (t) {
         case PowerType::Greedy:              return "Gain +1 combo for\nevery 4 dollars.";
-        case PowerType::RandomUpgrade:       return "After each frame,\na random pin gains +1 value.";
+        case PowerType::RandomUpgrade:       return "After each frame,\nrandom pin +1 value.";
         case PowerType::ExtraPins:           return "Adds two extra pins\nto the rack.";
         case PowerType::ExtraBall:           return "Adds one extra shot\nper frame.";
         case PowerType::Duplicate:           return "Press N, then choose\nsource and target pin.";
@@ -1591,12 +1605,39 @@ static std::string formatCompactFloat(float value, int decimals = 2) {
     return out;
 }
 
+static std::string formatCompactScore(int value) {
+    long long absValue = std::llabs(static_cast<long long>(value));
+    auto withSuffix = [&](double scaled, const char* suffix) {
+        std::ostringstream ss;
+        if (scaled >= 100.0) ss << std::fixed << std::setprecision(0);
+        else if (scaled >= 10.0) ss << std::fixed << std::setprecision(1);
+        else ss << std::fixed << std::setprecision(2);
+        ss << scaled;
+        std::string out = ss.str();
+        while (!out.empty() && out.back() == '0') out.pop_back();
+        if (!out.empty() && out.back() == '.') out.pop_back();
+        if (value < 0) out = "-" + out;
+        out += suffix;
+        return out;
+    };
+    if (absValue >= 1000000000LL) {
+        return withSuffix((double)absValue / 1000000000.0, "B");
+    }
+    if (absValue >= 1000000LL) {
+        return withSuffix((double)absValue / 1000000.0, "M");
+    }
+    if (absValue >= 10000LL) {
+        return withSuffix((double)absValue / 1000.0, "K");
+    }
+    return std::to_string(value);
+}
+
 static std::string inventoryShoeStatus(const ActiveItems& items, ShoeType type) {
     switch (type) {
         case ShoeType::Clown:
             return items.clownBonusClaimed
-                ? "(currently: +10 bonus already claimed)"
-                : "(currently: +10 bonus on first buy)";
+                ? "(currently: +10 bonus already claimed, speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")"
+                : "(currently: +10 bonus on first buy, speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")";
         case ShoeType::Running:
             return "(currently: launch speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")";
         case ShoeType::Moon:
@@ -1747,7 +1788,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     float slot2X = x + width * 0.72f;
 
     auto drawBallSlot = [&](int slot, float sx, BallType bt) {
-        sf::Text slotLabel(font, "S" + std::to_string(slot), 14);
+        sf::Text slotLabel(font, "Ball " + std::to_string(slot), 14);
         sf::FloatRect slb = slotLabel.getLocalBounds();
         slotLabel.setPosition({sx - slb.size.x * 0.5f, iy});
         slotLabel.setFillColor({185, 185, 205});
@@ -1770,7 +1811,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         float rectW = std::max(90.f, ballR * 2.f + 58.f);
         float rectH = ballR * 2.f + 46.f;
         addHover(sf::FloatRect({sx - rectW * 0.5f, iy - 2.f}, {rectW, rectH}),
-                 "S" + std::to_string(slot) + " " + ballShortName(bt),
+                 "Ball " + std::to_string(slot) + " " + ballShortName(bt),
                  inventoryBallDesc(bt),
                  "",
                  ballPreviewColor(bt));
@@ -1815,12 +1856,18 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         window.draw(pinsLabel);
         iy += 28.f;
 
+        bool twoColumnPins = sortedPins.size() > 8;
         const float lineH = 20.f;
+        const float pinColW = twoColumnPins ? (width * 0.49f) : (width - 16.f);
+        int shownPins = 0;
         for (const auto& assigned : sortedPins) {
+            int row = twoColumnPins ? (shownPins / 2) : shownPins;
+            int col = twoColumnPins ? (shownPins % 2) : 0;
+            float rowY = iy + row * lineH;
+            float rowX = x + 10.f + col * pinColW;
             int pt = static_cast<int>(assigned.type);
-            float iconX = x + 18.f;
-            float rowY = iy + 8.f;
-            drawMiniPin(window, iconX, rowY, 11.f, pinPreviewColor(pt));
+            float iconX = rowX + 8.f;
+            drawMiniPin(window, iconX, rowY + 8.f, 11.f, pinPreviewColor(pt));
 
             int shownValue = 0;
             if (assigned.slot >= 1 && assigned.slot <= 12) {
@@ -1828,19 +1875,21 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
             }
             std::string valueText = (shownValue > 0) ? std::to_string(shownValue) : "-";
             std::string label = "P" + std::to_string(assigned.slot) + " " +
-                                pinShortName(pt) + " (" + valueText + ")";
+                                pinShortName(pt) + " v" + valueText;
 
             sf::Text pinText(font, label, 14);
-            pinText.setPosition({x + 34.f, iy});
+            pinText.setPosition({rowX + 24.f, rowY});
             pinText.setFillColor({210, 210, 210});
             window.draw(pinText);
-            addHover(sf::FloatRect({x + 8.f, iy - 1.f}, {width - 16.f, lineH}),
+            addHover(sf::FloatRect({rowX + 4.f, rowY - 1.f}, {pinColW - 6.f, lineH}),
                      "P" + std::to_string(assigned.slot) + " " + pinShortName(pt),
                      inventoryPinDesc(assigned.type),
                      inventoryPinStatus(items, assigned.slot, assigned.type),
                      pinPreviewColor(pt));
-            iy += lineH;
+            shownPins++;
         }
+        int pinRows = twoColumnPins ? ((shownPins + 1) / 2) : shownPins;
+        iy += pinRows * lineH;
         iy += 8.f;
     }
 
@@ -1857,8 +1906,10 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     };
     forceOwned(PowerType::Greedy, items.powerGreedy);
     forceOwned(PowerType::RandomUpgrade, items.powerRandomUpgrade);
-    forceOwned(PowerType::ExtraPins, items.powerExtraPins);
-    forceOwned(PowerType::ExtraBall, items.powerExtraBall);
+    forceOwned(PowerType::ExtraPins,
+               items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins));
+    forceOwned(PowerType::ExtraBall,
+               items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall));
     forceOwned(PowerType::Bumpers, items.powerBumpers);
     forceOwned(PowerType::HomeBase, items.powerHomeBase);
     forceOwned(PowerType::Confusion, items.powerConfusion);
@@ -2043,7 +2094,7 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
         ball1.setOutlineThickness(2.f);
         window.draw(ball1);
 
-        sf::Text b1(font, "S1 " + ballShortName(items.getBallForShot(1)), 13);
+        sf::Text b1(font, "Ball 1 " + ballShortName(items.getBallForShot(1)), 13);
         b1.setPosition({cx + br + 4.f, barY + barH/2.f - 20.f});
         b1.setFillColor(sf::Color::White);
         window.draw(b1);
@@ -2056,7 +2107,7 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
         ball2.setOutlineThickness(2.f);
         window.draw(ball2);
 
-        sf::Text b2(font, "S2 " + ballShortName(items.getBallForShot(2)), 13);
+        sf::Text b2(font, "Ball 2 " + ballShortName(items.getBallForShot(2)), 13);
         b2.setPosition({cx + br + 4.f, barY + barH/2.f + 2.f});
         b2.setFillColor(sf::Color::White);
         window.draw(b2);
@@ -2157,17 +2208,21 @@ static bool pointInRect(const sf::FloatRect& rect, sf::Vector2i point, float pad
 static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float windowH, std::size_t offerCount) {
     ShopOwnedPanelLayout layout;
     layout.panelW = std::clamp(windowW * 0.24f, 270.f, 330.f);
-    layout.panelH = std::min(620.f, windowH - 170.f);
+    layout.panelH = std::clamp(windowH - 130.f, 430.f, 760.f);
     if (layout.panelH < 430.f) layout.panelH = 430.f;
-    layout.panelX = windowW - layout.panelW - 22.f;
-    layout.panelY = 132.f;
+    layout.panelX = windowW - layout.panelW - 18.f;
+    layout.panelY = 118.f;
     if (offerCount > 4) {
-        // Extra item rows need a slightly narrower panel to keep card space readable.
-        layout.panelW = std::clamp(windowW * 0.22f, 250.f, 290.f);
-        layout.panelH = std::min(600.f, windowH - 160.f);
-        if (layout.panelH < 420.f) layout.panelH = 420.f;
-        layout.panelX = 16.f;
-        layout.panelY = 118.f;
+        // Keep the panel on the right in larger shops, but tighten it slightly
+        // so extra cards still have room.
+        layout.panelW = std::clamp(windowW * 0.21f, 240.f, 285.f);
+        layout.panelH = std::clamp(windowH - 120.f, 420.f, 760.f);
+        if (layout.panelH < 410.f) layout.panelH = 410.f;
+        layout.panelX = windowW - layout.panelW - 16.f;
+        layout.panelY = 110.f;
+    }
+    if (layout.panelY + layout.panelH > windowH - 16.f) {
+        layout.panelY = std::max(40.f, windowH - layout.panelH - 16.f);
     }
 
     const float pad = 12.f;
@@ -2187,9 +2242,16 @@ static ShopCardLayout computeShopCardLayout(float windowW,
                                             const ShopOwnedPanelLayout& ownedLayout,
                                             std::size_t offerCount) {
     ShopCardLayout out;
+    const bool compact = offerCount > 4;
+    if (compact) {
+        out.cardW = 178.f;
+        out.cardH = 246.f;
+        out.cardGap = 14.f;
+        out.firstCardY = 146.f;
+    }
     // Reserve the left control column (ball slot + pin slot controls), so cards
     // never cover it in smaller windowed layouts.
-    out.areaMinX = std::max(out.areaMinX, 250.f);
+    out.areaMinX = std::max(out.areaMinX, compact ? 210.f : 250.f);
     out.areaMaxX = windowW - 28.f;
 
     float panelMid = ownedLayout.panelX + ownedLayout.panelW * 0.5f;
@@ -2225,31 +2287,19 @@ static int powerTypeCost(PowerType t);
 
 static std::vector<PowerType> buildSellablePowerList(const ActiveItems& items) {
     const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
-    std::vector<int> remaining(powerCount, 0);
-
+    std::vector<PowerType> out;
+    out.reserve(powerCount);
     for (int p = 0; p < powerCount; p++) {
         PowerType t = static_cast<PowerType>(p);
         if (!items.hasPower(t)) continue;
-        // Extra Slot is one-time and cannot be sold in-run.
-        if (t == PowerType::ExtraPowerSlot) continue;
-        if (t == PowerType::Duplicate) {
-            remaining[p] = std::max(0, items.duplicateCharges);
-        } else if (t == PowerType::SwapPins) {
-            remaining[p] = std::max(0, items.swapCharges);
-        } else if (t == PowerType::SevenEightNine) {
-            remaining[p] = std::max(0, items.sevenEightNineCharges);
-        } else {
-            remaining[p] = 1;
-        }
-    }
+        if (t == PowerType::ExtraPowerSlot) continue; // one-time, not sellable
 
-    std::vector<PowerType> out;
-    out.reserve(items.purchasedPowers.size());
-    for (int raw : items.purchasedPowers) {
-        if (raw < 0 || raw >= powerCount) continue;
-        if (remaining[raw] <= 0) continue;
-        out.push_back(static_cast<PowerType>(raw));
-        remaining[raw]--;
+        int count = 1;
+        if (t == PowerType::Duplicate) count = std::max(0, items.duplicateCharges);
+        else if (t == PowerType::SwapPins) count = std::max(0, items.swapCharges);
+        else if (t == PowerType::SevenEightNine) count = std::max(0, items.sevenEightNineCharges);
+
+        for (int i = 0; i < count; i++) out.push_back(t);
     }
     return out;
 }
@@ -2262,7 +2312,7 @@ static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanel
     const float pad = 12.f;
     const float gap = 8.f;
     const float headerH = 18.f;
-    const float rowH = 28.f;
+    const float rowH = 24.f;
     const float listW = layout.panelW - pad * 2.f;
     const float colW = (listW - gap) * 0.5f;
     float y = layout.sellShoe.position.y + layout.sellShoe.size.y + 12.f;
@@ -2367,8 +2417,8 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
         window.draw(text);
     };
 
-    drawSellButton(layout.sellBall1, "Sell S1 (+" + std::to_string(s1Value) + ")", canSellS1, 19);
-    drawSellButton(layout.sellBall2, "Sell S2 (+" + std::to_string(s2Value) + ")", canSellS2, 19);
+    drawSellButton(layout.sellBall1, "Sell Ball 1 (+" + std::to_string(s1Value) + ")", canSellS1, 15);
+    drawSellButton(layout.sellBall2, "Sell Ball 2 (+" + std::to_string(s2Value) + ")", canSellS2, 15);
     drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe, 18);
 
     sf::Text pinHeader(font, "SELL PINS", 15);
@@ -2655,10 +2705,10 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Pin, BallType::Normal, PinType::ChangeIsGood, ShoeType::None, PowerType::Greedy,
          "Change Is Good","When another pin changes,\nthis pin gains +2 value.", 3},
         {ShopItemCategory::Pin, BallType::Normal, PinType::ThirdTime, ShoeType::None, PowerType::Greedy,
-         "3rd Time",     "Every 3rd 3rd-Time\nknock doubles combo.",           3},
+         "3rd Time",     "Every 3rd 3rd-Time hit:\ncombo x2 this shot.",     3},
         // Shoes
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Clown, PowerType::Greedy,
-         "Clown Shoes",  "Funny wobble:\nlaunch angle shifts a bit.\nFirst buy: +10 dollars.", 0},
+         "Clown Shoes",  "Wobble launch angle.\n8% slower.\nFirst buy: +10 dollars.", 0},
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Running, PowerType::Greedy,
          "Running Shoes","Ball launches\n18% faster.",                         3},
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Moon, PowerType::Greedy,
@@ -2673,7 +2723,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Greedy",       "Gain +1 combo for\nevery 4 dollars.",                5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::RandomUpgrade,
-         "Random Upgrade","After each frame,\na random pin gains +1 value.",    3},
+         "Random Upgrade","After each frame,\nrandom pin +1 value.",             3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
          "Extra Pins",   "Adds two extra pins\nto the rack.",                   5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraBall,
@@ -2720,6 +2770,11 @@ void UI::generateShopOffers(const ActiveItems& items) {
         }
         if (adjusted.category == ShopItemCategory::Shoe &&
             adjusted.shoeType == items.shoeType) {
+            continue;
+        }
+        if (adjusted.category == ShopItemCategory::Shoe &&
+            adjusted.shoeType == ShoeType::Clown &&
+            items.clownShoesPurchased) {
             continue;
         }
         if (adjusted.category == ShopItemCategory::Power &&
@@ -2905,6 +2960,22 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     window.draw(pinSlotCurrent);
 
     ShopCardLayout cardLayout = computeShopCardLayout(windowW, ownedLayout, shopOffers.size());
+    const bool compactCards = shopOffers.size() > 4;
+    const float buyBtnH = compactCards ? 38.f : 44.f;
+    const float buyBtnBottomMargin = compactCards ? 10.f : 12.f;
+    const unsigned catTextSize = compactCards ? 16 : 20;
+    const unsigned nameTextSize = compactCards ? 18 : 26;
+    const unsigned descTextSize = compactCards ? 16 : 20;
+    const float descLineStep = compactCards ? 20.f : 26.f;
+    const float previewR = compactCards ? 28.f : 36.f;
+    const float previewY = compactCards ? 108.f : 135.f;
+    const float descStartY = compactCards ? 145.f : 198.f;
+    auto fitCardText = [&](sf::Text& text, float maxW, unsigned minSize) {
+        while (text.getCharacterSize() > minSize &&
+               text.getLocalBounds().size.x > maxW) {
+            text.setCharacterSize(text.getCharacterSize() - 1);
+        }
+    };
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         const auto& offer = shopOffers[i];
@@ -2933,27 +3004,40 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         const int maxPermanentPowers = items.getMaxPermanentPowerSlots();
         bool powerLimitBlocked = isPower && !isOwned &&
                                  !canBuyPowerWithLimit(items, offer.powerType, maxPermanentPowers);
+        bool duplicateChargeBlocked = isPower &&
+                                      offer.powerType == PowerType::Duplicate &&
+                                      items.duplicateCharges > 0;
 
+        bool pinSlotLocked = false;
         if (isPin) {
             PinType selectedType = items.getPinTypeForSlot(selectedPinSlot);
             isOwned = (selectedType == offer.pinType);
         }
+        bool clownLocked = isShoe &&
+                           offer.shoeType == ShoeType::Clown &&
+                           items.clownShoesPurchased &&
+                           items.shoeType != ShoeType::Clown;
         bool pinLimitBlocked = false;
         if (isPin && !isOwned) {
             bool slotEmpty = !items.hasPinAssignmentAtSlot(selectedPinSlot);
             pinLimitBlocked = slotEmpty && (items.getPinAssignmentCount() >= pinBuyLimit);
+            pinSlotLocked = !slotEmpty &&
+                            (items.getPinTypeForSlot(selectedPinSlot) != offer.pinType);
         }
+        bool blocked =
+            !canAfford || powerLimitBlocked || duplicateChargeBlocked ||
+            pinLimitBlocked || pinSlotLocked || clownLocked;
 
         // Card background tint by category
         sf::Color cardColor = isOwned         ? sf::Color(40, 100, 40)  :
-                              (!canAfford || powerLimitBlocked || pinLimitBlocked)
+                              blocked
                                               ? sf::Color(40, 40, 40)   :
                               isBall          ? sf::Color(40, 50, 80)   :
                               isPin           ? sf::Color(40, 70, 50)   :
                               isShoe          ? sf::Color(70, 45, 45)   :
                                                 sf::Color(65, 50, 35);
         sf::Color borderColor = isOwned       ? sf::Color(80, 220, 80)  :
-                                (!canAfford || powerLimitBlocked || pinLimitBlocked)
+                                blocked
                                               ? sf::Color(80, 80, 80)   :
                                 isBall        ? sf::Color(140, 160, 255):
                                 isPin         ? sf::Color(120, 220, 140):
@@ -2976,22 +3060,22 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
                                    sf::Color(120,95,35));
         window.draw(badge);
 
-        sf::Text catLabel(font, isBall ? "BALL" : (isPin ? "PIN" : (isShoe ? "SHOE" : "POWER")), 20);
+        sf::Text catLabel(font, isBall ? "BALL" : (isPin ? "PIN" : (isShoe ? "SHOE" : "POWER")), catTextSize);
         catLabel.setPosition({cx + 10.f, cardY + 4.f});
         catLabel.setFillColor(sf::Color::White);
         window.draw(catLabel);
 
         // Item name
-        sf::Text nameText(font, offer.name, 26);
+        sf::Text nameText(font, offer.name, nameTextSize);
+        fitCardText(nameText, cardLayout.cardW - 16.f, 14);
         nameText.setPosition({cx + 10.f, cardY + 34.f});
         nameText.setFillColor(sf::Color::White);
         window.draw(nameText);
 
         // Preview circle
-        float pr = 36.f;
-        sf::CircleShape preview(pr);
-        preview.setOrigin({pr, pr});
-        preview.setPosition({cx + cardLayout.cardW/2.f, cardY + 135.f});
+        sf::CircleShape preview(previewR);
+        preview.setOrigin({previewR, previewR});
+        preview.setPosition({cx + cardLayout.cardW/2.f, cardY + previewY});
 
         if (isBall) {
             sf::Color pc;
@@ -3039,32 +3123,35 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
         // Description
         std::string desc = offer.description;
-        float dy = cardY + 198.f;
+        float dy = cardY + descStartY;
+        float buyBtnY = cardY + cardLayout.cardH - (buyBtnH + buyBtnBottomMargin);
+        float descBottomY = buyBtnY - 8.f;
         std::string line;
-        for (char ch : desc) {
-            if (ch == '\n') {
-                sf::Text lt(font, line, 20);
-                lt.setPosition({cx + 12.f, dy});
-                lt.setFillColor(sf::Color(200, 200, 200));
-                window.draw(lt);
-                dy += 26.f;
-                line.clear();
-            } else line += ch;
-        }
-        if (!line.empty()) {
-            sf::Text lt(font, line, 20);
+        auto drawDescLine = [&](const std::string& s) {
+            if (s.empty()) return;
+            if (dy + descLineStep > descBottomY) return;
+            sf::Text lt(font, s, descTextSize);
+            fitCardText(lt, cardLayout.cardW - 24.f, 12);
             lt.setPosition({cx + 12.f, dy});
             lt.setFillColor(sf::Color(200, 200, 200));
             window.draw(lt);
+            dy += descLineStep;
+        };
+        for (char ch : desc) {
+            if (ch == '\n') {
+                drawDescLine(line);
+                line.clear();
+            } else line += ch;
         }
+        drawDescLine(line);
 
         // Buy button
         sf::Color btnColor = isOwned     ? sf::Color(70, 70, 80) :
-                             (canAfford && !powerLimitBlocked && !pinLimitBlocked)
+                             (!blocked)
                                          ? sf::Color(80, 200, 120) :
                                            sf::Color(80, 80, 80);
-        sf::RectangleShape btn({cardLayout.cardW - 20.f, 44.f});
-        btn.setPosition({cx + 10.f, cardY + cardLayout.cardH - 56.f});
+        sf::RectangleShape btn({cardLayout.cardW - 20.f, buyBtnH});
+        btn.setPosition({cx + 10.f, cardY + cardLayout.cardH - (buyBtnH + buyBtnBottomMargin)});
         btn.setFillColor(btnColor);
         btn.setOutlineColor(sf::Color::Black);
         btn.setOutlineThickness(2);
@@ -3074,8 +3161,14 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         if (isOwned) {
             if (isBall || isShoe) btnLabel = "EQUIPPED";
             else btnLabel = "OWNED";
+        } else if (clownLocked) {
+            btnLabel = "One-time only";
+        } else if (duplicateChargeBlocked) {
+            btnLabel = "Use Duplicate first";
         } else if (powerLimitBlocked) {
             btnLabel = "Power limit (" + std::to_string(maxPermanentPowers) + ")";
+        } else if (pinSlotLocked) {
+            btnLabel = "Sell current pin first";
         } else if (pinLimitBlocked) {
             btnLabel = "Pin limit reached";
         } else if (canAfford) {
@@ -3083,8 +3176,9 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         } else {
             btnLabel = "Need " + std::to_string(offer.cost) + " tokens";
         }
-        sf::Text btnText(font, btnLabel, 20);
-        btnText.setPosition({cx + 18.f, cardY + cardLayout.cardH - 48.f});
+        sf::Text btnText(font, btnLabel, compactCards ? 17 : 20);
+        fitCardText(btnText, cardLayout.cardW - 28.f, 14);
+        btnText.setPosition({cx + 14.f, cardY + cardLayout.cardH - (buyBtnH + buyBtnBottomMargin) + (compactCards ? 7.f : 8.f)});
         btnText.setFillColor(sf::Color::White);
         window.draw(btnText);
     }
@@ -3191,6 +3285,9 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
 
     ShopCardLayout cardLayout = computeShopCardLayout(windowW, layout, shopOffers.size());
     const int maxPermanentPowers = items.getMaxPermanentPowerSlots();
+    const bool compactCards = shopOffers.size() > 4;
+    const float buyBtnH = compactCards ? 38.f : 44.f;
+    const float buyBtnBottomMargin = compactCards ? 10.f : 12.f;
 
     for (int i = 0; i < (int)shopOffers.size(); i++) {
         int row = i / cardLayout.cardsPerRow;
@@ -3203,9 +3300,9 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         float cardY = cardLayout.firstCardY + row * (cardLayout.cardH + cardLayout.cardGap);
         float cx  = rowStartX + col * (cardLayout.cardW + cardLayout.cardGap);
         float btnX = cx + 10.f;
-        float btnY = cardY + cardLayout.cardH - 56.f;
+        float btnY = cardY + cardLayout.cardH - (buyBtnH + buyBtnBottomMargin);
         float btnW = cardLayout.cardW - 20.f;
-        float btnH = 44.f;
+        float btnH = buyBtnH;
 
         sf::FloatRect buyRect(sf::Vector2f(btnX, btnY), sf::Vector2f(btnW, btnH));
         if (pointInRect(buyRect, mousePos, 10.0f)) {
@@ -3224,13 +3321,23 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
             }
 
             bool canBuy = (tokens >= offer.cost) && !isAlreadyOwned;
+            if (offer.category == ShopItemCategory::Shoe &&
+                offer.shoeType == ShoeType::Clown &&
+                items.clownShoesPurchased) {
+                canBuy = false;
+            }
             if (offer.category == ShopItemCategory::Power) {
                 canBuy = canBuy && canBuyPowerWithLimit(items, offer.powerType, maxPermanentPowers);
+                if (offer.powerType == PowerType::Duplicate && items.duplicateCharges > 0) {
+                    canBuy = false;
+                }
             }
             if (offer.category == ShopItemCategory::Pin) {
                 bool slotEmpty = !items.hasPinAssignmentAtSlot(selectedPinSlot);
                 if (slotEmpty) {
                     canBuy = canBuy && (items.getPinAssignmentCount() < pinBuyLimit);
+                } else if (items.getPinTypeForSlot(selectedPinSlot) != offer.pinType) {
+                    canBuy = false;
                 }
             }
 

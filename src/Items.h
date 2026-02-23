@@ -85,6 +85,7 @@ struct ActiveItems {
     bool powerMoMoney = false;
     bool powerExtraPowerSlot = false;
     bool clownBonusClaimed = false;
+    bool clownShoesPurchased = false;
 
     int duplicateCharges = 0;
     int swapCharges = 0;
@@ -156,6 +157,7 @@ struct ActiveItems {
         powerMoMoney = false;
         powerExtraPowerSlot = false;
         clownBonusClaimed = false;
+        clownShoesPurchased = false;
 
         duplicateCharges = 0;
         swapCharges = 0;
@@ -300,6 +302,7 @@ struct ActiveItems {
                 lockPinChangesMidRound = true;
                 break;
             case ShoeType::Clown:
+                launchSpeedMultiplier = 0.92f;
             case ShoeType::None:
             default:
                 break;

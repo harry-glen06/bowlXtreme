@@ -12,7 +12,9 @@ public:
     // Pass in how many pins were knocked this shot and the sum of their values.
     // comboMultiplier scales the combo term ((pinsHit + baseCombo + comboAdd) * comboMultiplier).
     // If strike is true, this shot gains +40% bonus points.
-    void recordShot(int pinsHit, int pinValueSum, bool strike = false, float comboMultiplier = 1.0f, int comboAdd = 0);
+    // If spare is true, this shot gains a small bonus (+10% by default).
+    void recordShot(int pinsHit, int pinValueSum, bool strike = false, bool spare = false,
+                    float comboMultiplier = 1.0f, int comboAdd = 0);
 
     // Progress
     int getRound() const { return round; }
@@ -69,7 +71,12 @@ private:
 
     int targetStart = 400;
     int targetIncreasePercent = 25;
+    int targetIncreasePercentRound10Plus = 35;
+    int targetIncreasePercentRound15Plus = 45;
     int targetScore = 400;
+
+    int spareBonusPercent = 10;
+    int interestCap = 12;
 
     // last shot
     int lastImpact = 10;
