@@ -774,40 +774,55 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         }
     }
 
-    // Left info panel
-    sf::RectangleShape leftPanel(sf::Vector2f(250, windowH - 80));
-    leftPanel.setPosition(sf::Vector2f(40, 40));
-    leftPanel.setFillColor(sf::Color(70, 70, 70));
-    leftPanel.setOutlineColor(sf::Color::Black);
+    // Left info panel (larger + cleaner styling).
+    const float leftPanelX = 28.0f;
+    const float leftPanelY = 30.0f;
+    const float leftPanelW = 300.0f;
+    const float leftPanelH = windowH - 64.0f;
+
+    sf::RectangleShape leftPanelShadow(sf::Vector2f(leftPanelW + 8.0f, leftPanelH + 8.0f));
+    leftPanelShadow.setPosition(sf::Vector2f(leftPanelX + 5.0f, leftPanelY + 7.0f));
+    leftPanelShadow.setFillColor(sf::Color(0, 0, 0, 90));
+    window.draw(leftPanelShadow);
+
+    sf::RectangleShape leftPanel(sf::Vector2f(leftPanelW, leftPanelH));
+    leftPanel.setPosition(sf::Vector2f(leftPanelX, leftPanelY));
+    leftPanel.setFillColor(sf::Color(67, 69, 79, 230));
+    leftPanel.setOutlineColor(sf::Color(132, 140, 164));
     leftPanel.setOutlineThickness(3.0f);
     window.draw(leftPanel);
 
-    float lx = 60.0f;
-    float y = 60.0f;
+    sf::RectangleShape leftPanelTopBar(sf::Vector2f(leftPanelW - 8.0f, 5.0f));
+    leftPanelTopBar.setPosition(sf::Vector2f(leftPanelX + 4.0f, leftPanelY + 4.0f));
+    leftPanelTopBar.setFillColor(sf::Color(120, 220, 255, 170));
+    window.draw(leftPanelTopBar);
 
-    sf::Text t1(font, "round " + std::to_string(round), 36);
+    float lx = leftPanelX + 22.0f;
+    float y = leftPanelY + 20.0f;
+
+    sf::Text t1(font, "round " + std::to_string(round), 42);
     t1.setPosition(sf::Vector2f(lx, y));
-    t1.setFillColor(sf::Color::Black);
+    t1.setFillColor(sf::Color(238, 240, 250));
     window.draw(t1);
-    y += 44;
+    y += 48;
 
-    sf::Text t2(font, "frame " + std::to_string(frameInRound), 30);
+    sf::Text t2(font, "frame " + std::to_string(frameInRound), 32);
     t2.setPosition(sf::Vector2f(lx, y));
-    t2.setFillColor(sf::Color::Black);
+    t2.setFillColor(sf::Color(226, 228, 238));
     window.draw(t2);
-    y += 38;
+    y += 40;
 
-    sf::Text t3(font, "shot " + std::to_string(shotInFrame), 30);
+    sf::Text t3(font, "shot " + std::to_string(shotInFrame), 32);
     t3.setPosition(sf::Vector2f(lx, y));
-    t3.setFillColor(sf::Color::Black);
+    t3.setFillColor(sf::Color(226, 228, 238));
     window.draw(t3);
-    y += 60;
+    y += 58;
 
-    sf::Text target(font, "score at least " + std::to_string(targetScore), 22);
+    sf::Text target(font, "score at least " + std::to_string(targetScore), 24);
     target.setPosition(sf::Vector2f(lx, y));
-    target.setFillColor(sf::Color::Black);
+    target.setFillColor(sf::Color(245, 224, 138));
     window.draw(target);
-    y += 70;
+    y += 72;
 
     int shownImpact = std::max(10, (int)std::round(hudImpactValue));
     int shownCombo = std::max(1, (int)std::round(hudComboValue));
@@ -815,19 +830,19 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         shownImpact = std::max(10, liveImpactPreview);
         shownCombo = std::max(1, liveComboPreview);
     }
-    sf::Text big(font, std::to_string(shownImpact) + " X " + std::to_string(shownCombo), 56);
+    sf::Text big(font, std::to_string(shownImpact) + " X " + std::to_string(shownCombo), 60);
     big.setPosition(sf::Vector2f(lx, y));
     big.setFillColor(sf::Color(120, 240, 255));
-    big.setOutlineColor(sf::Color::Black);
+    big.setOutlineColor(sf::Color(8, 12, 18));
     big.setOutlineThickness(3.0f);
     window.draw(big);
-    y += 80;
+    y += 84;
 
-    sf::Text explain(font, "Impact x Pin Combo", 22);
+    sf::Text explain(font, "Impact x Pin Combo", 24);
     explain.setPosition(sf::Vector2f(lx, y));
-    explain.setFillColor(sf::Color(255, 80, 80));
+    explain.setFillColor(sf::Color(255, 108, 108));
     window.draw(explain);
-    y += 34;
+    y += 38;
 
     int shownShotAdd = 0;
     if (hudCounting) {
@@ -835,19 +850,19 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     } else if (hudShowBigScore) {
         shownShotAdd = hudCountTarget;
     }
-    sf::Text shotScore(font, "shot add: " + std::to_string(shownShotAdd), 22);
+    sf::Text shotScore(font, "shot add: " + std::to_string(shownShotAdd), 24);
     shotScore.setPosition(sf::Vector2f(lx, y));
-    shotScore.setFillColor(hudCounting ? sf::Color(100, 255, 170) : sf::Color::Black);
+    shotScore.setFillColor(hudCounting ? sf::Color(100, 255, 170) : sf::Color(235, 236, 245));
     window.draw(shotScore);
-    y += 34;
+    y += 38;
 
-    sf::Text roundScoreText(font, "round score: " + std::to_string(roundScore), 28);
+    sf::Text roundScoreText(font, "round score: " + std::to_string(roundScore), 32);
     roundScoreText.setPosition(sf::Vector2f(lx, y));
-    roundScoreText.setFillColor(sf::Color::Black);
+    roundScoreText.setFillColor(sf::Color(246, 247, 255));
     window.draw(roundScoreText);
 
-    y += 40;
-    sf::Text tokenText(font, "tokens: " + std::to_string(tokens), 26);
+    y += 46;
+    sf::Text tokenText(font, "tokens: " + std::to_string(tokens), 30);
     tokenText.setPosition(sf::Vector2f(lx, y));
     tokenText.setFillColor(sf::Color(255, 215, 0));
     window.draw(tokenText);
@@ -882,8 +897,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         bigShot.setOutlineThickness(4.0f);
 
         sf::FloatRect bb = bigShot.getLocalBounds();
-        float centerX = 40.0f + 125.0f;
-        float centerY = 40.0f + 360.0f;
+        float centerX = leftPanelX + leftPanelW * 0.50f;
+        float centerY = leftPanelY + leftPanelH * 0.56f;
         bigShot.setPosition({centerX - bb.size.x * 0.5f, centerY - bb.size.y * 0.5f});
         window.draw(bigShot);
     }
@@ -1219,6 +1234,191 @@ static std::string powerShortName(PowerType t) {
     }
 }
 
+static sf::Color powerInventoryColor(PowerType t) {
+    switch (t) {
+        case PowerType::Greedy:              return {240, 210, 70};
+        case PowerType::RandomUpgrade:       return {120, 220, 255};
+        case PowerType::ExtraPins:           return {255, 170, 70};
+        case PowerType::ExtraBall:           return {120, 170, 255};
+        case PowerType::Duplicate:           return {210, 150, 255};
+        case PowerType::Bumpers:             return {255, 120, 120};
+        case PowerType::SwapPins:            return {140, 255, 170};
+        case PowerType::HomeBase:            return {255, 220, 180};
+        case PowerType::Confusion:           return {200, 130, 255};
+        case PowerType::Earthquake:          return {255, 140, 80};
+        case PowerType::Skip:                return {255, 255, 255};
+        case PowerType::UpgradesForEveryone: return {130, 255, 210};
+        case PowerType::Sales:               return {120, 255, 120};
+        case PowerType::PassedGo:            return {255, 240, 120};
+        case PowerType::MoMoney:             return {255, 200, 70};
+        case PowerType::ExtraPowerSlot:      return {255, 175, 110};
+        default:                             return {200, 200, 200};
+    }
+}
+
+static std::string inventoryBallDesc(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return "Pins drift toward ball.\n8% smaller.";
+        case BallType::Midas:      return "Hit pins turn gold.\nEach gold pin gives +1 token.";
+        case BallType::Upgrade:    return "Each pin hit gains +1 value.\n10% lighter, 5% faster.";
+        case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
+        case BallType::Fastball:   return "5% lighter, 15% faster.";
+        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.75 score.";
+        case BallType::EightBall:  return "All pins are worth 8.";
+        case BallType::Retrigger:  return "2nd pin hit scores 3x.";
+        default:                   return "A standard bowling ball.";
+    }
+}
+
+static std::string inventoryPinDesc(PinType t) {
+    switch (t) {
+        case PinType::Gold:        return "One pin turns gold.\nKnock it for +1 token.";
+        case PinType::Mischievous: return "One pin randomises value\n1-15 each shot.";
+        case PinType::Exploding:   return "One pin explodes shortly\nafter being knocked.";
+        case PinType::Light:       return "One pin is worth 2\nbut easy to knock.";
+        case PinType::Big:         return "One pin is worth 10\nbut hard to knock.";
+        case PinType::Ice:         return "One pin slides 15% faster\nwhen fallen.";
+        case PinType::CopyCat:     return "Copies the type of\nthe first pin hit.";
+        case PinType::LuckyDucky:  return "Worth 20 points.\n35% chance to score 0.";
+        case PinType::ThirdTime:   return "Every 3rd 3rd-Time knock\ndoubles combo.";
+        default:                   return "Normal pin.";
+    }
+}
+
+static std::string inventoryShoeDesc(ShoeType t) {
+    switch (t) {
+        case ShoeType::Clown:    return "Funny wobble:\nlaunch angle shifts a bit.";
+        case ShoeType::Running:  return "Ball launches 18% faster.";
+        case ShoeType::Moon:     return "All pins are 26% lighter.";
+        case ShoeType::Slippers: return "Everything slides 18% more.";
+        case ShoeType::SteelCap: return "Pins cannot change\nduring a round.";
+        default:                 return "Default shoe stats.";
+    }
+}
+
+static std::string inventoryPowerDesc(PowerType t) {
+    switch (t) {
+        case PowerType::Greedy:              return "Gain +1 combo for\nevery 4 dollars.";
+        case PowerType::RandomUpgrade:       return "After each frame,\na random pin gains +1 value.";
+        case PowerType::ExtraPins:           return "Adds two extra pins\nto the rack.";
+        case PowerType::ExtraBall:           return "Adds one extra shot\nper frame.";
+        case PowerType::Duplicate:           return "Press N, then choose\nsource and target pin.";
+        case PowerType::Bumpers:             return "No gutter balls\nfor the rest of run.";
+        case PowerType::SwapPins:            return "Press V, then choose\ntwo pins to swap.";
+        case PowerType::HomeBase:            return "Every 20 pins hit,\nbase combo +1.";
+        case PowerType::Confusion:           return "Spares score like\nstrikes.";
+        case PowerType::Earthquake:          return "Every 10 shots,\na free strike.";
+        case PowerType::Skip:                return "Permanent:\n2 rerolls each shop.";
+        case PowerType::UpgradesForEveryone: return "Future shops show\nthree extra items.";
+        case PowerType::Sales:               return "Everything in shop\nis 20% cheaper.";
+        case PowerType::PassedGo:            return "Round clears pay\n3 more dollars.";
+        case PowerType::MoMoney:             return "Interest every 2 dollars,\nnot 3.";
+        case PowerType::ExtraPowerSlot:      return "One-time:\nmax power slots 4 -> 5.";
+        default:                             return "Power effect.";
+    }
+}
+
+static std::string inventoryPinStatus(const ActiveItems& items, int slot, PinType type) {
+    int value = 0;
+    if (slot >= 1 && slot <= (int)items.pinSlotCurrentValues.size()) {
+        value = items.pinSlotCurrentValues[slot - 1];
+    }
+
+    std::string status = "(currently: value ";
+    status += (value > 0) ? std::to_string(value) : "-";
+    if (type == PinType::ThirdTime) {
+        int progress = items.thirdTimeGlobalKnocks % 3;
+        status += ", " + std::to_string(progress) + "/3";
+    }
+    status += ")";
+    return status;
+}
+
+static std::string formatCompactFloat(float value, int decimals = 2) {
+    std::ostringstream ss;
+    ss << std::fixed << std::setprecision(decimals) << value;
+    std::string out = ss.str();
+    while (out.size() > 1 && out.back() == '0') out.pop_back();
+    if (!out.empty() && out.back() == '.') out.pop_back();
+    return out;
+}
+
+static std::string inventoryShoeStatus(const ActiveItems& items, ShoeType type) {
+    switch (type) {
+        case ShoeType::Clown:
+            return items.clownBonusClaimed
+                ? "(currently: +10 bonus already claimed)"
+                : "(currently: +10 bonus on first buy)";
+        case ShoeType::Running:
+            return "(currently: launch speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")";
+        case ShoeType::Moon:
+            return "(currently: pin mass x" + formatCompactFloat(items.pinMassMultiplier) + ")";
+        case ShoeType::Slippers:
+            return "(currently: slide x" + formatCompactFloat(items.slideMultiplier) + ")";
+        case ShoeType::SteelCap:
+            return "(currently: lock pin changes ON)";
+        default:
+            return "(currently: default)";
+    }
+}
+
+static std::string inventoryPowerStatus(const ActiveItems& items, PowerType t, int count) {
+    switch (t) {
+        case PowerType::Greedy:
+            return "(currently: +1 combo / 4 dollars)";
+        case PowerType::RandomUpgrade:
+            return "(currently: +" + std::to_string(items.pendingRandomPinUpgrades) + " pending)";
+        case PowerType::ExtraPins:
+            return "(currently: rack size " + std::to_string(items.getActivePinSlotCount()) + ")";
+        case PowerType::ExtraBall:
+            return "(currently: +1 shot per frame)";
+        case PowerType::Duplicate:
+            return "(currently: " + std::to_string(items.duplicateCharges) + " charge)";
+        case PowerType::Bumpers:
+            return "(currently: ON)";
+        case PowerType::SwapPins:
+            return "(currently: " + std::to_string(items.swapCharges) + " charge)";
+        case PowerType::HomeBase:
+            return "(currently: +" + std::to_string((int)std::lround(items.homeBaseComboBonus)) +
+                   " combo, " + std::to_string(items.homeBasePinsTowardNextCombo) + "/20)";
+        case PowerType::Confusion:
+            return "(currently: active)";
+        case PowerType::Earthquake:
+            return "(currently: " + std::to_string(items.earthquakeShotCounter) + "/10)";
+        case PowerType::Skip:
+            return "(currently: " + std::to_string(items.skipCharges) + " rerolls)";
+        case PowerType::UpgradesForEveryone:
+            return "(currently: +3 shop items)";
+        case PowerType::Sales:
+            return "(currently: 20% discount)";
+        case PowerType::PassedGo:
+            return "(currently: +3 clear payout)";
+        case PowerType::MoMoney:
+            return "(currently: interest every 2)";
+        case PowerType::ExtraPowerSlot:
+            return "(currently: max " + std::to_string(items.getMaxPermanentPowerSlots()) + " slots)";
+        default:
+            break;
+    }
+    if (count > 1) {
+        return "(currently: x" + std::to_string(count) + ")";
+    }
+    return "";
+}
+
+static std::vector<std::string> splitTooltipLines(const std::string& text) {
+    std::vector<std::string> lines;
+    std::stringstream ss(text);
+    std::string line;
+    while (std::getline(ss, line, '\n')) {
+        lines.push_back(line);
+    }
+    if (lines.empty()) {
+        lines.push_back(text);
+    }
+    return lines;
+}
+
 // Draws a mini pin silhouette icon at (cx, cy) with given colour
 static void drawMiniPin(sf::RenderWindow& window, float cx, float cy, float size, sf::Color color) {
     // Simplified pin shape: small oval body + tiny head
@@ -1264,6 +1464,23 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
                              float x, float y, float width) {
     if (!fontLoaded) return;
 
+    struct HoverTooltipEntry {
+        sf::FloatRect rect{};
+        std::string title;
+        std::string description;
+        std::string status;
+        sf::Color accent = sf::Color::White;
+    };
+    std::vector<HoverTooltipEntry> hoverEntries;
+    hoverEntries.reserve(48);
+    auto addHover = [&](const sf::FloatRect& rect,
+                        const std::string& title,
+                        const std::string& desc,
+                        const std::string& status,
+                        sf::Color accent) {
+        hoverEntries.push_back({rect, title, desc, status, accent});
+    };
+
     float iy = y;
 
     // ── Ball section (2 slots: shot 1 + shot 2) ─────────────────────────────
@@ -1297,6 +1514,14 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         ballName.setPosition({sx - nb.size.x * 0.5f, iy + 20.f + ballR * 2.f + 4.f});
         ballName.setFillColor(sf::Color::White);
         window.draw(ballName);
+
+        float rectW = std::max(90.f, ballR * 2.f + 58.f);
+        float rectH = ballR * 2.f + 46.f;
+        addHover(sf::FloatRect({sx - rectW * 0.5f, iy - 2.f}, {rectW, rectH}),
+                 "S" + std::to_string(slot) + " " + ballShortName(bt),
+                 inventoryBallDesc(bt),
+                 "",
+                 ballPreviewColor(bt));
     };
 
     drawBallSlot(1, slot1X, items.getBallForShot(1));
@@ -1322,6 +1547,11 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     shoeName.setPosition({x + 46.f, iy + 2.f});
     shoeName.setFillColor(sf::Color::White);
     window.draw(shoeName);
+    addHover(sf::FloatRect({x + 8.f, iy - 2.f}, {width - 16.f, 30.f}),
+             shoeShortName(items.shoeType),
+             inventoryShoeDesc(items.shoeType),
+             inventoryShoeStatus(items, items.shoeType),
+             shoePreviewColor(items.shoeType));
     iy += 32.f;
 
     std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
@@ -1352,6 +1582,11 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
             pinText.setPosition({x + 34.f, iy});
             pinText.setFillColor({210, 210, 210});
             window.draw(pinText);
+            addHover(sf::FloatRect({x + 8.f, iy - 1.f}, {width - 16.f, lineH}),
+                     "P" + std::to_string(assigned.slot) + " " + pinShortName(pt),
+                     inventoryPinDesc(assigned.type),
+                     inventoryPinStatus(items, assigned.slot, assigned.type),
+                     pinPreviewColor(pt));
             iy += lineH;
         }
         iy += 8.f;
@@ -1414,8 +1649,106 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
             powerText.setPosition({x + 10.f + col * colW, iy + row * 18.f});
             powerText.setFillColor({220, 220, 180});
             window.draw(powerText);
+            addHover(sf::FloatRect({x + 8.f + col * colW, iy + row * 18.f - 1.f},
+                                   {colW - 8.f, 18.f}),
+                     powerShortName(static_cast<PowerType>(p)),
+                     inventoryPowerDesc(static_cast<PowerType>(p)),
+                     inventoryPowerStatus(items, static_cast<PowerType>(p), counts[p]),
+                     powerInventoryColor(static_cast<PowerType>(p)));
             shown++;
         }
+    }
+
+    sf::Vector2f mouse = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+    auto isInside = [](const sf::FloatRect& r, sf::Vector2f p) {
+        return p.x >= r.position.x && p.x <= r.position.x + r.size.x &&
+               p.y >= r.position.y && p.y <= r.position.y + r.size.y;
+    };
+
+    const HoverTooltipEntry* hovered = nullptr;
+    for (const auto& entry : hoverEntries) {
+        if (isInside(entry.rect, mouse)) {
+            hovered = &entry;
+        }
+    }
+
+    if (!hovered) return;
+
+    const int titleSize = 18;
+    const int bodySize = 14;
+    const int statusSize = 13;
+    std::vector<std::string> bodyLines = splitTooltipLines(hovered->description);
+
+    float maxTextW = 0.f;
+    auto updateWidth = [&](const std::string& text, int size) {
+        if (text.empty()) return;
+        sf::Text t(font, text, size);
+        sf::FloatRect b = t.getLocalBounds();
+        maxTextW = std::max(maxTextW, b.size.x);
+    };
+
+    updateWidth(hovered->title, titleSize);
+    for (const auto& line : bodyLines) updateWidth(line, bodySize);
+    updateWidth(hovered->status, statusSize);
+
+    float panelW = std::clamp(maxTextW + 22.f, 190.f, 360.f);
+    float panelH = 16.f + 24.f + (float)bodyLines.size() * 18.f + 10.f;
+    if (!hovered->status.empty()) panelH += 18.f;
+
+    sf::View currentView = window.getView();
+    float viewLeft = currentView.getCenter().x - currentView.getSize().x * 0.5f;
+    float viewTop = currentView.getCenter().y - currentView.getSize().y * 0.5f;
+    float viewRight = viewLeft + currentView.getSize().x;
+    float viewBottom = viewTop + currentView.getSize().y;
+
+    auto clampWithFallback = [](float value, float minV, float maxV) {
+        if (maxV < minV) return minV;
+        return std::clamp(value, minV, maxV);
+    };
+
+    float tipX = mouse.x + 14.f;
+    float tipY = mouse.y + 14.f;
+    if (tipX + panelW > viewRight - 4.f) tipX = mouse.x - panelW - 14.f;
+    if (tipY + panelH > viewBottom - 4.f) tipY = mouse.y - panelH - 14.f;
+    tipX = clampWithFallback(tipX, viewLeft + 4.f, viewRight - panelW - 4.f);
+    tipY = clampWithFallback(tipY, viewTop + 4.f, viewBottom - panelH - 4.f);
+
+    sf::RectangleShape shadow({panelW, panelH});
+    shadow.setPosition({tipX + 2.f, tipY + 2.f});
+    shadow.setFillColor({0, 0, 0, 110});
+    window.draw(shadow);
+
+    sf::RectangleShape panel({panelW, panelH});
+    panel.setPosition({tipX, tipY});
+    panel.setFillColor({15, 18, 34, 242});
+    panel.setOutlineColor({hovered->accent.r, hovered->accent.g, hovered->accent.b, 210});
+    panel.setOutlineThickness(2.f);
+    window.draw(panel);
+
+    sf::RectangleShape accentBar({panelW - 4.f, 4.f});
+    accentBar.setPosition({tipX + 2.f, tipY + 2.f});
+    accentBar.setFillColor({hovered->accent.r, hovered->accent.g, hovered->accent.b, 215});
+    window.draw(accentBar);
+
+    sf::Text title(font, hovered->title, titleSize);
+    title.setPosition({tipX + 10.f, tipY + 8.f});
+    title.setFillColor({245, 245, 250});
+    window.draw(title);
+
+    float textY = tipY + 33.f;
+    for (const auto& line : bodyLines) {
+        sf::Text body(font, line, bodySize);
+        body.setPosition({tipX + 10.f, textY});
+        body.setFillColor({214, 217, 230});
+        window.draw(body);
+        textY += 18.f;
+    }
+
+    if (!hovered->status.empty()) {
+        sf::Text status(font, hovered->status, statusSize);
+        status.setPosition({tipX + 10.f, textY + 2.f});
+        status.setFillColor({120, 235, 255});
+        window.draw(status);
     }
 }
 
