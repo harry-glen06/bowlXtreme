@@ -1,0 +1,125 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # triggers when you push a tag like v1.0, v1.1 etc
+  workflow_dispatch:  # lets you trigger manually from GitHub's UI
+
+jobs:
+  # ────────────────────────────────────────────────────────────────
+  # macOS build
+  # ────────────────────────────────────────────────────────────────
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SFML
+        run: brew install sfml
+
+      - name: Configure (CMake)
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir -p release-mac
+          cp build/bowling release-mac/bowling
+          # Copy assets if they exist
+          if [ -d assets ]; then
+            cp -r assets release-mac/assets
+          fi
+          # Add a simple launch script so friends can double-click
+          cat > release-mac/Play\ Bowling.command << 'EOF'
+          #!/bin/bash
+          cd "$(dirname "$0")"
+          ./bowling
+          EOF
+          chmod +x release-mac/Play\ Bowling.command
+          zip -r bowling-mac.zip release-mac
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowling-mac
+          path: bowling-mac.zip
+
+  # ────────────────────────────────────────────────────────────────
+  # Windows build
+  # ────────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SFML via vcpkg
+        run: |
+          vcpkg install sfml:x64-windows
+          echo "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT" >> $env:GITHUB_ENV
+
+      - name: Configure (CMake)
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_TARGET_TRIPLET=x64-windows
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Package
+        run: |
+          mkdir release-windows
+          copy build\Release\bowling.exe release-windows\bowling.exe
+          # Copy SFML DLLs
+          copy build\Release\*.dll release-windows\ 2>nul || true
+          # Copy assets if they exist
+          if (Test-Path assets) {
+            Copy-Item -Recurse assets release-windows\assets
+          }
+          Compress-Archive -Path release-windows\* -DestinationPath bowling-windows.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowling-windows
+          path: bowling-windows.zip
+
+  # ────────────────────────────────────────────────────────────────
+  # Create a GitHub Release with both zips attached
+  # ────────────────────────────────────────────────────────────────
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+    steps:
+      - name: Download Mac build
+        uses: actions/download-artifact@v4
+        with:
+          name: bowling-mac
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: bowling-windows
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bowling-mac.zip
+            bowling-windows.zip
+          body: |
+            ## How to play
+
+            **Mac:** Download `bowling-mac.zip`, unzip it, and double-click `Play Bowling.command`.
+            > If macOS blocks it: right-click → Open → Open anyway.
+
+            **Windows:** Download `bowling-windows.zip`, unzip it, and double-click `bowling.exe`.
