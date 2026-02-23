@@ -49,6 +49,9 @@ std::vector<Pin> Game::createPins(float centerX, float startY) {
     std::vector<Pin> out;
 
     float spacing = 55.0f;
+    if (activeItems.shoeType == ShoeType::HighHeels) {
+        spacing *= 0.92f; // 8% closer rack spacing
+    }
     float radius  = 9.0f;
 
     int pinValue = 1;
@@ -132,7 +135,11 @@ void Game::updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet) {
     activeItems.pinSlotCurrentValues.fill(0);
     int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
     for (int i = 0; i < maxSlot; i++) {
-        activeItems.pinSlotCurrentValues[i] = pinSet[i].getValue();
+        int value = pinSet[i].getValue();
+        if (pinSet[i].getPinType() == PinType::LevelUp) {
+            value += 1;
+        }
+        activeItems.pinSlotCurrentValues[i] = value;
     }
 }
 
@@ -384,7 +391,9 @@ void Game::handleEvents() {
                     };
 
                     auto isStackablePower = [](PowerType p) {
-                        return p == PowerType::Duplicate || p == PowerType::SwapPins;
+                        return p == PowerType::Duplicate ||
+                               p == PowerType::SwapPins ||
+                               p == PowerType::SevenEightNine;
                     };
 
                     auto powerCountsTowardLimit = [&](PowerType p) {
@@ -403,6 +412,9 @@ void Game::handleEvents() {
                             case PinType::Ice:         return 2;
                             case PinType::CopyCat:     return 3;
                             case PinType::LuckyDucky:  return 4;
+                            case PinType::LevelUp:     return 1;
+                            case PinType::Lover:       return 3;
+                            case PinType::ChangeIsGood:return 3;
                             case PinType::ThirdTime:   return 3;
                             default:                   return 1;
                         }
@@ -417,6 +429,7 @@ void Game::handleEvents() {
                             case BallType::Fastball:  return 2;
                             case BallType::OddBall:   return 3;
                             case BallType::EightBall: return 4;
+                            case BallType::Icy:       return 4;
                             case BallType::Retrigger: return 4;
                             default:                  return 1;
                         }
@@ -428,6 +441,7 @@ void Game::handleEvents() {
                             case ShoeType::Running:  return 3;
                             case ShoeType::Moon:     return 4;
                             case ShoeType::Slippers: return 3;
+                            case ShoeType::HighHeels:return 3;
                             case ShoeType::SteelCap: return 4;
                             default:                 return 0;
                         }
@@ -450,6 +464,7 @@ void Game::handleEvents() {
                             case PowerType::Sales:               return 4;
                             case PowerType::PassedGo:            return 4;
                             case PowerType::MoMoney:             return 4;
+                            case PowerType::SevenEightNine:      return 3;
                             case PowerType::ExtraPowerSlot:      return 4;
                             default:                             return 0;
                         }
@@ -494,6 +509,8 @@ void Game::handleEvents() {
                                 remaining[i] = std::max(0, activeItems.duplicateCharges);
                             } else if (p == PowerType::SwapPins) {
                                 remaining[i] = std::max(0, activeItems.swapCharges);
+                            } else if (p == PowerType::SevenEightNine) {
+                                remaining[i] = std::max(0, activeItems.sevenEightNineCharges);
                             } else {
                                 remaining[i] = 1;
                             }
@@ -523,6 +540,13 @@ void Game::handleEvents() {
                                 if (activeItems.swapCharges > 0) {
                                     activeItems.swapCharges--;
                                     erasePowerRecord(PowerType::SwapPins, false);
+                                    sold = true;
+                                }
+                                break;
+                            case PowerType::SevenEightNine:
+                                if (activeItems.sevenEightNineCharges > 0) {
+                                    activeItems.sevenEightNineCharges--;
+                                    erasePowerRecord(PowerType::SevenEightNine, false);
                                     sold = true;
                                 }
                                 break;
@@ -755,8 +779,9 @@ void Game::handleEvents() {
                     }
 
                     // Continue button
-                    if (worldPos.x > windowW/2.f - 110.f && worldPos.x < windowW/2.f + 110.f &&
-                        worldPos.y > windowH - 100.f    && worldPos.y < windowH - 40.f) {
+                    const float continuePad = 12.0f;
+                    if (worldPos.x > windowW/2.f - 110.f - continuePad && worldPos.x < windowW/2.f + 110.f + continuePad &&
+                        worldPos.y > windowH - 100.f - continuePad    && worldPos.y < windowH - 40.f + continuePad) {
                         ui.setState(GameState::Xtreme);
                         postScorePauseTimer = 0.0f;
                         xtremeRoundStartTokens = xtreme.getTokens();
@@ -838,6 +863,7 @@ void Game::equipBall(BallType type) {
         case BallType::Fastball:   ball.setColor({240, 240, 240}); break;
         case BallType::OddBall:    ball.setColor({60,  180, 60});  break;
         case BallType::EightBall:  ball.setColor({10,  10,  10});  break;
+        case BallType::Icy:        ball.setColor({165, 225, 255}); break;
         case BallType::Retrigger:  ball.setColor({160, 170, 180}); break;
         default:                   ball.setColor({25,  55,  140}); break;
     }
@@ -861,6 +887,9 @@ void Game::applyBlackHoleGravity(float dt) {
 
 int Game::computePinValueWithItems(int pinIndex) const {
     int val = pins[pinIndex].getValue();
+    if (pins[pinIndex].getPinType() == PinType::LevelUp) {
+        val += 1;
+    }
     switch (activeItems.ballType) {
         case BallType::EightBall: val = 8; break;
         case BallType::OddBall:
@@ -873,13 +902,20 @@ int Game::computePinValueWithItems(int pinIndex) const {
 
 int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
     int total = 0;
+    int icyPinsHit = 0;
     for (int idx : hitIndices) {
         total += computePinValueWithItems(idx);
+        if (pins[idx].getPinType() == PinType::Ice) {
+            icyPinsHit++;
+        }
     }
     // Retrigger means the 2nd pin hit scores 3x total:
     // 1x from the normal sum above, plus 2x extra here.
     if (activeItems.ballType == BallType::Retrigger && activeItems.retriggered)
         total += activeItems.retriggeredValue * 2;
+    if (activeItems.ballType == BallType::Icy) {
+        total += icyPinsHit * 15;
+    }
     return total;
 }
 
@@ -923,6 +959,24 @@ void Game::prepareNewShot() {
         if (!(activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme))
             pin.randomiseMischievous();
     }
+
+    // 7 8 9 power: one-time effect if rack includes slot 9.
+    if (activeItems.sevenEightNineCharges > 0) {
+        int maxSlot = std::min((int)pins.size(), activeItems.getActivePinSlotCount());
+        constexpr int idx7 = 6;
+        constexpr int idx9 = 8;
+        if (maxSlot > idx9 &&
+            pins[idx7].isActive() &&
+            pins[idx9].isActive()) {
+            pins[idx7].setValue(pins[idx7].getValue() * 3);
+            pins[idx9].setFallen(true);
+            pins[idx9].setVel({0.0f, 0.0f});
+            pins[idx9].setAngularVel(0.0f);
+            pins[idx9].setActive(false);
+            activeItems.sevenEightNineCharges--;
+        }
+    }
+
     updatePinSlotValueSnapshot(pins);
 }
 
@@ -1004,6 +1058,40 @@ void Game::finishPendingResetIfReady(float dt) {
                 activeItems.thirdTimeGlobalKnocks++;
                 if (activeItems.thirdTimeGlobalKnocks % 3 == 0) {
                     activeItems.thirdTimeComboBonus += 1; // one extra combo doubling
+                }
+            }
+        }
+
+        // Lover pin: each hit adds +1 value to the next slot pin.
+        {
+            int maxSlot = std::min((int)pins.size(), activeItems.getActivePinSlotCount());
+            for (int idx : hitPinIndices) {
+                if (idx < 0 || idx >= maxSlot) continue;
+                if (pins[idx].getPinType() != PinType::Lover) continue;
+                int nextIdx = idx + 1;
+                if (nextIdx < 0 || nextIdx >= maxSlot) continue;
+                if (!pins[nextIdx].isActive()) continue;
+                pins[nextIdx].setValue(pins[nextIdx].getValue() + 1);
+                if (nextIdx < (int)activeItems.pinChangeHitCountsThisShot.size()) {
+                    activeItems.pinChangeEventsThisShot++;
+                    activeItems.pinChangeHitCountsThisShot[nextIdx]++;
+                }
+            }
+        }
+
+        // Change Is Good: gains +2 for each changed "other" pin this shot.
+        if (activeItems.pinChangeEventsThisShot > 0) {
+            int maxSlot = std::min((int)pins.size(), activeItems.getActivePinSlotCount());
+            for (int i = 0; i < maxSlot; i++) {
+                if (!pins[i].isActive()) continue;
+                if (pins[i].getPinType() != PinType::ChangeIsGood) continue;
+                int ownChanges = 0;
+                if (i < (int)activeItems.pinChangeHitCountsThisShot.size()) {
+                    ownChanges = activeItems.pinChangeHitCountsThisShot[i];
+                }
+                int otherChanges = std::max(0, activeItems.pinChangeEventsThisShot - ownChanges);
+                if (otherChanges > 0) {
+                    pins[i].setValue(pins[i].getValue() + otherChanges * 2);
                 }
             }
         }
@@ -1399,6 +1487,12 @@ void Game::doCollisions() {
                 activeItems.firstBallHitPinIndex >= 0) {
                 PinType copyFrom = pins[activeItems.firstBallHitPinIndex].getPinType();
                 if (!activeItems.lockPinChangesMidRound && copyFrom != PinType::CopyCat) {
+                    if (pin.getPinType() != copyFrom &&
+                        pi >= 0 &&
+                        pi < (int)activeItems.pinChangeHitCountsThisShot.size()) {
+                        activeItems.pinChangeEventsThisShot++;
+                        activeItems.pinChangeHitCountsThisShot[pi]++;
+                    }
                     pin.setPinType(copyFrom);
                 }
             }
@@ -1423,6 +1517,11 @@ void Game::doCollisions() {
                 // Upgrade ball: each hit pin gains +1 value
                 if (activeItems.ballType == BallType::Upgrade) {
                     pin.setValue(pin.getValue() + 1);
+                    if (pi >= 0 &&
+                        pi < (int)activeItems.pinChangeHitCountsThisShot.size()) {
+                        activeItems.pinChangeEventsThisShot++;
+                        activeItems.pinChangeHitCountsThisShot[pi]++;
+                    }
                 }
 
                 // Midas ball: mark pin as gold (store index)

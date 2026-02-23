@@ -12,6 +12,9 @@ enum class PinType {
     Ice,            // Slides 15% faster when fallen
     CopyCat,        // Becomes the type of the first ball-hit pin this shot
     LuckyDucky,     // Worth 20, 35% chance to score 0
+    LevelUp,        // Worth +1 point
+    Lover,          // On hit, adds +1 value to the next slot pin
+    ChangeIsGood,   // Gains +2 value whenever another pin changes
     ThirdTime,      // Every 3rd time scored, combo x2 (counter persists whole run)
 };
 

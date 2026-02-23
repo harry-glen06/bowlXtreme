@@ -40,6 +40,13 @@ void Pin::setPinType(PinType t) {
             baseValue = 20;
             mass = baseMass;
             break;
+        case PinType::LevelUp:
+            mass = baseMass;
+            break;
+        case PinType::Lover:
+        case PinType::ChangeIsGood:
+            mass = baseMass;
+            break;
         default:
             mass = baseMass;
             break;
@@ -458,6 +465,72 @@ void Pin::draw(sf::RenderWindow& window) const {
         eye.setPosition({maxW*.15f, -H*.47f});
         eye.setFillColor({20,20,20});
         window.draw(eye, st);
+        break;
+    }
+
+    case PinType::LevelUp: {
+        drawPinShape(window, st, H, maxW,
+            {235,245,255}, {255,255,255},
+            true,  {80, 165, 235},
+            true,  {170, 210, 245});
+        sf::RectangleShape plusV({maxW * 0.22f, H * 0.18f});
+        plusV.setOrigin({maxW * 0.11f, H * 0.09f});
+        plusV.setPosition({0.f, -H * 0.14f});
+        plusV.setFillColor({80, 165, 235, 210});
+        window.draw(plusV, st);
+        sf::RectangleShape plusH({maxW * 0.62f, H * 0.07f});
+        plusH.setOrigin({maxW * 0.31f, H * 0.035f});
+        plusH.setPosition({0.f, -H * 0.14f});
+        plusH.setFillColor({80, 165, 235, 210});
+        window.draw(plusH, st);
+        break;
+    }
+
+    case PinType::Lover: {
+        drawPinShape(window, st, H, maxW,
+            {255, 170, 190}, {255, 210, 225},
+            true,  {210, 80, 130},
+            true,  {220, 120, 160});
+        sf::CircleShape heartA(maxW * 0.22f);
+        heartA.setOrigin({maxW * 0.22f, maxW * 0.22f});
+        heartA.setPosition({-maxW * 0.16f, -H * 0.18f});
+        heartA.setFillColor({220, 60, 110, 210});
+        window.draw(heartA, st);
+        sf::CircleShape heartB(maxW * 0.22f);
+        heartB.setOrigin({maxW * 0.22f, maxW * 0.22f});
+        heartB.setPosition({maxW * 0.16f, -H * 0.18f});
+        heartB.setFillColor({220, 60, 110, 210});
+        window.draw(heartB, st);
+        sf::ConvexShape heartTip;
+        heartTip.setPointCount(3);
+        heartTip.setPoint(0, {-maxW * 0.38f, -H * 0.14f});
+        heartTip.setPoint(1, { maxW * 0.38f, -H * 0.14f});
+        heartTip.setPoint(2, {0.f, -H * 0.34f});
+        heartTip.setFillColor({220, 60, 110, 210});
+        window.draw(heartTip, st);
+        break;
+    }
+
+    case PinType::ChangeIsGood: {
+        drawPinShape(window, st, H, maxW,
+            {255, 238, 175}, {255, 248, 210},
+            true,  {200, 155, 35},
+            true,  {210, 170, 70});
+        sf::CircleShape dot(maxW * 0.16f);
+        dot.setOrigin({maxW * 0.16f, maxW * 0.16f});
+        dot.setPosition({-maxW * 0.22f, -H * 0.18f});
+        dot.setFillColor({205, 160, 30, 220});
+        window.draw(dot, st);
+        sf::CircleShape dot2(maxW * 0.16f);
+        dot2.setOrigin({maxW * 0.16f, maxW * 0.16f});
+        dot2.setPosition({ maxW * 0.22f, -H * 0.18f});
+        dot2.setFillColor({205, 160, 30, 220});
+        window.draw(dot2, st);
+        sf::RectangleShape bar({maxW * 0.54f, H * 0.06f});
+        bar.setOrigin({maxW * 0.27f, H * 0.03f});
+        bar.setPosition({0.f, -H * 0.18f});
+        bar.setFillColor({205, 160, 30, 210});
+        window.draw(bar, st);
         break;
     }
 

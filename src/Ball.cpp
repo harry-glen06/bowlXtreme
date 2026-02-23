@@ -375,6 +375,7 @@ void Ball::draw(sf::RenderWindow& window) const {
         case BallType::Fastball:   drawFastball(window);   break;
         case BallType::OddBall:    drawOddBall(window);    break;
         case BallType::EightBall:  drawEightBall(window);  break;
+        case BallType::Icy:        drawNormal(window);     break;
         case BallType::Retrigger:  drawRetrigger(window);  break;
         default:                   drawNormal(window);     break;
     }

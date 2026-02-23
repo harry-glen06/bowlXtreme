@@ -13,6 +13,7 @@ enum class BallType {
     Fastball,
     OddBall,
     EightBall,
+    Icy,
     Retrigger,
 };
 
@@ -22,6 +23,7 @@ enum class ShoeType {
     Running,
     Moon,
     Slippers,
+    HighHeels,
     SteelCap,
 };
 
@@ -41,6 +43,7 @@ enum class PowerType {
     Sales,
     PassedGo,
     MoMoney,
+    SevenEightNine,
     ExtraPowerSlot,
 };
 
@@ -85,6 +88,7 @@ struct ActiveItems {
 
     int duplicateCharges = 0;
     int swapCharges = 0;
+    int sevenEightNineCharges = 0;
     int skipCharges = 0;
     int earthquakeShotCounter = 0;
     int pendingRandomPinUpgrades = 0;
@@ -100,6 +104,8 @@ struct ActiveItems {
     int   firstBallHitPinIndex = -1;
     std::vector<int> goldPinIndices;
     int   thirdTimeComboBonus = 0;
+    int   pinChangeEventsThisShot = 0;
+    std::array<int, 12> pinChangeHitCountsThisShot{};
 
     // Purchased/assigned pin types by explicit rack slot (spawn order).
     std::vector<PinSlotAssignment> pinSlotAssignments;
@@ -112,6 +118,8 @@ struct ActiveItems {
         retriggeredValue       = 0;
         firstBallHitPinIndex   = -1;
         thirdTimeComboBonus    = 0;
+        pinChangeEventsThisShot = 0;
+        pinChangeHitCountsThisShot.fill(0);
     }
 
     void resetAll() {
@@ -151,6 +159,7 @@ struct ActiveItems {
 
         duplicateCharges = 0;
         swapCharges = 0;
+        sevenEightNineCharges = 0;
         skipCharges = 0;
         earthquakeShotCounter = 0;
         pendingRandomPinUpgrades = 0;
@@ -285,6 +294,8 @@ struct ActiveItems {
             case ShoeType::Slippers:
                 slideMultiplier = 1.18f;
                 break;
+            case ShoeType::HighHeels:
+                break;
             case ShoeType::SteelCap:
                 lockPinChangesMidRound = true;
                 break;
@@ -304,6 +315,7 @@ struct ActiveItems {
             case PowerType::Duplicate:          return duplicateCharges > 0;
             case PowerType::Bumpers:            return powerBumpers;
             case PowerType::SwapPins:           return swapCharges > 0;
+            case PowerType::SevenEightNine:     return sevenEightNineCharges > 0;
             case PowerType::HomeBase:           return powerHomeBase;
             case PowerType::Confusion:          return powerConfusion;
             case PowerType::Earthquake:         return powerEarthquake;
@@ -327,6 +339,7 @@ struct ActiveItems {
             case PowerType::Duplicate:          duplicateCharges += 1; break;
             case PowerType::Bumpers:            powerBumpers = true; break;
             case PowerType::SwapPins:           swapCharges += 1; break;
+            case PowerType::SevenEightNine:     sevenEightNineCharges += 1; break;
             case PowerType::HomeBase:           powerHomeBase = true; break;
             case PowerType::Confusion:          powerConfusion = true; break;
             case PowerType::Earthquake:         powerEarthquake = true; break;
