@@ -155,6 +155,7 @@ public:
     int getDefaultBallColor() const { return defaultBallColor; }
     
     bool isFontLoaded() const { return fontLoaded; }
+    const sf::Font& getFont() const { return font; }
     
 private:
     sf::Font font;
@@ -170,7 +171,7 @@ private:
     };
     std::vector<Cloud> clouds;
     void initClouds(float windowW, float windowH);
-    void updateClouds(float dt, float windowW);
+    void updateClouds(float dt, float windowW, float windowH);
     void drawClouds(sf::RenderWindow& window);
     
     // Settings

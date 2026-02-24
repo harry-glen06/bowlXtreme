@@ -1,39 +1,39 @@
 category,item,shown,picked,pick_rate_percent
-BALL,8-Ball,18,3,16.67
-BALL,Black Hole,14,1,7.14
-BALL,Fastball,10,0,0.00
-BALL,Heavy Ball,20,6,30.00
-BALL,Icy Ball,3,0,0.00
-BALL,Midas Ball,14,1,7.14
-BALL,Odd Ball,17,0,0.00
-BALL,Retrigger,8,0,0.00
-BALL,Upgrade Ball,13,5,38.46
-PIN,3rd Time,16,4,25.00
-PIN,Big Pin,17,7,41.18
-PIN,Change Is Good,3,2,66.67
-PIN,Copy Cat,12,2,16.67
-PIN,Exploding Pin,17,5,29.41
-PIN,Gold Pin,15,7,46.67
-PIN,Ice Pin,17,2,11.76
-PIN,Level Up,3,1,33.33
-PIN,Light Pin,16,2,12.50
-PIN,Lover,3,2,66.67
-PIN,Lucky Ducky,12,6,50.00
-PIN,Mischievous,20,2,10.00
-POWER,7 8 9,3,2,66.67
-POWER,Bumpers,22,1,4.55
-POWER,Confusion,19,4,21.05
-POWER,Duplicate,16,3,18.75
-POWER,Earthquake,11,1,9.09
-POWER,Extra Ball,20,2,10.00
-POWER,Extra Pins,17,7,41.18
-POWER,Extra Slot,7,1,14.29
-POWER,Greedy,20,0,0.00
-POWER,Home Base,20,2,10.00
-POWER,Mo Money,12,2,16.67
-POWER,Passed Go,14,4,28.57
-POWER,Random Upgrade,13,0,0.00
-POWER,Reroll,17,1,5.88
-POWER,Sales,16,4,25.00
-POWER,Swap Pins,16,3,18.75
-POWER,Upgrades+3,21,0,0.00
+BALL,8-Ball,29,3,10.34
+BALL,Black Hole,20,1,5.00
+BALL,Fastball,17,0,0.00
+BALL,Heavy Ball,26,7,26.92
+BALL,Icy Ball,6,0,0.00
+BALL,Midas Ball,17,2,11.76
+BALL,Odd Ball,23,1,4.35
+BALL,Retrigger,14,0,0.00
+BALL,Upgrade Ball,21,7,33.33
+PIN,3rd Time,21,4,19.05
+PIN,Big Pin,22,7,31.82
+PIN,Change Is Good,8,2,25.00
+PIN,Copy Cat,18,2,11.11
+PIN,Exploding Pin,21,6,28.57
+PIN,Gold Pin,18,7,38.89
+PIN,Ice Pin,21,2,9.52
+PIN,Level Up,6,1,16.67
+PIN,Light Pin,25,3,12.00
+PIN,Lover,5,2,40.00
+PIN,Lucky Ducky,17,7,41.18
+PIN,Mischievous,22,2,9.09
+POWER,7 8 9,9,2,22.22
+POWER,Bumpers,26,2,7.69
+POWER,Confusion,23,4,17.39
+POWER,Duplicate,21,4,19.05
+POWER,Earthquake,18,1,5.56
+POWER,Extra Ball,27,2,7.41
+POWER,Extra Pins,20,7,35.00
+POWER,Extra Slot,12,1,8.33
+POWER,Greedy,27,0,0.00
+POWER,Home Base,25,2,8.00
+POWER,Mo Money,17,2,11.76
+POWER,Passed Go,18,4,22.22
+POWER,Random Upgrade,15,0,0.00
+POWER,Reroll,22,1,4.55
+POWER,Sales,20,4,20.00
+POWER,Swap Pins,25,3,12.00
+POWER,Upgrades+3,22,0,0.00

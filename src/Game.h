@@ -53,6 +53,11 @@ private:
     bool handlePinPowerSelectionClick(sf::Vector2f worldPos);
     void applyManualDuplicate(int sourceIndex, int targetIndex);
     void applyManualSwap(int firstIndex, int secondIndex);
+    void requestRunReset();
+    void confirmRunReset();
+    void triggerStrikeCelebration();
+    void updateStrikeConfetti(float dt);
+    void drawStrikeConfetti();
 
     sf::View view;
     void applyLetterbox(unsigned winW, unsigned winH);
@@ -137,11 +142,24 @@ private:
 
     // Game over state
     bool gameOver = false;
+    bool resetConfirmOpen = false;
 
     bool xtremeMode = false;
     int bestRound = 0;
     PinPowerSelectionMode pinPowerSelectionMode = PinPowerSelectionMode::None;
     int pinPowerFirstIndex = -1;
+
+    struct ConfettiPiece {
+        sf::Vector2f pos{};
+        sf::Vector2f vel{};
+        sf::Color color = sf::Color::White;
+        float life = 0.0f;
+        float totalLife = 0.0f;
+        float size = 5.0f;
+        float rotation = 0.0f;
+        float spin = 0.0f;
+    };
+    std::vector<ConfettiPiece> strikeConfetti;
     
     // High score
     int highScore = 0;

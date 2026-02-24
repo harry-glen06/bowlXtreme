@@ -243,249 +243,330 @@ void UI::savePickRateStats() const {
 
 void UI::initClouds(float windowW, float windowH) {
     clouds.clear();
-    
-    // Create 8 clouds at random positions
-    for (int i = 0; i < 8; i++) {
+
+    // Denser layered cloud field for the menu sky.
+    const int cloudCount = 12;
+    for (int i = 0; i < cloudCount; i++) {
         Cloud cloud;
         cloud.position = sf::Vector2f(
-            rand() % (int)windowW,
-            50.0f + rand() % (int)(windowH * 0.6f)
+            -160.0f + static_cast<float>(rand() % static_cast<int>(windowW + 320.0f)),
+            35.0f + static_cast<float>(rand() % std::max(120, static_cast<int>(windowH * 0.58f)))
         );
-        cloud.speed = 20.0f + rand() % 40;  // 20-60 pixels per second
-        cloud.size = 40.0f + rand() % 60;   // 40-100 size
+        cloud.speed = 10.0f + static_cast<float>(rand() % 26);  // 10-35 px/s
+        cloud.size = 65.0f + static_cast<float>(rand() % 120);  // 65-185 size
         clouds.push_back(cloud);
     }
 }
 
-void UI::updateClouds(float dt, float windowW) {
+void UI::updateClouds(float dt, float windowW, float windowH) {
     for (auto& cloud : clouds) {
         cloud.position.x += cloud.speed * dt;
-        
+
         // Wrap around when off screen
-        if (cloud.position.x > windowW + cloud.size) {
-            cloud.position.x = -cloud.size;
-            cloud.position.y = 50.0f + rand() % 400;
+        if (cloud.position.x > windowW + cloud.size * 1.5f) {
+            cloud.position.x = -cloud.size * 1.8f - static_cast<float>(rand() % 220);
+            cloud.position.y = 35.0f + static_cast<float>(rand() % std::max(120, static_cast<int>(windowH * 0.58f)));
+            cloud.speed = 10.0f + static_cast<float>(rand() % 26);
+            cloud.size = 65.0f + static_cast<float>(rand() % 120);
         }
     }
 }
 
 void UI::drawClouds(sf::RenderWindow& window) {
     for (const auto& cloud : clouds) {
-        // Draw fluffy cloud shape with multiple circles
-        sf::CircleShape cloudCircle1(cloud.size * 0.6f);
-        cloudCircle1.setFillColor(sf::Color(255, 255, 255, 180));
-        cloudCircle1.setPosition(cloud.position);
-        window.draw(cloudCircle1);
-        
-        sf::CircleShape cloudCircle2(cloud.size * 0.5f);
-        cloudCircle2.setFillColor(sf::Color(255, 255, 255, 180));
-        cloudCircle2.setPosition(sf::Vector2f(cloud.position.x + cloud.size * 0.5f, cloud.position.y - cloud.size * 0.2f));
-        window.draw(cloudCircle2);
-        
-        sf::CircleShape cloudCircle3(cloud.size * 0.7f);
-        cloudCircle3.setFillColor(sf::Color(255, 255, 255, 180));
-        cloudCircle3.setPosition(sf::Vector2f(cloud.position.x + cloud.size * 0.3f, cloud.position.y + cloud.size * 0.1f));
-        window.draw(cloudCircle3);
-        
-        sf::CircleShape cloudCircle4(cloud.size * 0.4f);
-        cloudCircle4.setFillColor(sf::Color(255, 255, 255, 180));
-        cloudCircle4.setPosition(sf::Vector2f(cloud.position.x + cloud.size * 0.9f, cloud.position.y + cloud.size * 0.15f));
-        window.draw(cloudCircle4);
+        float x = cloud.position.x;
+        float y = cloud.position.y;
+        float s = cloud.size;
+        std::uint8_t alphaMain = static_cast<std::uint8_t>(
+            std::clamp(118 + static_cast<int>((s - 65.0f) * 0.7f), 118, 208));
+        std::uint8_t alphaSoft = static_cast<std::uint8_t>(std::max(60, (int)alphaMain - 52));
+
+        auto drawPuff = [&](float dx, float dy, float r, sf::Color c, float scaleY) {
+            sf::CircleShape puff(r);
+            puff.setOrigin({r, r});
+            puff.setPosition({x + dx, y + dy});
+            puff.setScale({1.28f, scaleY});
+            puff.setFillColor(c);
+            window.draw(puff);
+        };
+
+        // Lower cool shadow gives depth against the sky.
+        drawPuff(0.0f,       s * 0.15f, s * 0.42f, sf::Color(108, 130, 170, alphaSoft), 0.78f);
+        drawPuff(s * 0.44f,  s * 0.17f, s * 0.34f, sf::Color(108, 130, 170, alphaSoft), 0.78f);
+        drawPuff(-s * 0.36f, s * 0.19f, s * 0.29f, sf::Color(108, 130, 170, alphaSoft), 0.78f);
+
+        // Main fluffy body.
+        drawPuff(-s * 0.44f, s * 0.06f, s * 0.40f, sf::Color(255, 255, 255, alphaMain), 0.84f);
+        drawPuff(-s * 0.08f, -s * 0.02f, s * 0.48f, sf::Color(255, 255, 255, alphaMain), 0.86f);
+        drawPuff( s * 0.34f,  0.0f,      s * 0.42f, sf::Color(255, 255, 255, alphaMain), 0.84f);
+        drawPuff( s * 0.70f,  s * 0.07f, s * 0.30f, sf::Color(255, 255, 255, alphaMain), 0.80f);
+
+        // Soft top highlight.
+        drawPuff(-s * 0.15f, -s * 0.12f, s * 0.30f, sf::Color(255, 255, 255, 96), 0.72f);
     }
 }
 
+namespace {
+struct MenuLayout {
+    float blockWidth = 0.0f;
+    float blockHeight = 0.0f;
+    float logoX = 0.0f;
+    float logoY = 0.0f;
+    float signW = 0.0f;
+    float signH = 0.0f;
+    float signX = 0.0f;
+    float signY = 0.0f;
+    float poleTop = 0.0f;
+    float poleBottom = 0.0f;
+    float poleW = 0.0f;
+    float poleGap = 0.0f;
+    float buttonWidth = 0.0f;
+    float buttonHeight = 0.0f;
+    float buttonSpacing = 0.0f;
+    float buttonStartX = 0.0f;
+    float buttonY = 0.0f;
+    sf::FloatRect buttonContainerRect{};
+    std::array<sf::FloatRect, 4> buttonRects{};
+};
+
+MenuLayout buildMenuLayout(float windowW, float windowH) {
+    MenuLayout layout;
+
+    layout.blockWidth = std::clamp(windowW * 0.082f, 72.0f, 120.0f);
+    layout.blockHeight = std::clamp(windowH * 0.205f, 118.0f, 174.0f);
+    layout.logoX = windowW * 0.5f - layout.blockWidth * 2.0f;
+    layout.logoY = std::clamp(windowH * 0.098f, 32.0f, 110.0f);
+
+    layout.signW = layout.blockWidth * 4.28f;
+    layout.signH = std::clamp(windowH * 0.118f, 72.0f, 102.0f);
+    layout.signX = windowW * 0.5f - layout.signW * 0.5f;
+    layout.signY = layout.logoY + layout.blockHeight + std::clamp(windowH * 0.018f, 12.0f, 22.0f);
+
+    layout.buttonHeight = std::clamp(windowH * 0.085f, 54.0f, 72.0f);
+    layout.buttonSpacing = std::clamp(windowW * 0.012f, 10.0f, 20.0f);
+    float sidePadding = std::clamp(windowW * 0.07f, 24.0f, 96.0f);
+    float availableRowWidth = std::max(360.0f, windowW - sidePadding * 2.0f);
+    float targetRowWidth = std::min(820.0f, availableRowWidth);
+    layout.buttonWidth = std::clamp((targetRowWidth - layout.buttonSpacing * 3.0f) / 4.0f, 86.0f, 190.0f);
+    float usedRowWidth = layout.buttonWidth * 4.0f + layout.buttonSpacing * 3.0f;
+    layout.buttonStartX = windowW * 0.5f - usedRowWidth * 0.5f;
+    layout.buttonStartX = std::max(10.0f, layout.buttonStartX);
+    if (layout.buttonStartX + usedRowWidth > windowW - 10.0f) {
+        layout.buttonStartX = windowW - 10.0f - usedRowWidth;
+    }
+    layout.buttonY = std::max(
+        layout.signY + layout.signH + std::clamp(windowH * 0.092f, 58.0f, 112.0f),
+        windowH - std::clamp(windowH * 0.195f, 126.0f, 186.0f));
+    layout.buttonY = std::min(layout.buttonY, windowH - layout.buttonHeight - 28.0f);
+
+    layout.buttonContainerRect = sf::FloatRect(
+        sf::Vector2f(layout.buttonStartX - 24.0f, layout.buttonY - 18.0f),
+        sf::Vector2f(usedRowWidth + 48.0f, layout.buttonHeight + 36.0f));
+
+    for (int i = 0; i < 4; i++) {
+        layout.buttonRects[(size_t)i] = sf::FloatRect(
+            sf::Vector2f(layout.buttonStartX + (layout.buttonWidth + layout.buttonSpacing) * static_cast<float>(i),
+                         layout.buttonY),
+            sf::Vector2f(layout.buttonWidth, layout.buttonHeight));
+    }
+
+    layout.poleTop = layout.logoY + layout.blockHeight * 0.95f;
+    layout.poleBottom = layout.buttonContainerRect.position.y - 12.0f;
+    if (layout.poleBottom < layout.poleTop + 70.0f) {
+        layout.poleBottom = layout.poleTop + 70.0f;
+    }
+    layout.poleW = std::clamp(layout.blockWidth * 0.24f, 18.0f, 30.0f);
+    layout.poleGap = std::clamp(layout.blockWidth * 0.18f, 8.0f, 16.0f);
+
+    return layout;
+}
+} // namespace
+
 void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float dt) {
     if (!fontLoaded) return;
-    
+
     // Initialize clouds if needed
     if (clouds.empty()) {
         initClouds(windowW, windowH);
     }
-    
-    // Update and draw animated clouds
-    updateClouds(dt, windowW);
-    
-    // Sky blue gradient background
-    sf::RectangleShape skyTop(sf::Vector2f(windowW, windowH / 2));
-    skyTop.setPosition(sf::Vector2f(0, 0));
-    skyTop.setFillColor(sf::Color(100, 149, 237));  // Cornflower blue
-    window.draw(skyTop);
-    
-    sf::RectangleShape skyBottom(sf::Vector2f(windowW, windowH / 2));
-    skyBottom.setPosition(sf::Vector2f(0, windowH / 2));
-    skyBottom.setFillColor(sf::Color(135, 206, 250));  // Light sky blue
-    window.draw(skyBottom);
-    
-    drawClouds(window);
-    
-    // Draw "BOWL" logo with colorful blocks
-    float logoX = windowW / 2 - 200;
-    float logoY = windowH / 3 - 100;
-    float blockWidth = 100.0f;
-    float blockHeight = 150.0f;
-    
-    // B - Red
-    sf::RectangleShape blockB(sf::Vector2f(blockWidth, blockHeight));
-    blockB.setPosition(sf::Vector2f(logoX, logoY));
-    blockB.setFillColor(sf::Color(220, 50, 50));
-    blockB.setOutlineColor(sf::Color::Black);
-    blockB.setOutlineThickness(3.0f);
-    window.draw(blockB);
-    
-    sf::Text letterB(font, "B", 90);
-    letterB.setPosition(sf::Vector2f(logoX + 20, logoY + 15));
-    letterB.setFillColor(sf::Color::White);
-    letterB.setOutlineColor(sf::Color::Black);
-    letterB.setOutlineThickness(3.0f);
-    window.draw(letterB);
-    
-    // O - Cyan
-    sf::RectangleShape blockO(sf::Vector2f(blockWidth, blockHeight));
-    blockO.setPosition(sf::Vector2f(logoX + blockWidth, logoY - 10));
-    blockO.setFillColor(sf::Color(80, 200, 220));
-    blockO.setOutlineColor(sf::Color::Black);
-    blockO.setOutlineThickness(3.0f);
-    window.draw(blockO);
-    
-    sf::Text letterO(font, "O", 90);
-    letterO.setPosition(sf::Vector2f(logoX + blockWidth + 20, logoY + 5));
-    letterO.setFillColor(sf::Color::White);
-    letterO.setOutlineColor(sf::Color::Black);
-    letterO.setOutlineThickness(3.0f);
-    window.draw(letterO);
-    
-    // W - Yellow
-    sf::RectangleShape blockW(sf::Vector2f(blockWidth, blockHeight));
-    blockW.setPosition(sf::Vector2f(logoX + blockWidth * 2, logoY + 8));
-    blockW.setFillColor(sf::Color(240, 220, 50));
-    blockW.setOutlineColor(sf::Color::Black);
-    blockW.setOutlineThickness(3.0f);
-    window.draw(blockW);
-    
-    sf::Text letterW(font, "W", 90);
-    letterW.setPosition(sf::Vector2f(logoX + blockWidth * 2 + 10, logoY + 23));
-    letterW.setFillColor(sf::Color::Black);
-    letterW.setOutlineColor(sf::Color::White);
-    letterW.setOutlineThickness(2.0f);
-    window.draw(letterW);
-    
-    // L - Light Blue
-    sf::RectangleShape blockL(sf::Vector2f(blockWidth, blockHeight));
-    blockL.setPosition(sf::Vector2f(logoX + blockWidth * 3, logoY + 3));
-    blockL.setFillColor(sf::Color(120, 190, 230));
-    blockL.setOutlineColor(sf::Color::Black);
-    blockL.setOutlineThickness(3.0f);
-    window.draw(blockL);
-    
-    sf::Text letterL(font, "L", 90);
-    letterL.setPosition(sf::Vector2f(logoX + blockWidth * 3 + 30, logoY + 18));
-    letterL.setFillColor(sf::Color::White);
-    letterL.setOutlineColor(sf::Color::Black);
-    letterL.setOutlineThickness(3.0f);
-    window.draw(letterL);
-    
-    // "Xtreme" subtitle with retro sign look
-    sf::RectangleShape xtremeBox(sf::Vector2f(450, 80));
-    xtremeBox.setPosition(sf::Vector2f(windowW / 2 - 225, logoY + blockHeight + 20));
-    xtremeBox.setFillColor(sf::Color(250, 240, 230));
-    xtremeBox.setOutlineColor(sf::Color(200, 50, 50));
-    xtremeBox.setOutlineThickness(5.0f);
-    window.draw(xtremeBox);
-    
-    sf::Text xtremeText(font, "Xtreme", 60);
-    xtremeText.setPosition(sf::Vector2f(windowW / 2 - 140, logoY + blockHeight + 20));
-    xtremeText.setFillColor(sf::Color(220, 50, 50));
-    xtremeText.setStyle(sf::Text::Bold);
-    window.draw(xtremeText);
-    
-    // Menu buttons in rounded gray container
-    float buttonY = windowH - 200;
-    float buttonSpacing = 18.0f;
-    float buttonWidth = 150.0f;
-    float buttonHeight = 60.0f;
-    float buttonsSpan = buttonWidth * 4 + buttonSpacing * 3;
-    float startX = windowW / 2 - buttonsSpan / 2.0f;
 
-    sf::ConvexShape buttonContainer = createRoundedRect(
-        sf::Vector2f(buttonsSpan + 44.0f, buttonHeight + 40.0f),
-        20.0f,
-        sf::Color(100, 100, 100, 200));
-    buttonContainer.setPosition(sf::Vector2f(startX - 22.0f, buttonY - 20.0f));
-    buttonContainer.setFillColor(sf::Color(100, 100, 100, 200));
+    // Update and draw animated clouds
+    updateClouds(dt, windowW, windowH);
+
+    MenuLayout layout = buildMenuLayout(windowW, windowH);
+
+    // Sky base gradient.
+    sf::VertexArray sky(sf::PrimitiveType::TriangleStrip, 4);
+    sky[0].position = {0.f, 0.f};
+    sky[1].position = {windowW, 0.f};
+    sky[2].position = {0.f, windowH};
+    sky[3].position = {windowW, windowH};
+    sky[0].color = sf::Color(58, 90, 197);
+    sky[1].color = sf::Color(68, 101, 206);
+    sky[2].color = sf::Color(128, 176, 242);
+    sky[3].color = sf::Color(112, 171, 244);
+    window.draw(sky);
+
+    sf::VertexArray skyGlow(sf::PrimitiveType::TriangleStrip, 4);
+    skyGlow[0].position = {0.f, windowH * 0.30f};
+    skyGlow[1].position = {windowW, windowH * 0.30f};
+    skyGlow[2].position = {0.f, windowH};
+    skyGlow[3].position = {windowW, windowH};
+    skyGlow[0].color = sf::Color(255, 255, 255, 30);
+    skyGlow[1].color = sf::Color(255, 255, 255, 18);
+    skyGlow[2].color = sf::Color(255, 255, 255, 90);
+    skyGlow[3].color = sf::Color(255, 255, 255, 74);
+    window.draw(skyGlow);
+
+    drawClouds(window);
+
+    auto tint = [](sf::Color c, int delta) {
+        auto shift = [delta](std::uint8_t v) -> std::uint8_t {
+            return static_cast<std::uint8_t>(std::clamp((int)v + delta, 0, 255));
+        };
+        return sf::Color(shift(c.r), shift(c.g), shift(c.b), c.a);
+    };
+
+    auto drawLogoBlock = [&](float x, float y, sf::Color fill, char letter, sf::Color textColor,
+                             sf::Color outlineColor, float letterScale) {
+        sf::RectangleShape shadow({layout.blockWidth, layout.blockHeight});
+        shadow.setPosition({x + 4.0f, y + 5.0f});
+        shadow.setFillColor(sf::Color(0, 0, 0, 70));
+        window.draw(shadow);
+
+        sf::RectangleShape block({layout.blockWidth, layout.blockHeight});
+        block.setPosition({x, y});
+        block.setFillColor(fill);
+        block.setOutlineColor(sf::Color::Black);
+        block.setOutlineThickness(2.8f);
+        window.draw(block);
+
+        unsigned int letterSize = static_cast<unsigned int>(layout.blockHeight * 0.60f * letterScale);
+        sf::Text txt(font, std::string(1, letter), letterSize);
+        txt.setStyle(sf::Text::Bold);
+        sf::FloatRect b = txt.getLocalBounds();
+        txt.setPosition({
+            x + layout.blockWidth * 0.5f - (b.position.x + b.size.x * 0.5f),
+            y + layout.blockHeight * 0.5f - (b.position.y + b.size.y * 0.52f)
+        });
+        txt.setFillColor(textColor);
+        txt.setOutlineColor(outlineColor);
+        txt.setOutlineThickness(2.2f);
+        window.draw(txt);
+    };
+
+    drawLogoBlock(layout.logoX, layout.logoY + 2.0f, sf::Color(245, 44, 50), 'B',
+                  sf::Color::White, sf::Color::Black, 1.0f);
+    drawLogoBlock(layout.logoX + layout.blockWidth, layout.logoY - 12.0f, sf::Color(96, 208, 238), 'O',
+                  sf::Color::White, sf::Color::Black, 1.0f);
+    drawLogoBlock(layout.logoX + layout.blockWidth * 2.0f, layout.logoY + 9.0f, sf::Color(244, 243, 78), 'W',
+                  sf::Color::Black, sf::Color::White, 0.86f);
+    drawLogoBlock(layout.logoX + layout.blockWidth * 3.0f, layout.logoY - 5.0f, sf::Color(98, 202, 230), 'L',
+                  sf::Color::White, sf::Color::Black, 1.0f);
+
+    sf::RectangleShape signShadow({layout.signW, layout.signH});
+    signShadow.setPosition({layout.signX + 5.0f, layout.signY + 6.0f});
+    signShadow.setFillColor(sf::Color(0, 0, 0, 75));
+    window.draw(signShadow);
+
+    sf::ConvexShape signBox = createRoundedRect({layout.signW, layout.signH}, 10.0f, sf::Color(250, 247, 241));
+    signBox.setPosition({layout.signX, layout.signY});
+    signBox.setFillColor(sf::Color(250, 247, 241));
+    signBox.setOutlineColor(sf::Color(230, 50, 50));
+    signBox.setOutlineThickness(4.0f);
+    window.draw(signBox);
+
+    sf::Text xtremeText(font, "Xtreme", static_cast<unsigned int>(layout.signH * 0.74f));
+    xtremeText.setLetterSpacing(1.35f);
+    xtremeText.setStyle(sf::Text::Bold);
+    sf::FloatRect xtb = xtremeText.getLocalBounds();
+    xtremeText.setPosition({
+        layout.signX + layout.signW * 0.5f - (xtb.position.x + xtb.size.x * 0.5f),
+        layout.signY + layout.signH * 0.5f - (xtb.position.y + xtb.size.y * 0.58f)
+    });
+    xtremeText.setFillColor(sf::Color(230, 40, 42));
+    xtremeText.setOutlineColor(sf::Color::Black);
+    xtremeText.setOutlineThickness(1.5f);
+    window.draw(xtremeText);
+
+    sf::ConvexShape buttonContainer = createRoundedRect(layout.buttonContainerRect.size, 24.0f, sf::Color(96, 102, 112, 210));
+    buttonContainer.setPosition(layout.buttonContainerRect.position);
+    buttonContainer.setFillColor(sf::Color(96, 102, 112, 210));
+    buttonContainer.setOutlineColor(sf::Color(210, 214, 226, 160));
+    buttonContainer.setOutlineThickness(2.0f);
     window.draw(buttonContainer);
 
+    sf::Vector2f mouseWorld = window.mapPixelToCoords(sf::Mouse::getPosition(window));
     auto drawMenuButton = [&](int index,
                               const std::string& label,
                               sf::Color fill,
                               sf::Color textColor,
                               unsigned textSize) {
-        float x = startX + (buttonWidth + buttonSpacing) * (float)index;
-        sf::ConvexShape button = createRoundedRect(
-            sf::Vector2f(buttonWidth, buttonHeight),
-            15.0f,
-            fill);
-        button.setPosition(sf::Vector2f(x, buttonY));
-        button.setFillColor(fill);
-        window.draw(button);
+        const sf::FloatRect& rect = layout.buttonRects[(size_t)index];
+        float x = rect.position.x;
+        bool hovered = pointInRectPadded(rect, mouseWorld, 4.0f);
+
+        sf::ConvexShape shadow = createRoundedRect(rect.size, 15.0f, sf::Color(0, 0, 0, 78));
+        shadow.setPosition({x + 2.0f, rect.position.y + 4.0f});
+        window.draw(shadow);
+
+        sf::Color borderColor = hovered ? tint(fill, -18) : tint(fill, -38);
+        sf::ConvexShape border = createRoundedRect(rect.size, 15.0f, borderColor);
+        border.setPosition({x, rect.position.y});
+        window.draw(border);
+
+        sf::Color faceColor = hovered ? tint(fill, 16) : fill;
+        sf::ConvexShape face = createRoundedRect({rect.size.x - 4.0f, rect.size.y - 4.0f}, 13.0f, faceColor);
+        face.setPosition({x + 2.0f, rect.position.y + 2.0f});
+        window.draw(face);
+
+        sf::ConvexShape highlight = createRoundedRect({rect.size.x - 8.0f, (rect.size.y - 4.0f) * 0.45f}, 11.0f,
+                                                      sf::Color(255, 255, 255, hovered ? 62 : 46));
+        highlight.setPosition({x + 4.0f, rect.position.y + 4.0f});
+        window.draw(highlight);
 
         sf::Text text(font, label, textSize);
+        while (text.getCharacterSize() > 20 &&
+               text.getLocalBounds().size.x > rect.size.x - 22.0f) {
+            text.setCharacterSize(text.getCharacterSize() - 1);
+        }
         sf::FloatRect tb = text.getLocalBounds();
-        text.setPosition(sf::Vector2f(
-            x + buttonWidth * 0.5f - (tb.position.x + tb.size.x * 0.5f),
-            buttonY + buttonHeight * 0.5f - (tb.position.y + tb.size.y * 0.5f) - 1.0f));
+        text.setPosition({
+            x + rect.size.x * 0.5f - (tb.position.x + tb.size.x * 0.5f),
+            rect.position.y + rect.size.y * 0.5f - (tb.position.y + tb.size.y * 0.54f)
+        });
         text.setFillColor(textColor);
+        text.setOutlineColor(hovered ? sf::Color::Black : sf::Color(0, 0, 0, 180));
+        text.setOutlineThickness(hovered ? 1.6f : 1.2f);
         window.draw(text);
     };
 
-    drawMenuButton(0, "Normal", sf::Color(220, 50, 50), sf::Color::White, 30);
-    drawMenuButton(1, "Xtreme", sf::Color(80, 200, 220), sf::Color::White, 30);
-    drawMenuButton(2, "Tutorial", sf::Color(110, 150, 255), sf::Color::White, 28);
-    drawMenuButton(3, "Settings", sf::Color(240, 220, 50), sf::Color::Black, 27);
+    drawMenuButton(0, "Normal", sf::Color(235, 48, 56), sf::Color::White, 33);
+    drawMenuButton(1, "Xtreme", sf::Color(92, 212, 240), sf::Color::White, 33);
+    drawMenuButton(2, "Tutorial", sf::Color(110, 156, 255), sf::Color::White, 31);
+    drawMenuButton(3, "Settings", sf::Color(248, 232, 64), sf::Color::Black, 30);
 }
 
 MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
     sf::View v = window.getView();
     float windowW = v.getSize().x;
     float windowH = v.getSize().y;
-    
-    float buttonY = windowH - 200;
-    float buttonSpacing = 18.0f;
-    float buttonWidth = 150.0f;
-    float buttonHeight = 60.0f;
+    MenuLayout layout = buildMenuLayout(windowW, windowH);
     const float clickPad = 10.0f;
-    float buttonsSpan = buttonWidth * 4 + buttonSpacing * 3;
-    float startX = windowW / 2 - buttonsSpan / 2.0f;
 
-    sf::FloatRect normalRect(
-        sf::Vector2f(startX, buttonY),
-        sf::Vector2f(buttonWidth, buttonHeight));
-    sf::FloatRect xtremeRect(
-        sf::Vector2f(startX + (buttonWidth + buttonSpacing), buttonY),
-        sf::Vector2f(buttonWidth, buttonHeight));
-    sf::FloatRect tutorialRect(
-        sf::Vector2f(startX + (buttonWidth + buttonSpacing) * 2.0f, buttonY),
-        sf::Vector2f(buttonWidth, buttonHeight));
-    sf::FloatRect settingsRect(
-        sf::Vector2f(startX + (buttonWidth + buttonSpacing) * 3.0f, buttonY),
-        sf::Vector2f(buttonWidth, buttonHeight));
-    
-    // Check Normal button
-    if (pointInRectPadded(normalRect, mousePos, clickPad)) {
+    if (pointInRectPadded(layout.buttonRects[0], mousePos, clickPad)) {
         return MenuButton::Normal;
     }
-    
-    // Check Xtreme button
-    if (pointInRectPadded(xtremeRect, mousePos, clickPad)) {
+
+    if (pointInRectPadded(layout.buttonRects[1], mousePos, clickPad)) {
         return MenuButton::Xtreme;
     }
 
-    // Check Tutorial button
-    if (pointInRectPadded(tutorialRect, mousePos, clickPad)) {
+    if (pointInRectPadded(layout.buttonRects[2], mousePos, clickPad)) {
         return MenuButton::Tutorial;
     }
-    
-    // Check Settings button
-    if (pointInRectPadded(settingsRect, mousePos, clickPad)) {
+
+    if (pointInRectPadded(layout.buttonRects[3], mousePos, clickPad)) {
         return MenuButton::Settings;
     }
     
@@ -1515,7 +1596,7 @@ static sf::Color powerInventoryColor(PowerType t) {
 static std::string inventoryBallDesc(BallType t) {
     switch (t) {
         case BallType::BlackHole:  return "Pins drift toward ball.\n8% smaller.";
-        case BallType::Midas:      return "Hit pins turn gold.\nEach gold pin gives +1 token.";
+        case BallType::Midas:      return "First pin hit each shot\nturns gold. Gold pin = +1 token.";
         case BallType::Upgrade:    return "Each pin hit gains +1 value.\n10% lighter, 5% faster.";
         case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
         case BallType::Fastball:   return "5% lighter, 15% faster.";
@@ -1585,6 +1666,7 @@ static std::string inventoryPinStatus(const ActiveItems& items, int slot, PinTyp
     if (slot >= 1 && slot <= (int)items.pinSlotCurrentValues.size()) {
         value = items.pinSlotCurrentValues[slot - 1];
     }
+    if (value <= 0) value = slot;
 
     std::string status = "(currently: value ";
     status += (value > 0) ? std::to_string(value) : "-";
@@ -1847,51 +1929,49 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
              shoePreviewColor(items.shoeType));
     iy += 32.f;
 
-    std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
-    if (!sortedPins.empty()) {
-        // ── Pins section ──────────────────────────────────────────────────────
-        sf::Text pinsLabel(font, "PINS", 20);
-        pinsLabel.setPosition({x + 10.f, iy});
-        pinsLabel.setFillColor({180, 180, 180});
-        window.draw(pinsLabel);
-        iy += 28.f;
+    // ── Pins section (always show all slots with live values) ───────────────
+    sf::Text pinsLabel(font, "PINS", 20);
+    pinsLabel.setPosition({x + 10.f, iy});
+    pinsLabel.setFillColor({180, 180, 180});
+    window.draw(pinsLabel);
+    iy += 28.f;
 
-        bool twoColumnPins = sortedPins.size() > 8;
-        const float lineH = 20.f;
-        const float pinColW = twoColumnPins ? (width * 0.49f) : (width - 16.f);
-        int shownPins = 0;
-        for (const auto& assigned : sortedPins) {
-            int row = twoColumnPins ? (shownPins / 2) : shownPins;
-            int col = twoColumnPins ? (shownPins % 2) : 0;
-            float rowY = iy + row * lineH;
-            float rowX = x + 10.f + col * pinColW;
-            int pt = static_cast<int>(assigned.type);
-            float iconX = rowX + 8.f;
-            drawMiniPin(window, iconX, rowY + 8.f, 11.f, pinPreviewColor(pt));
+    int slotCount = std::clamp(items.getActivePinSlotCount(), 1, 12);
+    bool twoColumnPins = slotCount > 8;
+    const float lineH = 18.f;
+    const float pinColW = twoColumnPins ? (width * 0.49f) : (width - 16.f);
+    for (int slot = 1; slot <= slotCount; slot++) {
+        int index = slot - 1;
+        int row = twoColumnPins ? (index / 2) : index;
+        int col = twoColumnPins ? (index % 2) : 0;
+        float rowY = iy + row * lineH;
+        float rowX = x + 10.f + col * pinColW;
 
-            int shownValue = 0;
-            if (assigned.slot >= 1 && assigned.slot <= 12) {
-                shownValue = items.pinSlotCurrentValues[assigned.slot - 1];
-            }
-            std::string valueText = (shownValue > 0) ? std::to_string(shownValue) : "-";
-            std::string label = "P" + std::to_string(assigned.slot) + " " +
-                                pinShortName(pt) + " v" + valueText;
+        PinType slotType = items.getPinTypeForSlot(slot);
+        int pt = static_cast<int>(slotType);
+        int shownValue = items.pinSlotCurrentValues[index];
+        if (shownValue <= 0) shownValue = slot;
 
-            sf::Text pinText(font, label, 14);
-            pinText.setPosition({rowX + 24.f, rowY});
-            pinText.setFillColor({210, 210, 210});
-            window.draw(pinText);
-            addHover(sf::FloatRect({rowX + 4.f, rowY - 1.f}, {pinColW - 6.f, lineH}),
-                     "P" + std::to_string(assigned.slot) + " " + pinShortName(pt),
-                     inventoryPinDesc(assigned.type),
-                     inventoryPinStatus(items, assigned.slot, assigned.type),
-                     pinPreviewColor(pt));
-            shownPins++;
-        }
-        int pinRows = twoColumnPins ? ((shownPins + 1) / 2) : shownPins;
-        iy += pinRows * lineH;
-        iy += 8.f;
+        float iconX = rowX + 8.f;
+        drawMiniPin(window, iconX, rowY + 8.f, 10.5f, pinPreviewColor(pt));
+
+        std::string label = "P" + std::to_string(slot) + " " + pinShortName(pt);
+        sf::Text pinText(font, label, 13);
+        pinText.setPosition({rowX + 24.f, rowY});
+        pinText.setFillColor((slotType == PinType::Normal)
+                             ? sf::Color(188, 190, 200)
+                             : sf::Color(216, 222, 232));
+        window.draw(pinText);
+
+        addHover(sf::FloatRect({rowX + 4.f, rowY - 1.f}, {pinColW - 6.f, lineH}),
+                 "P" + std::to_string(slot) + " " + pinShortName(pt),
+                 inventoryPinDesc(slotType),
+                 inventoryPinStatus(items, slot, slotType),
+                 pinPreviewColor(pt));
     }
+    int pinRows = twoColumnPins ? ((slotCount + 1) / 2) : slotCount;
+    iy += pinRows * lineH;
+    iy += 8.f;
 
     const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
     std::vector<int> counts(powerCount, 0);
@@ -2509,7 +2589,7 @@ static std::string ballTypeName(BallType t) {
 static std::string ballTypeDesc(BallType t) {
     switch (t) {
         case BallType::BlackHole:  return "Pins drift toward\nball. 8% smaller.";
-        case BallType::Midas:      return "Hit pins turn gold.\nEach gold pin = +1 token.";
+        case BallType::Midas:      return "First pin hit each shot\nturns gold. Gold pin = +1 token.";
         case BallType::Upgrade:    return "Each pin hit gains\n+1 value. 10% lighter,\n5% faster.";
         case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
         case BallType::Fastball:   return "5% lighter, 15% faster.";
@@ -2666,7 +2746,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Ball, BallType::BlackHole, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Black Hole",   "Pins drift toward ball.\n8% smaller.",               4},
         {ShopItemCategory::Ball, BallType::Midas, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Midas Ball",   "Hit pins turn gold.\nEach = +1 token.",              5},
+         "Midas Ball",   "First pin hit each shot\nturns gold. Gold pin +1 token.", 5},
         {ShopItemCategory::Ball, BallType::Upgrade, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Upgrade Ball", "Hit pins +1 value.\n10% lighter, 5% faster.",        3},
         {ShopItemCategory::Ball, BallType::Heavy, PinType::Normal, ShoeType::None, PowerType::Greedy,

@@ -7,9 +7,62 @@
 #include <cstdlib>
 #include <algorithm>
 #include <fstream>
+#include <cstdint>
 
 namespace {
 constexpr float kHomeBaseComboBonusCap = 8.0f;
+
+struct ResetConfirmLayout {
+    sf::FloatRect panel;
+    sf::FloatRect yesButton;
+    sf::FloatRect noButton;
+};
+
+ResetConfirmLayout makeResetConfirmLayout(float windowW, float windowH) {
+    ResetConfirmLayout out;
+    float panelW = std::clamp(windowW * 0.34f, 360.0f, 560.0f);
+    float panelH = std::clamp(windowH * 0.24f, 200.0f, 280.0f);
+    float panelX = windowW * 0.5f - panelW * 0.5f;
+    float panelY = windowH * 0.5f - panelH * 0.5f;
+    out.panel = sf::FloatRect(sf::Vector2f(panelX, panelY), sf::Vector2f(panelW, panelH));
+
+    float btnW = std::clamp(panelW * 0.34f, 120.0f, 190.0f);
+    float btnH = 48.0f;
+    float btnGap = std::clamp(panelW * 0.08f, 22.0f, 42.0f);
+    float btnY = panelY + panelH - btnH - 22.0f;
+    float btnStartX = panelX + panelW * 0.5f - (btnW * 2.0f + btnGap) * 0.5f;
+
+    out.yesButton = sf::FloatRect(sf::Vector2f(btnStartX, btnY), sf::Vector2f(btnW, btnH));
+    out.noButton = sf::FloatRect(sf::Vector2f(btnStartX + btnW + btnGap, btnY), sf::Vector2f(btnW, btnH));
+    return out;
+}
+
+bool pointInRectWithPad(const sf::FloatRect& rect, sf::Vector2f point, float pad = 0.0f) {
+    return point.x >= rect.position.x - pad &&
+           point.x <= rect.position.x + rect.size.x + pad &&
+           point.y >= rect.position.y - pad &&
+           point.y <= rect.position.y + rect.size.y + pad;
+}
+
+float randomRange(float lo, float hi) {
+    if (hi <= lo) return lo;
+    float t = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+    return lo + t * (hi - lo);
+}
+
+sf::Color randomConfettiColor() {
+    static const sf::Color kPalette[] = {
+        sf::Color(255, 60, 80),   // red
+        sf::Color(255, 150, 45),  // orange
+        sf::Color(255, 235, 70),  // yellow
+        sf::Color(75, 225, 95),   // green
+        sf::Color(70, 190, 255),  // cyan
+        sf::Color(100, 130, 255), // blue
+        sf::Color(200, 110, 255), // purple
+        sf::Color(255, 105, 205), // pink
+    };
+    return kPalette[rand() % (sizeof(kPalette) / sizeof(kPalette[0]))];
+}
 }
 
 Game::Game()
@@ -306,6 +359,127 @@ void Game::run() {
     }
 }
 
+void Game::requestRunReset() {
+    GameState s = ui.getState();
+    if (s == GameState::Menu || s == GameState::Settings || s == GameState::Tutorial) return;
+    resetConfirmOpen = true;
+}
+
+void Game::confirmRunReset() {
+    bool inXtremeRun = (ui.getState() == GameState::Xtreme) ||
+                       (ui.getState() == GameState::Shop) ||
+                       (ui.getState() == GameState::RoundSummary) ||
+                       xtremeMode;
+
+    if (inXtremeRun) {
+        xtreme.reset();
+        xtremeRoundStartTokens = xtreme.getTokens();
+        ui.setState(GameState::Xtreme);
+        xtremeMode = true;
+    } else {
+        scorer.resetGame();
+        ui.setState(GameState::Playing);
+        xtremeMode = false;
+    }
+
+    gameOver = false;
+    resetConfirmOpen = false;
+    roundSummaryLeadsToGameOver = false;
+    roundSummaryPassed = false;
+    pendingGameOverFromScore = false;
+    postScorePauseTimer = 0.0f;
+    pendingReset = false;
+    xtremeLastRoundScoreProgress = 0;
+    xtremeLastRoundTargetProgress = 0;
+    equipBall(BallType::Normal);
+    activeItems.resetAll();
+    ui.resetEquippedBall();
+    cancelPinPowerSelection();
+    lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
+    if (ui.getState() == GameState::Xtreme) {
+        ui.generateShopOffers(activeItems);
+    }
+    pins = createPins(lane.centerX(), 240.0f);
+    resetBall();
+    strikeConfetti.clear();
+    audio.playBackgroundMusic();
+}
+
+void Game::triggerStrikeCelebration() {
+    audio.playStrikeCheer(86.0f);
+
+    // Sometimes trigger confetti (not every strike).
+    if ((rand() % 100) >= 68) return;
+
+    strikeConfetti.clear();
+    int pieceCount = 140 + (rand() % 60);
+    strikeConfetti.reserve(static_cast<size_t>(pieceCount));
+
+    float emitCenterX = windowW * 0.5f;
+    float emitSpreadX = windowW * 0.26f;
+    for (int i = 0; i < pieceCount; i++) {
+        ConfettiPiece p;
+        p.pos = {
+            emitCenterX + randomRange(-emitSpreadX, emitSpreadX),
+            randomRange(-70.0f, -10.0f)
+        };
+
+        float angleDeg = randomRange(58.0f, 122.0f);
+        float angleRad = angleDeg * 3.14159265f / 180.0f;
+        float speed = randomRange(260.0f, 620.0f);
+        p.vel = {
+            std::cos(angleRad) * speed,
+            std::sin(angleRad) * speed
+        };
+
+        p.color = randomConfettiColor();
+        p.life = randomRange(1.1f, 2.2f);
+        p.totalLife = p.life;
+        p.size = randomRange(4.0f, 9.0f);
+        p.rotation = randomRange(0.0f, 360.0f);
+        p.spin = randomRange(-380.0f, 380.0f);
+        strikeConfetti.push_back(p);
+    }
+}
+
+void Game::updateStrikeConfetti(float dt) {
+    if (strikeConfetti.empty()) return;
+
+    const float gravity = 920.0f;
+    const float drag = 0.985f;
+    for (auto& p : strikeConfetti) {
+        p.life -= dt;
+        p.vel.y += gravity * dt;
+        p.vel.x *= std::pow(drag, dt * 60.0f);
+        p.pos += p.vel * dt;
+        p.rotation += p.spin * dt;
+    }
+
+    strikeConfetti.erase(
+        std::remove_if(strikeConfetti.begin(), strikeConfetti.end(),
+            [&](const ConfettiPiece& p) {
+                return p.life <= 0.0f || p.pos.y > windowH + 60.0f;
+            }),
+        strikeConfetti.end());
+}
+
+void Game::drawStrikeConfetti() {
+    if (strikeConfetti.empty()) return;
+
+    for (const auto& p : strikeConfetti) {
+        float t = (p.totalLife > 0.0f) ? std::clamp(p.life / p.totalLife, 0.0f, 1.0f) : 0.0f;
+        sf::Color c = p.color;
+        c.a = static_cast<std::uint8_t>(30 + 225 * t);
+
+        sf::RectangleShape q({p.size, p.size * 0.62f});
+        q.setOrigin({q.getSize().x * 0.5f, q.getSize().y * 0.5f});
+        q.setPosition(p.pos);
+        q.setRotation(sf::degrees(p.rotation));
+        q.setFillColor(c);
+        window.draw(q);
+    }
+}
+
 void Game::handleEvents() {
     while (true) {
         auto ev = window.pollEvent();
@@ -326,6 +500,16 @@ void Game::handleEvents() {
                 }
             }
         }
+
+        if (ev->is<sf::Event::KeyPressed>() && resetConfirmOpen) {
+            auto keyEv = ev->getIf<sf::Event::KeyPressed>();
+            if (keyEv->code == sf::Keyboard::Key::Enter) {
+                confirmRunReset();
+            } else if (keyEv->code == sf::Keyboard::Key::Escape) {
+                resetConfirmOpen = false;
+            }
+            continue;
+        }
         
         // Handle mouse clicks for menu
         if (ev->is<sf::Event::MouseButtonPressed>()) {
@@ -335,6 +519,16 @@ void Game::handleEvents() {
                 
                 // Convert to world coordinates
                 sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+
+                if (resetConfirmOpen) {
+                    ResetConfirmLayout modal = makeResetConfirmLayout(windowW, windowH);
+                    if (pointInRectWithPad(modal.yesButton, worldPos, 8.0f)) {
+                        confirmRunReset();
+                    } else if (pointInRectWithPad(modal.noButton, worldPos, 8.0f)) {
+                        resetConfirmOpen = false;
+                    }
+                    continue;
+                }
 
                 if (ui.getState() == GameState::Xtreme && !gameOver) {
                     if (!rollLocked && !pendingReset && handlePinPowerSelectionClick(worldPos)) {
@@ -348,6 +542,7 @@ void Game::handleEvents() {
                     if (clicked == MenuButton::Normal) {
                         xtremeMode = false;
                         ui.setState(GameState::Playing);
+                        strikeConfetti.clear();
                         scorer.resetGame();
                         gameOver = false;
                         roundSummaryLeadsToGameOver = false;
@@ -367,6 +562,7 @@ void Game::handleEvents() {
 
                     } else if (clicked == MenuButton::Xtreme) {
                         ui.setState(GameState::Xtreme);
+                        strikeConfetti.clear();
                         xtreme.reset();
                         xtremeMode = true;
                         gameOver = false;
@@ -1172,15 +1368,6 @@ void Game::finishPendingResetIfReady(float dt) {
             greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
         }
 
-        if (activeItems.ballType == BallType::Midas) {
-            for (int idx : activeItems.goldPinIndices) {
-                if (pins[idx].isFallen() && pins[idx].getPinType() != PinType::Gold) {
-                    xtreme.addTokens(1);
-                }
-            }
-            activeItems.goldPinIndices.clear();
-        }
-
         int thirdTimeComboMultiplier = 1;
         if (activeItems.thirdTimeComboBonus > 0 && knockedThisBall > 0) {
             int doublings = std::min(activeItems.thirdTimeComboBonus, 4); // cap at x16
@@ -1192,6 +1379,7 @@ void Game::finishPendingResetIfReady(float dt) {
         }
 
         bool strikeThisShot = false;
+        bool triggerStrikeFx = false;
         if (ui.getState() == GameState::Xtreme) {
             // shotBeforeRecord is intentionally captured before recordShot(),
             // because recordShot advances the internal shot counter.
@@ -1214,6 +1402,8 @@ void Game::finishPendingResetIfReady(float dt) {
                 static_cast<float>(thirdTimeComboMultiplier),
                 greedyComboBonus);
 
+            triggerStrikeFx = strikeThisShot;
+
             if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
                 activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
                 while (activeItems.homeBasePinsTowardNextCombo >= 20) {
@@ -1232,7 +1422,20 @@ void Game::finishPendingResetIfReady(float dt) {
                 activeItems.pendingRandomPinUpgrades += 1;
             }
         } else {
+            int normalFrameBefore = scorer.getCurrentFrame();
+            int normalBallBefore = scorer.getCurrentBall();
+            bool tenthBonusBallStrike =
+                (normalFrameBefore == 9 && normalBallBefore == 2 && scorer.getFrames()[9].ball1 == 10) ||
+                (normalFrameBefore == 9 && normalBallBefore == 3 &&
+                 (scorer.getFrames()[9].ball1 == 10 || scorer.getFrames()[9].isSpare));
+            triggerStrikeFx =
+                (physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart) &&
+                ((normalBallBefore == 1) || tenthBonusBallStrike);
             scorer.recordBall(knockedThisBall);
+        }
+
+        if (triggerStrikeFx) {
+            triggerStrikeCelebration();
         }
 
         pendingPhysicalPinsDownThisShot = physicalPinsDownThisShot;
@@ -1599,15 +1802,21 @@ void Game::doCollisions() {
                     }
                 }
 
-                // Midas ball: mark pin as gold (store index)
+                // Midas ball: only the first pin hit this shot turns into Gold.
                 if (activeItems.ballType == BallType::Midas) {
-                    // Gold pins already pay via their own effect; don't double-count.
-                    if (pin.getPinType() != PinType::Gold) {
-                        bool alreadyGold = false;
-                        for (int idx : activeItems.goldPinIndices)
-                            if (idx == pi) { alreadyGold = true; break; }
-                        if (!alreadyGold)
-                            activeItems.goldPinIndices.push_back(pi);
+                    bool firstPinThisShot = (activeItems.firstBallHitPinIndex == pi);
+                    if (firstPinThisShot &&
+                        !activeItems.lockPinChangesMidRound &&
+                        pin.getPinType() != PinType::Gold) {
+                        if (pi >= 0 &&
+                            pi < (int)activeItems.pinChangeHitCountsThisShot.size()) {
+                            activeItems.pinChangeEventsThisShot++;
+                            activeItems.pinChangeHitCountsThisShot[pi]++;
+                        }
+                        pin.setPinType(PinType::Gold);
+                        if (pi + 1 >= 1 && pi + 1 <= activeItems.getActivePinSlotCount()) {
+                            activeItems.setPinAssignment(pi + 1, PinType::Gold);
+                        }
                     }
                 }
 
@@ -1701,8 +1910,18 @@ void Game::update(float dt) {
 
     audio.setMusicVolume(ui.getMusicVolume());
     audio.setSoundVolume(ui.getSoundVolume());
+    updateStrikeConfetti(dt);
 
-    if (ui.getState() == GameState::RoundSummary) {
+    if (!window.hasFocus()) {
+        return;
+    }
+
+    if (ui.getState() == GameState::RoundSummary ||
+        ui.getState() == GameState::Shop) {
+        return;
+    }
+
+    if (resetConfirmOpen) {
         return;
     }
     
@@ -1717,6 +1936,7 @@ void Game::update(float dt) {
         if (nowM && !prevM) {
             // Back to menu
             ui.setState(GameState::Menu);
+            strikeConfetti.clear();
             gameOver = false;
             roundSummaryLeadsToGameOver = false;
             roundSummaryPassed = false;
@@ -1734,27 +1954,7 @@ void Game::update(float dt) {
         }
         
         if (nowR && !prevR) {
-            if (ui.getState() == GameState::Xtreme) {
-                xtreme.reset();
-                xtremeRoundStartTokens = xtreme.getTokens();
-            } else {
-                scorer.resetGame();
-            }
-            gameOver = false;
-            roundSummaryLeadsToGameOver = false;
-            roundSummaryPassed = false;
-            pendingGameOverFromScore = false;
-            postScorePauseTimer = 0.0f;
-            pendingReset = false;
-            xtremeLastRoundScoreProgress = 0;
-            xtremeLastRoundTargetProgress = 0;
-            equipBall(BallType::Normal);
-            activeItems.resetAll();
-            ui.resetEquippedBall();
-            cancelPinPowerSelection();
-            lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
-            pins = createPins(lane.centerX(), 240.0f);
-            resetBall();
+            confirmRunReset();
         }
         
         prevR = nowR;
@@ -1851,30 +2051,7 @@ void Game::update(float dt) {
     }
 
     if (nowR && !prevR) {
-        if (ui.getState() == GameState::Xtreme) {
-            xtreme.reset();
-            xtremeRoundStartTokens = xtreme.getTokens();
-        } else {
-            scorer.resetGame();
-        }
-        gameOver = false;
-        roundSummaryLeadsToGameOver = false;
-        roundSummaryPassed = false;
-        pendingGameOverFromScore = false;
-        postScorePauseTimer = 0.0f;
-        pendingReset = false;
-        xtremeLastRoundScoreProgress = 0;
-        xtremeLastRoundTargetProgress = 0;
-        equipBall(BallType::Normal);
-        activeItems.resetAll();
-        ui.resetEquippedBall();
-        cancelPinPowerSelection();
-        lane.bumpersOn = (ui.getState() == GameState::Playing) ? ui.getBumpersDefault() : false;
-        if (ui.getState() == GameState::Xtreme) {
-            ui.generateShopOffers(activeItems);
-        }
-        pins = createPins(lane.centerX(), 240.0f);
-        resetBall();
+        requestRunReset();
     }
 
     // C key - change ball color
@@ -2090,6 +2267,7 @@ void Game::draw() {
     }
 
     ball.draw(window);
+    drawStrikeConfetti();
 
     // Draw UI and check for actions (like exiting to menu)
     GameAction action = GameAction::None;
@@ -2217,9 +2395,70 @@ void Game::draw() {
         }
     }
 
+    if (resetConfirmOpen) {
+        ResetConfirmLayout modal = makeResetConfirmLayout(windowW, windowH);
+
+        sf::RectangleShape dim(sf::Vector2f(windowW, windowH));
+        dim.setFillColor(sf::Color(0, 0, 0, 150));
+        window.draw(dim);
+
+        sf::RectangleShape panel(modal.panel.size);
+        panel.setPosition(modal.panel.position);
+        panel.setFillColor(sf::Color(20, 24, 46, 245));
+        panel.setOutlineColor(sf::Color(182, 194, 255));
+        panel.setOutlineThickness(3.0f);
+        window.draw(panel);
+
+        auto drawConfirmButton = [&](const sf::FloatRect& rect,
+                                     const std::string& label,
+                                     sf::Color fill,
+                                     sf::Color border) {
+            sf::RectangleShape b(rect.size);
+            b.setPosition(rect.position);
+            b.setFillColor(fill);
+            b.setOutlineColor(border);
+            b.setOutlineThickness(2.0f);
+            window.draw(b);
+
+            if (ui.isFontLoaded()) {
+                sf::Text t(ui.getFont(), label, 28);
+                sf::FloatRect tb = t.getLocalBounds();
+                t.setPosition({
+                    rect.position.x + rect.size.x * 0.5f - (tb.position.x + tb.size.x * 0.5f),
+                    rect.position.y + rect.size.y * 0.5f - (tb.position.y + tb.size.y * 0.58f)
+                });
+                t.setFillColor(sf::Color::White);
+                window.draw(t);
+            }
+        };
+
+        drawConfirmButton(modal.yesButton, "YES", sf::Color(50, 160, 92), sf::Color(140, 235, 170));
+        drawConfirmButton(modal.noButton, "NO", sf::Color(152, 70, 82), sf::Color(255, 160, 170));
+
+        if (ui.isFontLoaded()) {
+            sf::Text ask(ui.getFont(), "Reset run?", 44);
+            ask.setFillColor(sf::Color::White);
+            ask.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 18.0f});
+            window.draw(ask);
+
+            sf::Text sub(ui.getFont(), "Are you sure? This will restart the current run.", 24);
+            sub.setFillColor(sf::Color(205, 212, 236));
+            sub.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 84.0f});
+            window.draw(sub);
+
+            sf::Text hint(ui.getFont(), "Enter = Yes, Esc = No", 18);
+            hint.setFillColor(sf::Color(140, 215, 255));
+            hint.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 120.0f});
+            window.draw(hint);
+        }
+
+        action = GameAction::None;
+    }
+
     // Now handle the action returned from the scorecard UI
     if (action == GameAction::ExitToMenu) {
         ui.setState(GameState::Menu);
+        strikeConfetti.clear();
         scorer.resetGame();
         xtreme.reset();
         xtremeMode = false;

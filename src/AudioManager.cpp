@@ -39,6 +39,11 @@ void AudioManager::loadSounds() {
         explodingPinSound = std::make_unique<sf::Sound>(explodingPinBuffer);
         explodingPinSound->setVolume(75.0f);
     }
+
+    if (strikeCheerBuffer.loadFromFile("assets/cheering.wav")) {
+        strikeCheerSound = std::make_unique<sf::Sound>(strikeCheerBuffer);
+        strikeCheerSound->setVolume(85.0f);
+    }
     
     // --- Music Files (Using if checks to silence [[nodiscard]] warnings) ---
     
@@ -143,6 +148,14 @@ void AudioManager::playExplodingPin(float volume) {
     if (explodingPinSound->getStatus() != sf::SoundSource::Status::Playing) {
         explodingPinSound->setVolume(volume * (sfxVolume / 100.0f));
         explodingPinSound->play();
+    }
+}
+
+void AudioManager::playStrikeCheer(float volume) {
+    if (!soundsLoaded || !strikeCheerSound) return;
+    if (strikeCheerSound->getStatus() != sf::SoundSource::Status::Playing) {
+        strikeCheerSound->setVolume(volume * (sfxVolume / 100.0f));
+        strikeCheerSound->play();
     }
 }
 

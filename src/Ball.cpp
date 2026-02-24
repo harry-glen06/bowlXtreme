@@ -264,25 +264,27 @@ void Ball::drawFastball(sf::RenderWindow& window) const {
 }
 
 void Ball::drawOddBall(sf::RenderWindow& window) const {
-    // Half green (odd), half orange (even), split diagonally
-    float c = std::cos(spin), s = std::sin(spin);
-
-    // Left half green
+    // Two-colour ball: left green, right orange, with a clean curved split.
+    float c = std::cos(spin);
+    float s = std::sin(spin);
     drawBallShell(window, pos, radius, {60, 180, 60}, spin);
 
-    // Right half orange using a clipping rectangle trick (draw on top)
-    sf::ConvexShape half;
-    half.setPointCount(4);
-    float r = radius * 1.2f;
-    // Rotated right half
-    auto rot = [&](sf::Vector2f v) {
+    auto rot = [&](sf::Vector2f v) -> sf::Vector2f {
         return pos + sf::Vector2f(v.x*c - v.y*s, v.x*s + v.y*c);
     };
-    half.setPoint(0, rot({0.f, -r}));
-    half.setPoint(1, rot({r,   -r}));
-    half.setPoint(2, rot({r,    r}));
-    half.setPoint(3, rot({0.f,  r}));
-    half.setFillColor({220, 120, 30, 200});
+
+    // Right semicircle overlay (curved edge, no square clipping artifact).
+    const int segs = 28;
+    const float rr = radius * 0.985f;
+    sf::ConvexShape half;
+    half.setPointCount(static_cast<std::size_t>(segs + 2));
+    half.setPoint(0, pos);
+    for (int i = 0; i <= segs; i++) {
+        float t = -1.5707963f + (3.1415926f * static_cast<float>(i) / static_cast<float>(segs)); // -90..+90 deg
+        sf::Vector2f local(rr * std::cos(t), rr * std::sin(t));
+        half.setPoint(static_cast<std::size_t>(i + 1), rot(local));
+    }
+    half.setFillColor({236, 156, 52, 212});
     window.draw(half);
 
     // Dividing line
