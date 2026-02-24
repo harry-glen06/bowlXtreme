@@ -2202,7 +2202,7 @@ void Game::update(float dt) {
 }
 
 void Game::draw() {
-    window.clear(sf::Color(20, 20, 20));
+    window.clear(sf::Color(36, 52, 66));
 
     // Draw menu if in menu state
     if (ui.getState() == GameState::Menu) {
@@ -2436,19 +2436,34 @@ void Game::draw() {
         drawConfirmButton(modal.noButton, "NO", sf::Color(152, 70, 82), sf::Color(255, 160, 170));
 
         if (ui.isFontLoaded()) {
+            const float textPadX = 24.0f;
+            const float maxTextWidth = std::max(80.0f, modal.panel.size.x - textPadX * 2.0f);
+
             sf::Text ask(ui.getFont(), "Reset run?", 44);
+            while (ask.getCharacterSize() > 28 &&
+                   ask.getLocalBounds().size.x > maxTextWidth) {
+                ask.setCharacterSize(ask.getCharacterSize() - 1);
+            }
             ask.setFillColor(sf::Color::White);
             ask.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 18.0f});
             window.draw(ask);
 
-            sf::Text sub(ui.getFont(), "Are you sure? This will restart the current run.", 24);
+            sf::Text sub(ui.getFont(), "Are you sure?\nThis will restart the current run.", 22);
+            while (sub.getCharacterSize() > 16 &&
+                   sub.getLocalBounds().size.x > maxTextWidth) {
+                sub.setCharacterSize(sub.getCharacterSize() - 1);
+            }
             sub.setFillColor(sf::Color(205, 212, 236));
             sub.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 84.0f});
             window.draw(sub);
 
             sf::Text hint(ui.getFont(), "Enter = Yes, Esc = No", 18);
+            while (hint.getCharacterSize() > 12 &&
+                   hint.getLocalBounds().size.x > maxTextWidth) {
+                hint.setCharacterSize(hint.getCharacterSize() - 1);
+            }
             hint.setFillColor(sf::Color(140, 215, 255));
-            hint.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 120.0f});
+            hint.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 150.0f});
             window.draw(hint);
         }
 

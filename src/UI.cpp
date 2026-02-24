@@ -868,50 +868,97 @@ GameAction UI::drawScorecard(sf::RenderWindow& window,
                        float windowW, 
                        float windowH) {
     if (!fontLoaded) return GameAction::None;
-    
-    float startX = 10.0f;
-    float startY = 100.0f;
-    float frameWidth = 70.0f;
-    float frameHeight = 60.0f;
-    
+
+    const float panelX = 14.0f;
+    const float panelY = 24.0f;
+    const float panelW = 264.0f;
+    const float panelH = windowH - 48.0f;
+
+    sf::ConvexShape panelShadow = createRoundedRect({panelW + 8.0f, panelH + 8.0f}, 16.0f, sf::Color(0, 0, 0, 58));
+    panelShadow.setPosition({panelX + 4.0f, panelY + 6.0f});
+    window.draw(panelShadow);
+
+    sf::ConvexShape panel = createRoundedRect({panelW, panelH}, 16.0f, sf::Color(126, 112, 90, 238));
+    panel.setPosition({panelX, panelY});
+    panel.setOutlineColor(sf::Color(160, 139, 110));
+    panel.setOutlineThickness(2.6f);
+    window.draw(panel);
+
+    sf::RectangleShape headBar({panelW - 8.0f, 54.0f});
+    headBar.setPosition({panelX + 4.0f, panelY + 4.0f});
+    headBar.setFillColor(sf::Color(100, 83, 61, 238));
+    window.draw(headBar);
+
+    sf::Text title(font, "CLASSIC MODE", 25);
+    title.setPosition({panelX + 16.0f, panelY + 12.0f});
+    title.setFillColor(sf::Color(243, 232, 210));
+    window.draw(title);
+
+    int shownFrame = std::clamp(currentFrame + 1, 1, 10);
+    sf::Text frameInfo(font, "Frame " + std::to_string(shownFrame) + "  Ball " + std::to_string(currentBall), 16);
+    frameInfo.setPosition({panelX + 16.0f, panelY + 62.0f});
+    frameInfo.setFillColor(sf::Color(235, 220, 191));
+    window.draw(frameInfo);
+
+    float frameProgress = std::clamp((float)currentFrame / 10.0f, 0.0f, 1.0f);
+    if (currentFrame < 10) {
+        frameProgress = std::clamp(((float)currentFrame + ((float)currentBall - 1.0f) * 0.5f) / 10.0f, 0.0f, 1.0f);
+    }
+    sf::RectangleShape progBg({panelW - 34.0f, 10.0f});
+    progBg.setPosition({panelX + 17.0f, panelY + 88.0f});
+    progBg.setFillColor(sf::Color(80, 66, 48, 240));
+    progBg.setOutlineColor(sf::Color(161, 138, 106));
+    progBg.setOutlineThickness(1.2f);
+    window.draw(progBg);
+
+    sf::RectangleShape progFill({(panelW - 34.0f) * frameProgress, 10.0f});
+    progFill.setPosition({panelX + 17.0f, panelY + 88.0f});
+    progFill.setFillColor(sf::Color(86, 206, 170));
+    window.draw(progFill);
+
+    int liveTotal = 0;
     for (int i = 0; i < 10; i++) {
-        float x = startX;
-        float y = startY + i * frameHeight;
-        
-        // Frame box
-        sf::RectangleShape box(sf::Vector2f(frameWidth - 2, frameHeight - 2));
-        box.setPosition(sf::Vector2f(x, y));
-        box.setFillColor(sf::Color(40, 40, 40));
-        box.setOutlineColor(sf::Color::White);
-        box.setOutlineThickness(1.0f);
-        window.draw(box);
-        
-        // Frame number
-        sf::Text frameNum(font, std::to_string(i + 1), 14);
-        frameNum.setPosition(sf::Vector2f(x + 5, y + 2));
-        frameNum.setFillColor(sf::Color(150, 150, 150));
-        window.draw(frameNum);
-        
-        // Ball scores
+        if (frames[i].isComplete || i < currentFrame) liveTotal = frames[i].score;
+    }
+
+    sf::Text totalText(font, "Score  " + formatCompactScore(liveTotal), 30);
+    totalText.setPosition({panelX + 16.0f, panelY + 104.0f});
+    totalText.setFillColor(sf::Color(48, 165, 187));
+    totalText.setOutlineColor(sf::Color(24, 22, 18));
+    totalText.setOutlineThickness(2.0f);
+    window.draw(totalText);
+
+    const float cardX = panelX + 12.0f;
+    const float cardW = panelW - 24.0f;
+    const float rowH = 64.0f;
+    const float cardsStartY = panelY + 146.0f;
+
+    for (int i = 0; i < 10; i++) {
+        float y = cardsStartY + rowH * (float)i;
+        bool current = (i == currentFrame && currentFrame < 10);
+        bool complete = (frames[i].isComplete || i < currentFrame);
+
+        sf::Color cardColor = complete ? sf::Color(111, 97, 76, 240) : sf::Color(101, 88, 68, 240);
+        sf::Color borderColor = current ? sf::Color(106, 224, 177) : sf::Color(158, 136, 106);
+        sf::ConvexShape card = createRoundedRect({cardW, rowH - 6.0f}, 9.0f, cardColor);
+        card.setPosition({cardX, y});
+        card.setOutlineColor(borderColor);
+        card.setOutlineThickness(current ? 2.6f : 1.4f);
+        window.draw(card);
+
+        sf::Text frameLabel(font, "F" + std::to_string(i + 1), 18);
+        frameLabel.setPosition({cardX + 10.0f, y + 8.0f});
+        frameLabel.setFillColor(current ? sf::Color(202, 255, 228) : sf::Color(229, 213, 184));
+        window.draw(frameLabel);
+
         std::string ball1Str = "";
         std::string ball2Str = "";
-
         if (currentFrame > i || (currentFrame == i && currentBall > 1)) {
-            if (frames[i].ball1 == 0) {
-                ball1Str = "-";
-            } else {
-                ball1Str = std::to_string(frames[i].ball1);
-            }
+            ball1Str = (frames[i].ball1 == 0) ? "-" : std::to_string(frames[i].ball1);
         }
-
         if (currentFrame > i || (currentFrame == i && currentBall > 2)) {
-            if (frames[i].ball2 == 0) {
-                ball2Str = "-";
-            } else {
-                ball2Str = std::to_string(frames[i].ball2);
-            }
+            ball2Str = (frames[i].ball2 == 0) ? "-" : std::to_string(frames[i].ball2);
         }
-
         if (frames[i].isStrike && i < 9) {
             ball1Str = "X";
             ball2Str = "";
@@ -920,64 +967,63 @@ GameAction UI::drawScorecard(sf::RenderWindow& window,
         } else if (frames[i].ball2 == 10) {
             ball2Str = "X";
         }
-        
-        sf::Text ball1Text(font, ball1Str, 16);
-        ball1Text.setPosition(sf::Vector2f(x + frameWidth - 45, y + 18));
-        window.draw(ball1Text);
-        
-        sf::Text ball2Text(font, ball2Str, 16);
-        ball2Text.setPosition(sf::Vector2f(x + frameWidth - 25, y + 18));
-        window.draw(ball2Text);
-        
-        // 10th frame has 3 balls
-        if (i == 9 && frames[i].ball3 > 0) {
+
+        sf::Text b1(font, ball1Str, 20);
+        b1.setPosition({cardX + cardW - 92.0f, y + 7.0f});
+        b1.setFillColor(sf::Color(247, 236, 216));
+        window.draw(b1);
+
+        sf::Text b2(font, ball2Str, 20);
+        b2.setPosition({cardX + cardW - 66.0f, y + 7.0f});
+        b2.setFillColor(sf::Color(247, 236, 216));
+        window.draw(b2);
+
+        if (i == 9 && (frames[i].ball3 > 0 || frames[i].ball3 == 10)) {
             std::string ball3Str = frames[i].ball3 == 10 ? "X" : std::to_string(frames[i].ball3);
-            sf::Text ball3Text(font, ball3Str, 16);
-            ball3Text.setPosition(sf::Vector2f(x + frameWidth - 15, y + 5));
-            window.draw(ball3Text);
+            sf::Text b3(font, ball3Str, 16);
+            b3.setPosition({cardX + cardW - 40.0f, y + 9.0f});
+            b3.setFillColor(sf::Color(231, 218, 193));
+            window.draw(b3);
         }
-        
-        // Frame total
-        if (frames[i].isComplete || i < currentFrame) {
-            sf::Text scoreText(font, std::to_string(frames[i].score), 20);
-            scoreText.setPosition(sf::Vector2f(x + frameWidth / 2 - 15, y + 35));
-            scoreText.setFillColor(sf::Color::Yellow);
+
+        if (complete) {
+            sf::Text scoreText(font, formatCompactScore(frames[i].score), 24);
+            scoreText.setPosition({cardX + cardW - 110.0f, y + 32.0f});
+            scoreText.setFillColor(sf::Color(44, 156, 178));
             window.draw(scoreText);
+        } else {
+            sf::Text pending(font, "...", 22);
+            pending.setPosition({cardX + cardW - 76.0f, y + 32.0f});
+            pending.setFillColor(sf::Color(215, 196, 166));
+            window.draw(pending);
         }
-        
     }
-    
-    // Current frame indicator
-    float indicatorY = startY + currentFrame * frameHeight;
-    sf::RectangleShape indicator(sf::Vector2f(3, frameHeight - 2));
-    indicator.setPosition(sf::Vector2f(startX + frameWidth, indicatorY));
-    indicator.setFillColor(sf::Color::Green);
-    window.draw(indicator);
-        
-    // Show high score at bottom
-    sf::Text highScoreDisplay(font, "High Score: " + std::to_string(normalHighScore), 16);
-    highScoreDisplay.setPosition(sf::Vector2f(startX + 5, startY + (10 * frameHeight) + 10));
-    highScoreDisplay.setFillColor(sf::Color::Cyan);
+
+    sf::Text highScoreDisplay(font, "High Score: " + formatCompactScore(normalHighScore), 18);
+    highScoreDisplay.setPosition({panelX + 16.0f, panelY + panelH - 26.0f});
+    highScoreDisplay.setFillColor(sf::Color(93, 228, 243));
     window.draw(highScoreDisplay);
 
-    // Define the Exit Button area
-    sf::RectangleShape exitBtn(sf::Vector2f(120, 40));
-    exitBtn.setPosition(sf::Vector2f(windowW - 140, 20)); // Top right corner
-    exitBtn.setFillColor(sf::Color(100, 100, 100, 200));
-    exitBtn.setOutlineThickness(2);
-    exitBtn.setOutlineColor(sf::Color::White);
-    // Draw the Button
+    sf::FloatRect exitRect(sf::Vector2f(windowW - 146.0f, 18.0f), sf::Vector2f(122.0f, 44.0f));
+    sf::ConvexShape exitBtn = createRoundedRect(exitRect.size, 10.0f, sf::Color(214, 130, 95, 235));
+    exitBtn.setPosition(exitRect.position);
+    exitBtn.setOutlineColor(sf::Color(240, 211, 166));
+    exitBtn.setOutlineThickness(2.0f);
     window.draw(exitBtn);
-    sf::Text exitText(font, "MENU", 20);
-    exitText.setPosition(sf::Vector2f(windowW - 110, 27));
-    exitText.setFillColor(sf::Color::White);
+
+    sf::Text exitText(font, "MENU", 22);
+    sf::FloatRect eb = exitText.getLocalBounds();
+    exitText.setPosition({
+        exitRect.position.x + exitRect.size.x * 0.5f - (eb.position.x + eb.size.x * 0.5f),
+        exitRect.position.y + exitRect.size.y * 0.5f - (eb.position.y + eb.size.y * 0.58f)
+    });
+    exitText.setFillColor(sf::Color(44, 36, 28));
     window.draw(exitText);
-    // Handle Click Detection
+
     if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
         sf::Vector2i mousePos = sf::Mouse::getPosition(window);
         sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
-        sf::FloatRect hit = exitBtn.getGlobalBounds();
-        if (pointInRectPadded(hit, worldPos, 8.0f)) {
+        if (pointInRectPadded(exitRect, worldPos, 8.0f)) {
             return GameAction::ExitToMenu;
         }
     }
@@ -1089,62 +1135,122 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         }
     }
 
-    // Left info panel (larger + cleaner styling).
-    const float leftPanelX = 28.0f;
-    const float leftPanelY = 30.0f;
-    const float leftPanelW = 300.0f;
-    const float leftPanelH = windowH - 64.0f;
+    const float sideMargin = std::clamp(windowW * 0.017f, 14.0f, 28.0f);
+    const float panelTop = std::clamp(windowH * 0.03f, 18.0f, 34.0f);
+    const float panelBottomMargin = std::clamp(windowH * 0.034f, 22.0f, 40.0f);
+    const float minSidePanelW = 230.0f;
+    const float desiredSidePanelW = std::clamp(windowW * 0.205f, 250.0f, 372.0f);
+    const float maxSidePanelW = std::max(minSidePanelW, (windowW - 360.0f - sideMargin * 2.0f - 24.0f) * 0.5f);
+    const float sidePanelW = std::clamp(desiredSidePanelW, minSidePanelW, maxSidePanelW);
+    const float sidePanelH = windowH - panelTop - panelBottomMargin;
+    const float leftPanelX = sideMargin;
+    const float leftPanelY = panelTop;
 
-    sf::RectangleShape leftPanelShadow(sf::Vector2f(leftPanelW + 8.0f, leftPanelH + 8.0f));
-    leftPanelShadow.setPosition(sf::Vector2f(leftPanelX + 5.0f, leftPanelY + 7.0f));
-    leftPanelShadow.setFillColor(sf::Color(0, 0, 0, 90));
+    // Left panel
+    sf::ConvexShape leftPanelShadow = createRoundedRect(
+        {sidePanelW + 10.0f, sidePanelH + 10.0f}, 18.0f, sf::Color(0, 0, 0, 64));
+    leftPanelShadow.setPosition({leftPanelX + 5.0f, leftPanelY + 6.0f});
     window.draw(leftPanelShadow);
 
-    sf::RectangleShape leftPanel(sf::Vector2f(leftPanelW, leftPanelH));
-    leftPanel.setPosition(sf::Vector2f(leftPanelX, leftPanelY));
-    leftPanel.setFillColor(sf::Color(67, 69, 79, 230));
-    leftPanel.setOutlineColor(sf::Color(132, 140, 164));
-    leftPanel.setOutlineThickness(3.0f);
+    sf::ConvexShape leftPanel = createRoundedRect(
+        {sidePanelW, sidePanelH}, 18.0f, sf::Color(122, 109, 89, 238));
+    leftPanel.setPosition({leftPanelX, leftPanelY});
+    leftPanel.setOutlineColor(sf::Color(159, 138, 109));
+    leftPanel.setOutlineThickness(2.5f);
     window.draw(leftPanel);
 
-    sf::RectangleShape leftPanelTopBar(sf::Vector2f(leftPanelW - 8.0f, 5.0f));
-    leftPanelTopBar.setPosition(sf::Vector2f(leftPanelX + 4.0f, leftPanelY + 4.0f));
-    leftPanelTopBar.setFillColor(sf::Color(120, 220, 255, 170));
-    window.draw(leftPanelTopBar);
+    sf::RectangleShape leftHead({sidePanelW - 6.0f, 58.0f});
+    leftHead.setPosition({leftPanelX + 3.0f, leftPanelY + 3.0f});
+    leftHead.setFillColor(sf::Color(96, 80, 59, 240));
+    window.draw(leftHead);
 
-    float lx = leftPanelX + 22.0f;
-    float y = leftPanelY + 20.0f;
-    const float leftTextMaxW = leftPanelW - 36.0f;
+    sf::RectangleShape leftHeadAccent({sidePanelW - 20.0f, 3.0f});
+    leftHeadAccent.setPosition({leftPanelX + 10.0f, leftPanelY + 52.0f});
+    leftHeadAccent.setFillColor(sf::Color(222, 196, 149, 226));
+    window.draw(leftHeadAccent);
+
+    float lx = leftPanelX + 18.0f;
+    float y = leftPanelY + 9.0f;
+    const float leftTextMaxW = sidePanelW - 34.0f;
     auto fitTextToPanel = [&](sf::Text& text, float maxW, unsigned minSize) {
         while (text.getCharacterSize() > minSize && text.getLocalBounds().size.x > maxW) {
             text.setCharacterSize(text.getCharacterSize() - 1);
         }
     };
 
-    sf::Text t1(font, "round " + std::to_string(round), 42);
+    sf::Text modeText(font, "XTREME MODE", 30);
+    fitTextToPanel(modeText, leftTextMaxW, 18);
+    modeText.setPosition({lx, y});
+    modeText.setFillColor(sf::Color(245, 234, 214));
+    window.draw(modeText);
+    y += 64.0f;
+
+    float targetProgress = 0.0f;
+    if (targetScore > 0) {
+        targetProgress = std::clamp((float)roundScore / (float)targetScore, 0.0f, 1.0f);
+    }
+    const float targetCardH = 98.0f;
+    sf::ConvexShape targetCard = createRoundedRect({leftTextMaxW, targetCardH}, 10.0f, sf::Color(216, 195, 148, 244));
+    targetCard.setPosition({lx, y});
+    targetCard.setOutlineColor(targetProgress >= 1.0f
+                               ? sf::Color(110, 240, 145)
+                               : sf::Color(250, 214, 120));
+    targetCard.setOutlineThickness(2.0f);
+    window.draw(targetCard);
+
+    sf::Text targetLabel(font, "TARGET SCORE", 20);
+    fitTextToPanel(targetLabel, leftTextMaxW - 20.0f, 13);
+    targetLabel.setPosition({lx + 10.0f, y + 8.0f});
+    targetLabel.setFillColor(sf::Color(72, 49, 27));
+    window.draw(targetLabel);
+
+    sf::Text targetValue(font,
+                         formatCompactScore(roundScore) + " / " + formatCompactScore(targetScore),
+                         36);
+    fitTextToPanel(targetValue, leftTextMaxW - 20.0f, 20);
+    targetValue.setPosition({lx + 10.0f, y + 30.0f});
+    targetValue.setFillColor(targetProgress >= 1.0f
+                             ? sf::Color(33, 130, 78)
+                             : sf::Color(55, 45, 34));
+    targetValue.setOutlineColor(sf::Color(237, 224, 194));
+    targetValue.setOutlineThickness(2.0f);
+    window.draw(targetValue);
+
+    const float targetBarY = y + targetCardH - 18.0f;
+    sf::RectangleShape targetTrack({leftTextMaxW - 14.0f, 10.0f});
+    targetTrack.setPosition({lx + 7.0f, targetBarY});
+    targetTrack.setFillColor(sf::Color(194, 171, 128, 242));
+    targetTrack.setOutlineColor(sf::Color(140, 110, 66));
+    targetTrack.setOutlineThickness(1.1f);
+    window.draw(targetTrack);
+
+    sf::RectangleShape targetFill({(leftTextMaxW - 14.0f) * targetProgress, 10.0f});
+    targetFill.setPosition({lx + 7.0f, targetBarY});
+    targetFill.setFillColor(targetProgress >= 1.0f
+                            ? sf::Color(110, 244, 150)
+                            : sf::Color(243, 209, 98));
+    window.draw(targetFill);
+
+    // Add more breathing room so all rows below target card start lower.
+    y += targetCardH + 36.0f;
+
+    sf::Text t1(font, "round " + std::to_string(round), 40);
     t1.setPosition(sf::Vector2f(lx, y));
-    t1.setFillColor(sf::Color(238, 240, 250));
+    t1.setFillColor(sf::Color(246, 235, 215));
     window.draw(t1);
-    y += 48;
+    y += 42;
 
-    sf::Text t2(font, "frame " + std::to_string(frameInRound), 32);
+    sf::Text t2(font, "frame " + std::to_string(frameInRound), 30);
     t2.setPosition(sf::Vector2f(lx, y));
-    t2.setFillColor(sf::Color(226, 228, 238));
+    t2.setFillColor(sf::Color(238, 223, 194));
     window.draw(t2);
-    y += 40;
+    y += 36;
 
-    sf::Text t3(font, "shot " + std::to_string(shotInFrame), 32);
+    sf::Text t3(font, "shot " + std::to_string(shotInFrame), 30);
     t3.setPosition(sf::Vector2f(lx, y));
-    t3.setFillColor(sf::Color(226, 228, 238));
+    t3.setFillColor(sf::Color(238, 223, 194));
     window.draw(t3);
-    y += 58;
-
-    sf::Text target(font, "score at least " + formatCompactScore(targetScore), 24);
-    fitTextToPanel(target, leftTextMaxW, 16);
-    target.setPosition(sf::Vector2f(lx, y));
-    target.setFillColor(sf::Color(245, 224, 138));
-    window.draw(target);
-    y += 72;
+    y += 48;
 
     int shownImpact = std::max(10, (int)std::round(hudImpactValue));
     int shownCombo = std::max(1, (int)std::round(hudComboValue));
@@ -1152,18 +1258,18 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         shownImpact = std::max(10, liveImpactPreview);
         shownCombo = std::max(1, liveComboPreview);
     }
-    sf::Text big(font, formatCompactScore(shownImpact) + " X " + formatCompactScore(shownCombo), 60);
-    fitTextToPanel(big, leftTextMaxW, 28);
+    sf::Text big(font, formatCompactScore(shownImpact) + " X " + formatCompactScore(shownCombo), 58);
+    fitTextToPanel(big, leftTextMaxW, 24);
     big.setPosition(sf::Vector2f(lx, y));
-    big.setFillColor(sf::Color(120, 240, 255));
-    big.setOutlineColor(sf::Color(8, 12, 18));
+    big.setFillColor(sf::Color(54, 175, 196));
+    big.setOutlineColor(sf::Color(22, 21, 17));
     big.setOutlineThickness(3.0f);
     window.draw(big);
-    y += 84;
+    y += 78;
 
-    sf::Text explain(font, "Impact x Pin Combo", 24);
+    sf::Text explain(font, "Impact x Pin Combo", 25);
     explain.setPosition(sf::Vector2f(lx, y));
-    explain.setFillColor(sf::Color(255, 108, 108));
+    explain.setFillColor(sf::Color(255, 148, 161));
     window.draw(explain);
     y += 38;
 
@@ -1173,38 +1279,52 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     } else if (hudShowBigScore) {
         shownShotAdd = hudCountTarget;
     }
-    sf::Text shotScore(font, "shot add: " + formatCompactScore(shownShotAdd), 24);
-    fitTextToPanel(shotScore, leftTextMaxW, 16);
-    shotScore.setPosition(sf::Vector2f(lx, y));
-    shotScore.setFillColor(hudCounting ? sf::Color(100, 255, 170) : sf::Color(235, 236, 245));
+    sf::RectangleShape shotRow({leftTextMaxW, 34.0f});
+    shotRow.setPosition({lx, y - 2.0f});
+    shotRow.setFillColor(sf::Color(91, 77, 58, 238));
+    shotRow.setOutlineColor(sf::Color(159, 136, 104));
+    shotRow.setOutlineThickness(1.4f);
+    window.draw(shotRow);
+
+    sf::Text shotScore(font, "shot add: " + formatCompactScore(shownShotAdd), 23);
+    fitTextToPanel(shotScore, leftTextMaxW - 10.0f, 14);
+    shotScore.setPosition(sf::Vector2f(lx + 8.0f, y + 1.0f));
+    shotScore.setFillColor(hudCounting ? sf::Color(126, 255, 200) : sf::Color(245, 232, 209));
     window.draw(shotScore);
-    y += 38;
+    y += 40;
 
-    sf::Text roundScoreText(font, "round score: " + formatCompactScore(roundScore), 32);
-    fitTextToPanel(roundScoreText, leftTextMaxW, 18);
-    roundScoreText.setPosition(sf::Vector2f(lx, y));
-    roundScoreText.setFillColor(sf::Color(246, 247, 255));
+    sf::RectangleShape roundRow({leftTextMaxW, 39.0f});
+    roundRow.setPosition({lx, y - 2.0f});
+    roundRow.setFillColor(sf::Color(91, 77, 58, 238));
+    roundRow.setOutlineColor(sf::Color(159, 136, 104));
+    roundRow.setOutlineThickness(1.5f);
+    window.draw(roundRow);
+
+    sf::Text roundScoreText(font, "round score: " + formatCompactScore(roundScore), 30);
+    fitTextToPanel(roundScoreText, leftTextMaxW - 10.0f, 16);
+    roundScoreText.setPosition(sf::Vector2f(lx + 8.0f, y + 2.0f));
+    roundScoreText.setFillColor(sf::Color(245, 232, 209));
     window.draw(roundScoreText);
+    y += 50;
 
-    y += 46;
-    sf::Text tokenText(font, "tokens: " + formatCompactScore(tokens), 30);
+    sf::Text tokenText(font, "tokens: " + formatCompactScore(tokens), 29);
     fitTextToPanel(tokenText, leftTextMaxW, 16);
     tokenText.setPosition(sf::Vector2f(lx, y));
-    tokenText.setFillColor(sf::Color(255, 215, 0));
+    tokenText.setFillColor(sf::Color(248, 184, 70));
     window.draw(tokenText);
 
     if (!pinPowerHintLine1.empty()) {
         y += 38.f;
         sf::Text hint1(font, pinPowerHintLine1, 18);
         hint1.setPosition(sf::Vector2f(lx, y));
-        hint1.setFillColor(sf::Color(230, 240, 255));
+        hint1.setFillColor(sf::Color(134, 233, 255));
         window.draw(hint1);
     }
     if (!pinPowerHintLine2.empty()) {
         y += 24.f;
         sf::Text hint2(font, pinPowerHintLine2, 18);
         hint2.setPosition(sf::Vector2f(lx, y));
-        hint2.setFillColor(sf::Color(255, 210, 140));
+        hint2.setFillColor(sf::Color(255, 190, 104));
         window.draw(hint2);
     }
 
@@ -1216,54 +1336,90 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         std::uint8_t alpha = (std::uint8_t)(255.0f * fade);
 
         sf::Text bigShot(font, "+" + formatCompactScore(hudCountTarget), 88);
-        fitTextToPanel(bigShot, leftPanelW * 0.82f, 40);
+        fitTextToPanel(bigShot, sidePanelW * 0.82f, 40);
         bigShot.setStyle(sf::Text::Bold);
         bigShot.setScale({pulse, pulse});
-        bigShot.setFillColor(sf::Color(255, 230, 110, alpha));
-        bigShot.setOutlineColor(sf::Color(20, 20, 20, alpha));
+        bigShot.setFillColor(sf::Color(243, 137, 66, alpha));
+        bigShot.setOutlineColor(sf::Color(245, 248, 255, alpha));
         bigShot.setOutlineThickness(4.0f);
 
         sf::FloatRect bb = bigShot.getLocalBounds();
-        float centerX = leftPanelX + leftPanelW * 0.50f;
-        float centerY = leftPanelY + leftPanelH * 0.56f;
+        float centerX = leftPanelX + sidePanelW * 0.50f;
+        float centerY = leftPanelY + sidePanelH * 0.56f;
         bigShot.setPosition({centerX - bb.size.x * 0.5f, centerY - bb.size.y * 0.5f});
         window.draw(bigShot);
     }
 
-    // Right inventory panel (moved further right)
-    const float inventoryOffsetX = 60.f;
-    sf::RectangleShape rightPanel(sf::Vector2f(300, windowH - 80));
-    rightPanel.setPosition(sf::Vector2f(windowW - 360 + inventoryOffsetX, 40));
-    rightPanel.setFillColor(sf::Color(50, 50, 60));
-    rightPanel.setOutlineColor(sf::Color::Black);
-    rightPanel.setOutlineThickness(3.0f);
+    // Right inventory panel.
+    const float rightPanelW = sidePanelW;
+    const float rightPanelX = windowW - rightPanelW - sideMargin;
+    const float rightPanelY = panelTop;
+    const float rightPanelH = sidePanelH;
+
+    sf::ConvexShape rightPanelShadow = createRoundedRect(
+        {rightPanelW + 10.0f, rightPanelH + 10.0f}, 18.0f, sf::Color(0, 0, 0, 64));
+    rightPanelShadow.setPosition({rightPanelX + 5.0f, rightPanelY + 6.0f});
+    window.draw(rightPanelShadow);
+
+    sf::ConvexShape rightPanel = createRoundedRect(
+        {rightPanelW, rightPanelH}, 18.0f, sf::Color(122, 109, 89, 238));
+    rightPanel.setPosition({rightPanelX, rightPanelY});
+    rightPanel.setOutlineColor(sf::Color(159, 138, 109));
+    rightPanel.setOutlineThickness(2.3f);
     window.draw(rightPanel);
 
-    sf::Text invTitle(font, "inventory", 36);
-    invTitle.setPosition(sf::Vector2f(windowW - 345 + inventoryOffsetX, 55));
-    invTitle.setFillColor(sf::Color(200, 200, 200));
+    sf::RectangleShape invHead({rightPanelW - 6.0f, 50.0f});
+    invHead.setPosition({rightPanelX + 3.0f, rightPanelY + 3.0f});
+    invHead.setFillColor(sf::Color(96, 80, 59, 240));
+    window.draw(invHead);
+
+    sf::Text invTitle(font, "INVENTORY", 33);
+    sf::FloatRect invB = invTitle.getLocalBounds();
+    invTitle.setPosition({rightPanelX + rightPanelW * 0.5f - (invB.position.x + invB.size.x * 0.5f),
+                          rightPanelY + 10.0f});
+    invTitle.setFillColor(sf::Color(245, 234, 214));
     window.draw(invTitle);
 
-    drawInventoryPanel(window, items, windowW - 355 + inventoryOffsetX, 110, 290);
+    drawInventoryPanel(window, items, rightPanelX + 8.0f, rightPanelY + 62.0f, rightPanelW - 16.0f);
 
-    // Menu button
-    sf::RectangleShape exitBtn(sf::Vector2f(120, 40));
-    exitBtn.setPosition(sf::Vector2f(windowW - 140, 20));
-    exitBtn.setFillColor(sf::Color(100, 100, 100, 200));
-    exitBtn.setOutlineThickness(2);
-    exitBtn.setOutlineColor(sf::Color::White);
+    // Menu button.
+    sf::Vector2f mouseWorld = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+    float exitW = 130.0f;
+    float exitH = 44.0f;
+    float exitX = rightPanelX - exitW - 14.0f;
+    float minExitX = leftPanelX + sidePanelW + 16.0f;
+    float maxExitX = windowW - exitW - sideMargin;
+    if (maxExitX < minExitX) maxExitX = minExitX;
+    exitX = std::clamp(exitX, minExitX, maxExitX);
+    sf::FloatRect exitRect(sf::Vector2f(exitX, panelTop - 2.0f), sf::Vector2f(exitW, exitH));
+    bool menuHover = pointInRectPadded(exitRect, mouseWorld, 5.0f);
+
+    sf::ConvexShape exitBtn = createRoundedRect(exitRect.size, 10.0f, menuHover
+        ? sf::Color(225, 152, 104, 240)
+        : sf::Color(212, 131, 92, 232));
+    exitBtn.setPosition(exitRect.position);
+    exitBtn.setOutlineThickness(2.0f);
+    exitBtn.setOutlineColor(menuHover ? sf::Color(244, 218, 178) : sf::Color(236, 202, 158));
     window.draw(exitBtn);
 
-    sf::Text exitText(font, "MENU", 20);
-    exitText.setPosition(sf::Vector2f(windowW - 110, 27));
-    exitText.setFillColor(sf::Color::White);
+    sf::ConvexShape exitGlow = createRoundedRect({exitRect.size.x - 6.0f, 14.0f}, 8.0f,
+                                                  sf::Color(255, 255, 255, menuHover ? 88 : 60));
+    exitGlow.setPosition({exitRect.position.x + 3.0f, exitRect.position.y + 3.0f});
+    window.draw(exitGlow);
+
+    sf::Text exitText(font, "MENU", 22);
+    sf::FloatRect eb = exitText.getLocalBounds();
+    exitText.setPosition({
+        exitRect.position.x + exitRect.size.x * 0.5f - (eb.position.x + eb.size.x * 0.5f),
+        exitRect.position.y + exitRect.size.y * 0.5f - (eb.position.y + eb.size.y * 0.58f)
+    });
+    exitText.setFillColor(sf::Color(43, 35, 28));
     window.draw(exitText);
 
     if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
         sf::Vector2i mousePos = sf::Mouse::getPosition(window);
         sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
-        sf::FloatRect hit = exitBtn.getGlobalBounds();
-        if (pointInRectPadded(hit, worldPos, 8.0f)) {
+        if (pointInRectPadded(exitRect, worldPos, 8.0f)) {
             return GameAction::ExitToMenu;
         }
     }
@@ -1285,12 +1441,12 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     
     // Semi-transparent overlay
     sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
-    overlay.setFillColor(sf::Color(0, 0, 0, 180));
+    overlay.setFillColor(sf::Color(56, 70, 102, 118));
     window.draw(overlay);
     
     // Game Over text
     sf::Text gameOverText(font, "GAME OVER!", 80);
-    gameOverText.setFillColor(sf::Color::Green);
+    gameOverText.setFillColor(sf::Color(90, 250, 165));
     gameOverText.setStyle(sf::Text::Bold);
     sf::FloatRect bounds = gameOverText.getLocalBounds();
     gameOverText.setPosition(sf::Vector2f(
@@ -1304,7 +1460,7 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     ? "Rounds Cleared: "
     : "Final Score: ";
     sf::Text scoreText(font, mainLabel + std::to_string(finalScore), 50);
-    scoreText.setFillColor(sf::Color::Yellow);
+    scoreText.setFillColor(sf::Color(255, 192, 92));
     bounds = scoreText.getLocalBounds();
     scoreText.setPosition(sf::Vector2f(
         windowW / 2 - bounds.size.x / 2,
@@ -1334,9 +1490,9 @@ void UI::drawGameOverScreen(sf::RenderWindow& window,
     sf::Text highScoreText(font, bestLabel + std::to_string(highScore), 40);
     if (finalScore == highScore && finalScore > 0) {
         highScoreText.setString((mode == GameOverMode::Xtreme) ? "NEW BEST ROUND!" : "NEW HIGH SCORE!");
-        highScoreText.setFillColor(sf::Color::Green);
+        highScoreText.setFillColor(sf::Color(90, 250, 165));
     } else {
-        highScoreText.setFillColor(sf::Color::Cyan);
+        highScoreText.setFillColor(sf::Color(112, 219, 244));
     }
     bounds = highScoreText.getLocalBounds();
     highScoreText.setPosition(sf::Vector2f(
@@ -1378,7 +1534,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     if (!fontLoaded) return;
 
     sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
-    overlay.setFillColor(sf::Color(0, 0, 0, 170));
+    overlay.setFillColor(sf::Color(52, 66, 92, 108));
     window.draw(overlay);
 
     const float panelW = 620.f;
@@ -1388,15 +1544,15 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
 
     sf::RectangleShape panel(sf::Vector2f(panelW, panelH));
     panel.setPosition(sf::Vector2f(panelX, panelY));
-    panel.setFillColor(sf::Color(30, 32, 45, 245));
-    panel.setOutlineColor(sf::Color(180, 190, 235));
+    panel.setFillColor(sf::Color(246, 241, 224, 248));
+    panel.setOutlineColor(sf::Color(137, 152, 202));
     panel.setOutlineThickness(3.f);
     window.draw(panel);
 
     sf::Text title(font, "ROUND " + std::to_string(roundNumber) + " SUMMARY", 42);
     sf::FloatRect titleBounds = title.getLocalBounds();
     title.setPosition(sf::Vector2f(panelX + panelW * 0.5f - titleBounds.size.x * 0.5f, panelY + 18.f));
-    title.setFillColor(sf::Color(245, 245, 255));
+    title.setFillColor(sf::Color(37, 50, 90));
     window.draw(title);
 
     sf::Text status(font, passed ? "PASSED" : "FAILED", 44);
@@ -1407,7 +1563,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
 
     sf::RectangleShape divider(sf::Vector2f(panelW - 70.f, 2.f));
     divider.setPosition(sf::Vector2f(panelX + 35.f, panelY + 132.f));
-    divider.setFillColor(sf::Color(110, 120, 165, 180));
+    divider.setFillColor(sf::Color(131, 145, 188, 180));
     window.draw(divider);
 
     sf::Text ratio(font,
@@ -1427,7 +1583,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
 
     sf::Text total(font, "Tokens total: " + std::to_string(tokensTotal), 30);
     total.setPosition(sf::Vector2f(panelX + 36.f, panelY + 274.f));
-    total.setFillColor(sf::Color(230, 230, 240));
+    total.setFillColor(sf::Color(80, 92, 128));
     window.draw(total);
 
     const float btnW = 320.f;
@@ -1438,8 +1594,8 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
 
     sf::RectangleShape btn(sf::Vector2f(btnW, btnH));
     btn.setPosition(sf::Vector2f(btnX, btnY));
-    btn.setFillColor(leadsToGameOver ? sf::Color(180, 80, 80) : sf::Color(80, 190, 220));
-    btn.setOutlineColor(sf::Color::Black);
+    btn.setFillColor(leadsToGameOver ? sf::Color(236, 142, 132) : sf::Color(116, 209, 238));
+    btn.setOutlineColor(sf::Color(90, 122, 179));
     btn.setOutlineThickness(3.f);
     window.draw(btn);
 
@@ -1447,7 +1603,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     sf::FloatRect bb = btnText.getLocalBounds();
     btnText.setPosition(sf::Vector2f(btnX + btnW * 0.5f - bb.size.x * 0.5f,
                                      btnY + btnH * 0.5f - bb.size.y * 0.5f - 6.f));
-    btnText.setFillColor(sf::Color::Black);
+    btnText.setFillColor(sf::Color(34, 46, 78));
     window.draw(btnText);
 }
 
@@ -1857,11 +2013,17 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     };
 
     float iy = y;
+    const bool highContrastInGame = (state == GameState::Xtreme || state == GameState::Playing);
+    const sf::Color sectionColor = highContrastInGame ? sf::Color(236, 225, 204) : sf::Color(52, 43, 32);
+    const sf::Color subLabelColor = highContrastInGame ? sf::Color(220, 206, 180) : sf::Color(64, 53, 39);
+    const sf::Color nameColor = highContrastInGame ? sf::Color(248, 238, 220) : sf::Color(41, 35, 28);
+    const sf::Color textNormal = highContrastInGame ? sf::Color(228, 212, 186) : sf::Color(77, 65, 50);
+    const sf::Color textSpecial = highContrastInGame ? sf::Color(245, 231, 210) : sf::Color(58, 49, 37);
 
     // ── Ball section (2 slots: shot 1 + shot 2) ─────────────────────────────
     sf::Text ballLabel(font, "BALLS", 20);
     ballLabel.setPosition({x + 10.f, iy});
-    ballLabel.setFillColor({180, 180, 180});
+    ballLabel.setFillColor(sectionColor);
     window.draw(ballLabel);
     iy += 28.f;
 
@@ -1873,7 +2035,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         sf::Text slotLabel(font, "Ball " + std::to_string(slot), 14);
         sf::FloatRect slb = slotLabel.getLocalBounds();
         slotLabel.setPosition({sx - slb.size.x * 0.5f, iy});
-        slotLabel.setFillColor({185, 185, 205});
+        slotLabel.setFillColor(subLabelColor);
         window.draw(slotLabel);
 
         sf::CircleShape ballCircle(ballR);
@@ -1887,7 +2049,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         sf::Text ballName(font, ballShortName(bt), 14);
         sf::FloatRect nb = ballName.getLocalBounds();
         ballName.setPosition({sx - nb.size.x * 0.5f, iy + 20.f + ballR * 2.f + 4.f});
-        ballName.setFillColor(sf::Color::White);
+        ballName.setFillColor(nameColor);
         window.draw(ballName);
 
         float rectW = std::max(90.f, ballR * 2.f + 58.f);
@@ -1906,7 +2068,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     // ── Shoes section ────────────────────────────────────────────────────────
     sf::Text shoeLabel(font, "SHOES", 20);
     shoeLabel.setPosition({x + 10.f, iy});
-    shoeLabel.setFillColor({180, 180, 180});
+    shoeLabel.setFillColor(sectionColor);
     window.draw(shoeLabel);
     iy += 24.f;
 
@@ -1920,7 +2082,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::Text shoeName(font, shoeShortName(items.shoeType), 15);
     shoeName.setPosition({x + 46.f, iy + 2.f});
-    shoeName.setFillColor(sf::Color::White);
+    shoeName.setFillColor(nameColor);
     window.draw(shoeName);
     addHover(sf::FloatRect({x + 8.f, iy - 2.f}, {width - 16.f, 30.f}),
              shoeShortName(items.shoeType),
@@ -1932,7 +2094,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     // ── Pins section (always show all slots with live values) ───────────────
     sf::Text pinsLabel(font, "PINS", 20);
     pinsLabel.setPosition({x + 10.f, iy});
-    pinsLabel.setFillColor({180, 180, 180});
+    pinsLabel.setFillColor(sectionColor);
     window.draw(pinsLabel);
     iy += 28.f;
 
@@ -1959,8 +2121,8 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         sf::Text pinText(font, label, 13);
         pinText.setPosition({rowX + 24.f, rowY});
         pinText.setFillColor((slotType == PinType::Normal)
-                             ? sf::Color(188, 190, 200)
-                             : sf::Color(216, 222, 232));
+                             ? textNormal
+                             : textSpecial);
         window.draw(pinText);
 
         addHover(sf::FloatRect({rowX + 4.f, rowY - 1.f}, {pinColW - 6.f, lineH}),
@@ -2015,7 +2177,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
         // ── Powers section ────────────────────────────────────────────────────
         sf::Text powersLabel(font, "POWERS", 20);
         powersLabel.setPosition({x + 10.f, iy});
-        powersLabel.setFillColor({180, 180, 180});
+        powersLabel.setFillColor(sectionColor);
         window.draw(powersLabel);
         iy += 26.f;
 
@@ -2031,7 +2193,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
 
             sf::Text powerText(font, label, 14);
             powerText.setPosition({x + 10.f + col * colW, iy + row * 18.f});
-            powerText.setFillColor({220, 220, 180});
+            powerText.setFillColor(textSpecial);
             window.draw(powerText);
             addHover(sf::FloatRect({x + 8.f + col * colW, iy + row * 18.f - 1.f},
                                    {colW - 8.f, 18.f}),
@@ -2099,12 +2261,12 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::RectangleShape shadow({panelW, panelH});
     shadow.setPosition({tipX + 2.f, tipY + 2.f});
-    shadow.setFillColor({0, 0, 0, 110});
+    shadow.setFillColor({0, 0, 0, 70});
     window.draw(shadow);
 
     sf::RectangleShape panel({panelW, panelH});
     panel.setPosition({tipX, tipY});
-    panel.setFillColor({15, 18, 34, 242});
+    panel.setFillColor({251, 247, 234, 248});
     panel.setOutlineColor({hovered->accent.r, hovered->accent.g, hovered->accent.b, 210});
     panel.setOutlineThickness(2.f);
     window.draw(panel);
@@ -2116,14 +2278,14 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::Text title(font, hovered->title, titleSize);
     title.setPosition({tipX + 10.f, tipY + 8.f});
-    title.setFillColor({245, 245, 250});
+    title.setFillColor({36, 46, 82});
     window.draw(title);
 
     float textY = tipY + 33.f;
     for (const auto& line : bodyLines) {
         sf::Text body(font, line, bodySize);
         body.setPosition({tipX + 10.f, textY});
-        body.setFillColor({214, 217, 230});
+        body.setFillColor({56, 68, 100});
         window.draw(body);
         textY += 18.f;
     }
@@ -2131,7 +2293,7 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     if (!hovered->status.empty()) {
         sf::Text status(font, hovered->status, statusSize);
         status.setPosition({tipX + 10.f, textY + 2.f});
-        status.setFillColor({120, 235, 255});
+        status.setFillColor({30, 133, 126});
         window.draw(status);
     }
 }
@@ -2441,19 +2603,19 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::RectangleShape panel({layout.panelW, layout.panelH});
     panel.setPosition({layout.panelX, layout.panelY});
-    panel.setFillColor({20, 22, 40, 250});
-    panel.setOutlineColor({120, 128, 175});
+    panel.setFillColor({230, 235, 249, 248});
+    panel.setOutlineColor({130, 145, 191});
     panel.setOutlineThickness(2.2f);
     window.draw(panel);
 
     sf::RectangleShape head({layout.panelW, 36.f});
     head.setPosition({layout.panelX, layout.panelY});
-    head.setFillColor({38, 44, 78, 245});
+    head.setFillColor({161, 179, 226, 245});
     window.draw(head);
 
     sf::Text title(font, "OWNED INVENTORY", 24);
     title.setPosition({layout.panelX + 12.f, layout.panelY + 4.f});
-    title.setFillColor({210, 218, 245});
+    title.setFillColor({38, 50, 92});
     window.draw(title);
 
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
@@ -2463,8 +2625,8 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     if (actionAreaH > 20.f) {
         sf::RectangleShape actionArea({layout.panelW - 14.f, actionAreaH});
         actionArea.setPosition({layout.panelX + 7.f, actionAreaY});
-        actionArea.setFillColor({30, 33, 56, 232});
-        actionArea.setOutlineColor({96, 104, 150, 180});
+        actionArea.setFillColor({214, 222, 243, 232});
+        actionArea.setOutlineColor({132, 146, 186, 190});
         actionArea.setOutlineThickness(1.4f);
         window.draw(actionArea);
     }
@@ -2480,20 +2642,20 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::Text quick(font, "QUICK SELL", 14);
     quick.setPosition({layout.panelX + 14.f, layout.sellBall1.position.y - 20.f});
-    quick.setFillColor({170, 182, 225});
+    quick.setFillColor({62, 78, 122});
     window.draw(quick);
 
     auto drawSellButton = [&](const sf::FloatRect& rect, const std::string& label, bool enabled, int charSize) {
         sf::RectangleShape button(rect.size);
         button.setPosition(rect.position);
-        button.setFillColor(enabled ? sf::Color(186, 114, 58) : sf::Color(68, 70, 92));
-        button.setOutlineColor(enabled ? sf::Color(242, 180, 132) : sf::Color(92, 95, 122));
+        button.setFillColor(enabled ? sf::Color(245, 168, 122) : sf::Color(194, 198, 213));
+        button.setOutlineColor(enabled ? sf::Color(255, 216, 178) : sf::Color(152, 160, 189));
         button.setOutlineThickness(2.f);
         window.draw(button);
 
         sf::Text text(font, label, charSize);
         text.setPosition({rect.position.x + 9.f, rect.position.y + (rect.size.y - (float)charSize) * 0.5f - 2.f});
-        text.setFillColor(enabled ? sf::Color(245, 246, 252) : sf::Color(155, 158, 180));
+        text.setFillColor(enabled ? sf::Color(45, 52, 78) : sf::Color(112, 120, 148));
         window.draw(text);
     };
 
@@ -2503,7 +2665,7 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
 
     sf::Text pinHeader(font, "SELL PINS", 15);
     pinHeader.setPosition({layout.panelX + 10.f, dynamic.pinHeaderY});
-    pinHeader.setFillColor({184, 195, 235});
+    pinHeader.setFillColor({63, 79, 121});
     window.draw(pinHeader);
 
     std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
@@ -2518,13 +2680,13 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     if (dynamic.pinSellRects.empty()) {
         sf::Text none(font, "None", 14);
         none.setPosition({layout.panelX + 12.f, dynamic.pinHeaderY + 14.f});
-        none.setFillColor({132, 136, 160});
+        none.setFillColor({113, 121, 149});
         window.draw(none);
     }
 
     sf::Text powerHeader(font, "SELL POWERS", 15);
     powerHeader.setPosition({layout.panelX + 10.f, dynamic.powerHeaderY});
-    powerHeader.setFillColor({184, 195, 235});
+    powerHeader.setFillColor({63, 79, 121});
     window.draw(powerHeader);
 
     for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
@@ -2536,7 +2698,7 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     if (dynamic.powerSellRects.empty()) {
         sf::Text none(font, "None", 14);
         none.setPosition({layout.panelX + 12.f, dynamic.powerHeaderY + 14.f});
-        none.setFillColor({132, 136, 160});
+        none.setFillColor({113, 121, 149});
         window.draw(none);
     }
 
@@ -2898,22 +3060,22 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
     // Background
     sf::RectangleShape bg(sf::Vector2f(windowW, windowH));
-    bg.setFillColor(sf::Color(25, 25, 35));
+    bg.setFillColor(sf::Color(64, 68, 86));
     window.draw(bg);
 
     // Title
     sf::Text title(font, "SHOP", 80);
     title.setPosition({windowW/2.f - 80.f, 30.f});
-    title.setFillColor(sf::Color(255, 215, 0));
-    title.setOutlineColor(sf::Color::Black);
+    title.setFillColor(sf::Color(232, 82, 139));
+    title.setOutlineColor(sf::Color(250, 252, 255));
     title.setOutlineThickness(3);
     window.draw(title);
 
     // Tokens display
     sf::Text tokenText(font, "Tokens: " + std::to_string(tokens), 36);
     tokenText.setPosition({windowW - 240.f, 40.f});
-    tokenText.setFillColor(sf::Color(255, 215, 0));
-    tokenText.setOutlineColor(sf::Color::Black);
+    tokenText.setFillColor(sf::Color(214, 124, 24));
+    tokenText.setOutlineColor(sf::Color(250, 252, 255));
     tokenText.setOutlineThickness(2);
     window.draw(tokenText);
 
@@ -2925,8 +3087,8 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         bool canUseSkip = tokens >= 1;
         sf::RectangleShape skipBtn({skipW, skipH});
         skipBtn.setPosition({skipX, skipY});
-        skipBtn.setFillColor(canUseSkip ? sf::Color(120, 170, 240) : sf::Color(70, 80, 100));
-        skipBtn.setOutlineColor(sf::Color::Black);
+        skipBtn.setFillColor(canUseSkip ? sf::Color(122, 194, 245) : sf::Color(191, 196, 214));
+        skipBtn.setOutlineColor(sf::Color(106, 124, 176));
         skipBtn.setOutlineThickness(2.f);
         window.draw(skipBtn);
 
@@ -2934,7 +3096,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
                           "REROLL (1) x" + std::to_string(items.skipCharges),
                           20);
         skipText.setPosition({skipX + 14.f, skipY + 8.f});
-        skipText.setFillColor(sf::Color::White);
+        skipText.setFillColor(sf::Color(35, 47, 82));
         window.draw(skipText);
     }
 
@@ -2946,7 +3108,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     // Ball slot selector (which slot a purchased ball should fill)
     sf::Text slotTitle(font, "Ball Slot", 22);
     slotTitle.setPosition({40.f, 38.f});
-    slotTitle.setFillColor({220, 220, 230});
+    slotTitle.setFillColor({46, 64, 106});
     window.draw(slotTitle);
 
     const float slotY = 70.f;
@@ -2959,14 +3121,14 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         bool selected = (selectedBallSlot == slot);
         sf::RectangleShape b({slotW, slotH});
         b.setPosition({x, slotY});
-        b.setFillColor(selected ? sf::Color(70, 170, 120) : sf::Color(55, 55, 70));
-        b.setOutlineColor(selected ? sf::Color(200, 255, 220) : sf::Color(130, 130, 160));
+        b.setFillColor(selected ? sf::Color(113, 220, 179) : sf::Color(207, 212, 231));
+        b.setOutlineColor(selected ? sf::Color(57, 170, 124) : sf::Color(130, 140, 178));
         b.setOutlineThickness(2.f);
         window.draw(b);
 
         sf::Text t(font, "SHOT " + std::to_string(slot), 20);
         t.setPosition({x + 14.f, slotY + 10.f});
-        t.setFillColor(sf::Color::White);
+        t.setFillColor(sf::Color(35, 47, 82));
         window.draw(t);
     };
 
@@ -2975,12 +3137,12 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
     sf::Text slotCurrent(font, "Current: " + ballShortName(items.getBallForSlot(selectedBallSlot)), 20);
     slotCurrent.setPosition({40.f, 122.f});
-    slotCurrent.setFillColor({200, 200, 200});
+    slotCurrent.setFillColor({72, 86, 123});
     window.draw(slotCurrent);
 
     sf::Text pinSlotTitle(font, "Pin Slot", 20);
     pinSlotTitle.setPosition({40.f, 150.f});
-    pinSlotTitle.setFillColor({220, 220, 230});
+    pinSlotTitle.setFillColor({46, 64, 106});
     window.draw(pinSlotTitle);
 
     const float pinSlotY = 176.f;
@@ -2993,21 +3155,21 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
     sf::RectangleShape pinPrev({pinBtnW, pinBtnH});
     pinPrev.setPosition({pinPrevX, pinSlotY});
-    pinPrev.setFillColor(sf::Color(55, 55, 70));
-    pinPrev.setOutlineColor(sf::Color(130, 130, 160));
+    pinPrev.setFillColor(sf::Color(207, 212, 231));
+    pinPrev.setOutlineColor(sf::Color(130, 140, 178));
     pinPrev.setOutlineThickness(2.f);
     window.draw(pinPrev);
 
     sf::Text prevText(font, "<", 20);
     prevText.setPosition({pinPrevX + 10.f, pinSlotY + 4.f});
-    prevText.setFillColor(sf::Color::White);
+    prevText.setFillColor(sf::Color(35, 47, 82));
     window.draw(prevText);
 
     bool assigned = items.hasPinAssignmentAtSlot(selectedPinSlot);
     sf::RectangleShape pinBadge({pinBadgeW, pinBtnH});
     pinBadge.setPosition({pinBadgeX, pinSlotY});
-    pinBadge.setFillColor(assigned ? sf::Color(70, 90, 120) : sf::Color(52, 52, 70));
-    pinBadge.setOutlineColor(sf::Color(175, 255, 205));
+    pinBadge.setFillColor(assigned ? sf::Color(173, 209, 245) : sf::Color(207, 212, 231));
+    pinBadge.setOutlineColor(sf::Color(123, 147, 204));
     pinBadge.setOutlineThickness(2.f);
     window.draw(pinBadge);
 
@@ -3015,19 +3177,19 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
                           "P" + std::to_string(selectedPinSlot) + "/" + std::to_string(pinBuyLimit),
                           16);
     pinBadgeText.setPosition({pinBadgeX + 11.f, pinSlotY + 7.f});
-    pinBadgeText.setFillColor(sf::Color::White);
+    pinBadgeText.setFillColor(sf::Color(35, 47, 82));
     window.draw(pinBadgeText);
 
     sf::RectangleShape pinNext({pinBtnW, pinBtnH});
     pinNext.setPosition({pinNextX, pinSlotY});
-    pinNext.setFillColor(sf::Color(55, 55, 70));
-    pinNext.setOutlineColor(sf::Color(130, 130, 160));
+    pinNext.setFillColor(sf::Color(207, 212, 231));
+    pinNext.setOutlineColor(sf::Color(130, 140, 178));
     pinNext.setOutlineThickness(2.f);
     window.draw(pinNext);
 
     sf::Text nextText(font, ">", 20);
     nextText.setPosition({pinNextX + 10.f, pinSlotY + 4.f});
-    nextText.setFillColor(sf::Color::White);
+    nextText.setFillColor(sf::Color(35, 47, 82));
     window.draw(nextText);
 
     PinType selectedPinType = items.getPinTypeForSlot(selectedPinSlot);
@@ -3036,7 +3198,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         pinShortName(static_cast<int>(selectedPinType)), 18);
     float pinInfoY = pinSlotY + pinBtnH + 6.f;
     pinSlotCurrent.setPosition({40.f, pinInfoY});
-    pinSlotCurrent.setFillColor({190, 198, 215});
+    pinSlotCurrent.setFillColor({72, 86, 123});
     window.draw(pinSlotCurrent);
 
     ShopCardLayout cardLayout = computeShopCardLayout(windowW, ownedLayout, shopOffers.size());
@@ -3109,20 +3271,20 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
             pinLimitBlocked || pinSlotLocked || clownLocked;
 
         // Card background tint by category
-        sf::Color cardColor = isOwned         ? sf::Color(40, 100, 40)  :
+        sf::Color cardColor = isOwned         ? sf::Color(182, 238, 195)  :
                               blocked
-                                              ? sf::Color(40, 40, 40)   :
-                              isBall          ? sf::Color(40, 50, 80)   :
-                              isPin           ? sf::Color(40, 70, 50)   :
-                              isShoe          ? sf::Color(70, 45, 45)   :
-                                                sf::Color(65, 50, 35);
-        sf::Color borderColor = isOwned       ? sf::Color(80, 220, 80)  :
+                                              ? sf::Color(207, 210, 220)   :
+                              isBall          ? sf::Color(205, 219, 255)   :
+                              isPin           ? sf::Color(202, 239, 216)   :
+                              isShoe          ? sf::Color(246, 216, 202)   :
+                                                sf::Color(247, 230, 190);
+        sf::Color borderColor = isOwned       ? sf::Color(73, 184, 111)  :
                                 blocked
-                                              ? sf::Color(80, 80, 80)   :
-                                isBall        ? sf::Color(140, 160, 255):
-                                isPin         ? sf::Color(120, 220, 140):
-                                isShoe        ? sf::Color(240, 170, 130):
-                                                sf::Color(255, 210, 120);
+                                              ? sf::Color(151, 156, 174)   :
+                                isBall        ? sf::Color(120, 145, 230):
+                                isPin         ? sf::Color(98, 189, 125):
+                                isShoe        ? sf::Color(214, 137, 99):
+                                                sf::Color(210, 163, 72);
 
         sf::RectangleShape card({cardLayout.cardW, cardLayout.cardH});
         card.setPosition({cx, cardY});
@@ -3134,22 +3296,22 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         // Category badge
         sf::RectangleShape badge({cardLayout.cardW, 28.f});
         badge.setPosition({cx, cardY});
-        badge.setFillColor(isBall ? sf::Color(60,80,150) :
-                          isPin  ? sf::Color(40,110,70) :
-                          isShoe ? sf::Color(120,70,60) :
-                                   sf::Color(120,95,35));
+        badge.setFillColor(isBall ? sf::Color(138,165,235) :
+                          isPin  ? sf::Color(126,199,152) :
+                          isShoe ? sf::Color(226,157,128) :
+                                   sf::Color(232,191,108));
         window.draw(badge);
 
         sf::Text catLabel(font, isBall ? "BALL" : (isPin ? "PIN" : (isShoe ? "SHOE" : "POWER")), catTextSize);
         catLabel.setPosition({cx + 10.f, cardY + 4.f});
-        catLabel.setFillColor(sf::Color::White);
+        catLabel.setFillColor(sf::Color(35, 46, 78));
         window.draw(catLabel);
 
         // Item name
         sf::Text nameText(font, offer.name, nameTextSize);
         fitCardText(nameText, cardLayout.cardW - 16.f, 14);
         nameText.setPosition({cx + 10.f, cardY + 34.f});
-        nameText.setFillColor(sf::Color::White);
+        nameText.setFillColor(sf::Color(35, 46, 78));
         window.draw(nameText);
 
         // Preview circle
@@ -3213,7 +3375,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
             sf::Text lt(font, s, descTextSize);
             fitCardText(lt, cardLayout.cardW - 24.f, 12);
             lt.setPosition({cx + 12.f, dy});
-            lt.setFillColor(sf::Color(200, 200, 200));
+            lt.setFillColor(sf::Color(66, 76, 108));
             window.draw(lt);
             dy += descLineStep;
         };
@@ -3226,14 +3388,14 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         drawDescLine(line);
 
         // Buy button
-        sf::Color btnColor = isOwned     ? sf::Color(70, 70, 80) :
+        sf::Color btnColor = isOwned     ? sf::Color(145, 161, 200) :
                              (!blocked)
-                                         ? sf::Color(80, 200, 120) :
-                                           sf::Color(80, 80, 80);
+                                         ? sf::Color(103, 216, 166) :
+                                           sf::Color(178, 183, 200);
         sf::RectangleShape btn({cardLayout.cardW - 20.f, buyBtnH});
         btn.setPosition({cx + 10.f, cardY + cardLayout.cardH - (buyBtnH + buyBtnBottomMargin)});
         btn.setFillColor(btnColor);
-        btn.setOutlineColor(sf::Color::Black);
+        btn.setOutlineColor(sf::Color(87, 98, 133));
         btn.setOutlineThickness(2);
         window.draw(btn);
 
@@ -3259,21 +3421,21 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         sf::Text btnText(font, btnLabel, compactCards ? 17 : 20);
         fitCardText(btnText, cardLayout.cardW - 28.f, 14);
         btnText.setPosition({cx + 14.f, cardY + cardLayout.cardH - (buyBtnH + buyBtnBottomMargin) + (compactCards ? 7.f : 8.f)});
-        btnText.setFillColor(sf::Color::White);
+        btnText.setFillColor(sf::Color(32, 41, 71));
         window.draw(btnText);
     }
 
     // Continue button
     sf::RectangleShape cont({220.f, 60.f});
     cont.setPosition({windowW/2.f - 110.f, windowH - 100.f});
-    cont.setFillColor(sf::Color(80, 200, 220));
-    cont.setOutlineColor(sf::Color::Black);
+    cont.setFillColor(sf::Color(116, 209, 238));
+    cont.setOutlineColor(sf::Color(90, 122, 179));
     cont.setOutlineThickness(3);
     window.draw(cont);
 
     sf::Text contText(font, "CONTINUE", 30);
     contText.setPosition({windowW/2.f - 90.f, windowH - 88.f});
-    contText.setFillColor(sf::Color::Black);
+    contText.setFillColor(sf::Color(35, 47, 82));
     window.draw(contText);
 
     // Show what the player already owns
