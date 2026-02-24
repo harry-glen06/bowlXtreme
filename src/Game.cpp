@@ -362,6 +362,11 @@ void Game::run() {
 void Game::requestRunReset() {
     GameState s = ui.getState();
     if (s == GameState::Menu || s == GameState::Settings || s == GameState::Tutorial) return;
+    if (gameOver) {
+        // On game-over screen, R should instantly reset without confirmation.
+        confirmRunReset();
+        return;
+    }
     resetConfirmOpen = true;
 }
 
@@ -1180,7 +1185,7 @@ int Game::computePinValueSumWithItems(const std::vector<int>& hitIndices) {
 
 void Game::processExplosions() {
     const float blastRadius = 108.f;
-    const float blastForce  = 900.f * 0.74f;
+    const float blastForce  = 900.f * 0.74f * 0.90f;
 
     for (auto& pin : pins) {
         if (!pin.isActive()) continue;
@@ -2202,7 +2207,7 @@ void Game::update(float dt) {
 }
 
 void Game::draw() {
-    window.clear(sf::Color(36, 52, 66));
+    window.clear(sf::Color(84, 128, 208));
 
     // Draw menu if in menu state
     if (ui.getState() == GameState::Menu) {
@@ -2399,15 +2404,20 @@ void Game::draw() {
         ResetConfirmLayout modal = makeResetConfirmLayout(windowW, windowH);
 
         sf::RectangleShape dim(sf::Vector2f(windowW, windowH));
-        dim.setFillColor(sf::Color(0, 0, 0, 150));
+        dim.setFillColor(sf::Color(20, 36, 76, 150));
         window.draw(dim);
 
         sf::RectangleShape panel(modal.panel.size);
         panel.setPosition(modal.panel.position);
-        panel.setFillColor(sf::Color(20, 24, 46, 245));
-        panel.setOutlineColor(sf::Color(182, 194, 255));
+        panel.setFillColor(sf::Color(231, 239, 252, 248));
+        panel.setOutlineColor(sf::Color(106, 139, 206));
         panel.setOutlineThickness(3.0f);
         window.draw(panel);
+
+        sf::RectangleShape panelAccent(sf::Vector2f(modal.panel.size.x - 8.0f, 7.0f));
+        panelAccent.setPosition({modal.panel.position.x + 4.0f, modal.panel.position.y + 4.0f});
+        panelAccent.setFillColor(sf::Color(70, 198, 232, 220));
+        window.draw(panelAccent);
 
         auto drawConfirmButton = [&](const sf::FloatRect& rect,
                                      const std::string& label,
@@ -2427,13 +2437,15 @@ void Game::draw() {
                     rect.position.x + rect.size.x * 0.5f - (tb.position.x + tb.size.x * 0.5f),
                     rect.position.y + rect.size.y * 0.5f - (tb.position.y + tb.size.y * 0.58f)
                 });
-                t.setFillColor(sf::Color::White);
+                t.setFillColor(sf::Color(26, 45, 84));
+                t.setOutlineColor(sf::Color(245, 250, 255));
+                t.setOutlineThickness(1.0f);
                 window.draw(t);
             }
         };
 
-        drawConfirmButton(modal.yesButton, "YES", sf::Color(50, 160, 92), sf::Color(140, 235, 170));
-        drawConfirmButton(modal.noButton, "NO", sf::Color(152, 70, 82), sf::Color(255, 160, 170));
+        drawConfirmButton(modal.yesButton, "YES", sf::Color(94, 232, 152), sf::Color(198, 255, 223));
+        drawConfirmButton(modal.noButton, "NO", sf::Color(242, 104, 124), sf::Color(255, 200, 214));
 
         if (ui.isFontLoaded()) {
             const float textPadX = 24.0f;
@@ -2444,7 +2456,9 @@ void Game::draw() {
                    ask.getLocalBounds().size.x > maxTextWidth) {
                 ask.setCharacterSize(ask.getCharacterSize() - 1);
             }
-            ask.setFillColor(sf::Color::White);
+            ask.setFillColor(sf::Color(24, 45, 90));
+            ask.setOutlineColor(sf::Color(245, 250, 255));
+            ask.setOutlineThickness(1.2f);
             ask.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 18.0f});
             window.draw(ask);
 
@@ -2453,18 +2467,9 @@ void Game::draw() {
                    sub.getLocalBounds().size.x > maxTextWidth) {
                 sub.setCharacterSize(sub.getCharacterSize() - 1);
             }
-            sub.setFillColor(sf::Color(205, 212, 236));
+            sub.setFillColor(sf::Color(53, 78, 130));
             sub.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 84.0f});
             window.draw(sub);
-
-            sf::Text hint(ui.getFont(), "Enter = Yes, Esc = No", 18);
-            while (hint.getCharacterSize() > 12 &&
-                   hint.getLocalBounds().size.x > maxTextWidth) {
-                hint.setCharacterSize(hint.getCharacterSize() - 1);
-            }
-            hint.setFillColor(sf::Color(140, 215, 255));
-            hint.setPosition({modal.panel.position.x + 24.0f, modal.panel.position.y + 150.0f});
-            window.draw(hint);
         }
 
         action = GameAction::None;

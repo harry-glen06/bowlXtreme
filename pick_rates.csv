@@ -1,39 +1,39 @@
 category,item,shown,picked,pick_rate_percent
-BALL,8-Ball,30,4,13.33
-BALL,Black Hole,20,1,5.00
-BALL,Fastball,17,0,0.00
-BALL,Heavy Ball,30,9,30.00
-BALL,Icy Ball,8,0,0.00
-BALL,Midas Ball,17,2,11.76
-BALL,Odd Ball,28,2,7.14
-BALL,Retrigger,14,0,0.00
-BALL,Upgrade Ball,21,7,33.33
-PIN,3rd Time,21,4,19.05
-PIN,Big Pin,25,7,28.00
-PIN,Change Is Good,11,2,18.18
-PIN,Copy Cat,19,2,10.53
-PIN,Exploding Pin,23,6,26.09
-PIN,Gold Pin,19,7,36.84
-PIN,Ice Pin,21,2,9.52
-PIN,Level Up,7,2,28.57
-PIN,Light Pin,25,3,12.00
-PIN,Lover,7,2,28.57
-PIN,Lucky Ducky,18,7,38.89
-PIN,Mischievous,23,2,8.70
-POWER,7 8 9,10,2,20.00
-POWER,Bumpers,27,2,7.41
-POWER,Confusion,23,4,17.39
-POWER,Duplicate,24,4,16.67
-POWER,Earthquake,20,1,5.00
-POWER,Extra Ball,27,2,7.41
-POWER,Extra Pins,20,7,35.00
-POWER,Extra Slot,13,1,7.69
-POWER,Greedy,28,0,0.00
-POWER,Home Base,26,2,7.69
-POWER,Mo Money,20,3,15.00
-POWER,Passed Go,20,5,25.00
-POWER,Random Upgrade,16,0,0.00
-POWER,Reroll,25,1,4.00
-POWER,Sales,23,4,17.39
-POWER,Swap Pins,28,3,10.71
-POWER,Upgrades+3,24,0,0.00
+BALL,8-Ball,35,4,11.43
+BALL,Black Hole,24,1,4.17
+BALL,Fastball,21,1,4.76
+BALL,Heavy Ball,37,10,27.03
+BALL,Icy Ball,10,0,0.00
+BALL,Midas Ball,21,2,9.52
+BALL,Odd Ball,32,3,9.38
+BALL,Retrigger,16,0,0.00
+BALL,Upgrade Ball,26,8,30.77
+PIN,3rd Time,27,7,25.93
+PIN,Big Pin,29,7,24.14
+PIN,Change Is Good,16,2,12.50
+PIN,Copy Cat,22,2,9.09
+PIN,Exploding Pin,29,9,31.03
+PIN,Gold Pin,21,8,38.10
+PIN,Ice Pin,25,2,8.00
+PIN,Level Up,10,2,20.00
+PIN,Light Pin,36,4,11.11
+PIN,Lover,12,5,41.67
+PIN,Lucky Ducky,21,7,33.33
+PIN,Mischievous,24,2,8.33
+POWER,7 8 9,16,2,12.50
+POWER,Bumpers,29,2,6.90
+POWER,Confusion,28,4,14.29
+POWER,Duplicate,33,9,27.27
+POWER,Earthquake,25,1,4.00
+POWER,Extra Ball,29,2,6.90
+POWER,Extra Pins,25,8,32.00
+POWER,Extra Slot,18,2,11.11
+POWER,Greedy,31,1,3.23
+POWER,Home Base,29,3,10.34
+POWER,Mo Money,23,3,13.04
+POWER,Passed Go,22,6,27.27
+POWER,Random Upgrade,20,1,5.00
+POWER,Reroll,28,1,3.57
+POWER,Sales,26,4,15.38
+POWER,Swap Pins,30,3,10.00
+POWER,Upgrades+3,29,1,3.45
