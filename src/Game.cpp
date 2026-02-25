@@ -1010,71 +1010,19 @@ void Game::handleEvents() {
                     };
 
                     auto pinTypeCost = [](PinType t) {
-                        switch (t) {
-                            case PinType::Gold:        return 2;
-                            case PinType::Mischievous: return 2;
-                            case PinType::Exploding:   return 4;
-                            case PinType::Light:       return 2;
-                            case PinType::Big:         return 3;
-                            case PinType::Ice:         return 2;
-                            case PinType::CopyCat:     return 3;
-                            case PinType::LuckyDucky:  return 4;
-                            case PinType::LevelUp:     return 1;
-                            case PinType::Lover:       return 3;
-                            case PinType::ChangeIsGood:return 3;
-                            case PinType::ThirdTime:   return 3;
-                            default:                   return 1;
-                        }
+                        return getPinTokenCost(t);
                     };
 
                     auto ballTypeCost = [](BallType t) {
-                        switch (t) {
-                            case BallType::BlackHole: return 4;
-                            case BallType::Midas:     return 5;
-                            case BallType::Upgrade:   return 3;
-                            case BallType::Heavy:     return 2;
-                            case BallType::Fastball:  return 2;
-                            case BallType::OddBall:   return 3;
-                            case BallType::EightBall: return 4;
-                            case BallType::Icy:       return 4;
-                            case BallType::Retrigger: return 4;
-                            default:                  return 1;
-                        }
+                        return getBallTokenCost(t);
                     };
 
                     auto shoeTypeCost = [](ShoeType t) {
-                        switch (t) {
-                            case ShoeType::Clown:    return 0;
-                            case ShoeType::Running:  return 3;
-                            case ShoeType::Moon:     return 4;
-                            case ShoeType::Slippers: return 3;
-                            case ShoeType::HighHeels:return 3;
-                            case ShoeType::SteelCap: return 4;
-                            default:                 return 0;
-                        }
+                        return getShoeTokenCost(t);
                     };
 
                     auto powerTypeCost = [](PowerType t) {
-                        switch (t) {
-                            case PowerType::Greedy:              return 5;
-                            case PowerType::RandomUpgrade:       return 3;
-                            case PowerType::ExtraPins:           return 5;
-                            case PowerType::ExtraBall:           return 7;
-                            case PowerType::Duplicate:           return 2;
-                            case PowerType::Bumpers:             return 5;
-                            case PowerType::SwapPins:            return 2;
-                            case PowerType::HomeBase:            return 5;
-                            case PowerType::Confusion:           return 3;
-                            case PowerType::Earthquake:          return 6;
-                            case PowerType::Skip:                return 1;
-                            case PowerType::UpgradesForEveryone: return 4;
-                            case PowerType::Sales:               return 4;
-                            case PowerType::PassedGo:            return 4;
-                            case PowerType::MoMoney:             return 4;
-                            case PowerType::SevenEightNine:      return 3;
-                            case PowerType::ExtraPowerSlot:      return 4;
-                            default:                             return 0;
-                        }
+                        return getPowerTokenCost(t);
                     };
 
                     auto ownedPermanentPowerCount = [&]() {
@@ -1433,10 +1381,12 @@ void Game::resetBall() {
     shotRollTimer = 0.0f;
     backlineJamTimer = 0.0f;
 
-    // Reset per-shot item state
+    // Reset per-shot item state (includes Third Time shot multiplier state).
     activeItems.resetForNewShot();
+    oilEffectPendingThisFrame = false;
 
     if (ui.getState() == GameState::Xtreme) {
+        oilEffectPendingThisFrame = (xtreme.getShotInFrame() == 1);
         if (xtreme.getShotInFrame() == 1) {
             xtremeFirstShotStrikeThisFrame = false;
         }
@@ -1464,6 +1414,9 @@ void Game::resetBall() {
         lane.bumpersOn = isPowerEnabledThisShot(PowerType::Bumpers);
     } else if (activeItems.powerBumpers) {
         lane.bumpersOn = ui.getBumpersDefault() || activeItems.powerBumpers;
+    }
+    if (ui.getState() != GameState::Xtreme) {
+        oilEffectPendingThisFrame = (scorer.getCurrentBall() == 1);
     }
 
     // Pick the active ball based on mode + shot number.
@@ -1529,9 +1482,11 @@ int Game::computePinValueWithItems(int pinIndex) const {
         val += 1;
     }
     switch (activeItems.ballType) {
-        case BallType::EightBall: val = 8; break;
+        // 8-Ball should never nerf high-value pins.
+        case BallType::EightBall: val = std::max(8, val); break;
         case BallType::OddBall:
-            val = (val % 2 != 0) ? (val * 2) : std::max(1, (val * 3 + 2) / 4);
+            // Odd pins are rewarded, even pins are only mildly reduced.
+            val = (val % 2 != 0) ? (val * 2) : std::max(1, (val * 85 + 50) / 100);
             break;
         default: break;
     }
@@ -1778,7 +1733,7 @@ void Game::finishPendingResetIfReady(float dt) {
 
         int greedyComboBonus = 0;
         if (ui.getState() == GameState::Xtreme && isPowerEnabledThisShot(PowerType::Greedy)) {
-            greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
+            greedyComboBonus = std::max(0, xtreme.getTokens() / 6);
         }
 
         int thirdTimeComboMultiplier = 1;
@@ -2221,6 +2176,18 @@ void Game::doCollisions() {
             float randomThreshold =
                 pinFallImpactThreshold + static_cast<float>((rand() % 5) - 2); // +/-2
             bool freshImpact = (!pin.isFallen() && impact > randomThreshold);
+            bool meaningfulStandingContact = (!pin.isFallen() && impact > pinFallImpactThreshold);
+            bool firstMeaningfulBallHit = false;
+            if (meaningfulStandingContact) {
+                if (pi >= 0 && pi < (int)activeItems.pinHitByBallThisShot.size() &&
+                    !activeItems.pinHitByBallThisShot[pi]) {
+                    activeItems.pinHitByBallThisShot[pi] = true;
+                    firstMeaningfulBallHit = true;
+                } else if (pi < 0 || pi >= (int)activeItems.pinHitByBallThisShot.size()) {
+                    // Safety fallback for unexpected pin counts > tracking array.
+                    firstMeaningfulBallHit = true;
+                }
+            }
 
             // CopyCat: becomes the type of the first hit pin.
             // Do this before setFallen so copying Exploding arms correctly.
@@ -2255,7 +2222,7 @@ void Game::doCollisions() {
             }
 
             // ── Item effects on first meaningful contact ──────────────────
-            if (freshImpact || (impact > pinFallImpactThreshold && !pin.isFallen())) {
+            if (firstMeaningfulBallHit) {
 
                 activeItems.pinsHitThisShot++;
 
@@ -2374,12 +2341,14 @@ void Game::update(float dt) {
     if (ui.getState() == GameState::Menu ||
         ui.getState() == GameState::Settings ||
         ui.getState() == GameState::Tutorial) {
+        menuAnimDt = window.hasFocus() ? dt : 0.0f;
         audio.playMenuMusic();
         audio.setMusicVolume(ui.getMusicVolume());
         audio.setSoundVolume(ui.getSoundVolume());
         return;
     }
 
+    menuAnimDt = 0.0f;
     audio.setMusicVolume(ui.getMusicVolume());
     audio.setSoundVolume(ui.getSoundVolume());
     updateStrikeConfetti(dt);
@@ -2509,6 +2478,12 @@ void Game::update(float dt) {
         rollDir = sf::Vector2f(std::cos(a), std::sin(a));
         float launchSpeed = 1600.0f * activeItems.speedMultiplier * activeItems.launchSpeedMultiplier;
         ball.launch(rollDir, launchSpeed);
+        if (oilEffectPendingThisFrame) {
+            sf::Vector2f launchVel = ball.getVel();
+            applyOilEffect(launchVel, countStandingPins());
+            ball.setVel(launchVel);
+            oilEffectPendingThisFrame = false;
+        }
         rollLocked = true;
 
         // Start rolling sound
@@ -2569,14 +2544,27 @@ void Game::update(float dt) {
         bool swapModeActive =
             (pinPowerSelectionMode == PinPowerSelectionMode::SwapPickFirst ||
              pinPowerSelectionMode == PinPowerSelectionMode::SwapPickSecond);
+        int selectableStandingPins = 0;
+        for (const auto& pin : pins) {
+            if (pin.isActive() && !pin.isFallen()) selectableStandingPins++;
+        }
 
-        // Duplicate is forced-use now: if you have a charge, selection mode is
-        // automatically enabled and must be resolved before launch.
-        if (activeItems.duplicateCharges > 0 && !duplicateModeActive) {
+        // Duplicate is forced-use while there are at least two selectable pins.
+        // If fewer than two are selectable, keep the charge and don't force mode.
+        if (activeItems.duplicateCharges > 0 &&
+            selectableStandingPins >= 2 &&
+            !duplicateModeActive) {
             pinPowerSelectionMode = PinPowerSelectionMode::DuplicatePickSource;
             pinPowerFirstIndex = -1;
             duplicateModeActive = true;
             swapModeActive = false;
+        }
+        if (activeItems.duplicateCharges > 0 &&
+            selectableStandingPins < 2 &&
+            duplicateModeActive) {
+            // Avoid trap states when there aren't enough valid targets.
+            cancelPinPowerSelection();
+            duplicateModeActive = false;
         }
 
         if (nowN && !prevN) {
@@ -2585,7 +2573,7 @@ void Game::update(float dt) {
                 if (activeItems.duplicateCharges <= 0) {
                     cancelPinPowerSelection();
                 }
-            } else if (activeItems.duplicateCharges > 0) {
+            } else if (activeItems.duplicateCharges > 0 && selectableStandingPins >= 2) {
                 pinPowerSelectionMode = PinPowerSelectionMode::DuplicatePickSource;
                 pinPowerFirstIndex = -1;
             }
@@ -2700,16 +2688,14 @@ void Game::draw() {
 
     // Draw menu if in menu state
     if (ui.getState() == GameState::Menu) {
-        float dt = clock.getElapsedTime().asSeconds();
-        ui.drawMenu(window, windowW, windowH, dt);
+        ui.drawMenu(window, windowW, windowH, menuAnimDt);
         drawDevOverlay();
         window.display();
         return;
     }
 
     if (ui.getState() == GameState::Settings) {
-        float dt = clock.getElapsedTime().asSeconds();
-        ui.drawMenu(window, windowW, windowH, dt);
+        ui.drawMenu(window, windowW, windowH, menuAnimDt);
         ui.drawSettings(window, windowW, windowH);
         drawDevOverlay();
         window.display();
@@ -2717,8 +2703,7 @@ void Game::draw() {
     }
 
     if (ui.getState() == GameState::Tutorial) {
-        float dt = clock.getElapsedTime().asSeconds();
-        ui.drawMenu(window, windowW, windowH, dt);
+        ui.drawMenu(window, windowW, windowH, menuAnimDt);
         ui.drawTutorial(window, windowW, windowH);
         drawDevOverlay();
         window.display();
@@ -2799,7 +2784,7 @@ void Game::draw() {
 
             int greedyComboBonus = 0;
             if (isPowerEnabledThisShot(PowerType::Greedy)) {
-                greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
+                greedyComboBonus = std::max(0, xtreme.getTokens() / 6);
             }
             float homeBaseBonus = isPowerEnabledThisShot(PowerType::HomeBase)
                 ? std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap)
@@ -2821,8 +2806,17 @@ void Game::draw() {
         }
 
         if (activeItems.duplicateCharges > 0) {
-            pinPowerHintLine1 = "Duplicate(" + std::to_string(activeItems.duplicateCharges) +
-                                ") must be used before roll";
+            int selectableStandingPins = 0;
+            for (const auto& pin : pins) {
+                if (pin.isActive() && !pin.isFallen()) selectableStandingPins++;
+            }
+            if (selectableStandingPins < 2) {
+                pinPowerHintLine1 = "Duplicate(" + std::to_string(activeItems.duplicateCharges) +
+                                    ") ready: need 2 standing pins";
+            } else {
+                pinPowerHintLine1 = "Duplicate(" + std::to_string(activeItems.duplicateCharges) +
+                                    ") must be used before roll";
+            }
         } else if (activeItems.swapCharges > 0) {
             pinPowerHintLine1 = "V Swap(" + std::to_string(activeItems.swapCharges) + ")";
         }

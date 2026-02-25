@@ -2241,8 +2241,8 @@ static std::string inventoryBallDesc(BallType t) {
         case BallType::Upgrade:    return "Each pin hit gains +1 value.\n10% lighter, 5% faster.";
         case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
         case BallType::Fastball:   return "5% lighter, 15% faster.";
-        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.75 score.";
-        case BallType::EightBall:  return "All pins are worth 8.";
+        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.85 score.";
+        case BallType::EightBall:  return "Pins are worth at least 8.";
         case BallType::Icy:        return "For each Ice pin hit,\n+15 score.";
         case BallType::Retrigger:  return "2nd pin hit scores 3x.";
         default:                   return "A standard bowling ball.";
@@ -2281,7 +2281,7 @@ static std::string inventoryShoeDesc(ShoeType t) {
 
 static std::string inventoryPowerDesc(PowerType t) {
     switch (t) {
-        case PowerType::Greedy:              return "Gain +1 combo for\nevery 4 dollars.";
+        case PowerType::Greedy:              return "Gain +1 combo for\nevery 6 dollars.";
         case PowerType::RandomUpgrade:       return "After each frame,\nrandom pin +1 value.";
         case PowerType::ExtraPins:           return "Adds two extra pins\nto the rack.";
         case PowerType::ExtraBall:           return "Adds one extra shot\nper frame.";
@@ -3263,8 +3263,8 @@ static std::string ballTypeDesc(BallType t) {
         case BallType::Upgrade:    return "Each pin hit gains\n+1 value. 10% lighter,\n5% faster.";
         case BallType::Heavy:      return "15% heavier.\nKnocks pins over easier.";
         case BallType::Fastball:   return "5% lighter, 15% faster.";
-        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.75 score.";
-        case BallType::EightBall:  return "All pins worth 8.";
+        case BallType::OddBall:    return "Odd pins x2 score.\nEven pins x0.85 score.";
+        case BallType::EightBall:  return "Pins worth at least 8.";
         case BallType::Icy:        return "Each Ice pin hit\ngives +15 score.";
         case BallType::Retrigger:  return "2nd pin hit scores 3x.";
         default:                   return "A standard bowling ball.";
@@ -3272,71 +3272,19 @@ static std::string ballTypeDesc(BallType t) {
 }
 
 static int ballTypeCost(BallType t) {
-    switch (t) {
-        case BallType::BlackHole:  return 4;
-        case BallType::Midas:      return 5;
-        case BallType::Upgrade:    return 3;
-        case BallType::Heavy:      return 2;
-        case BallType::Fastball:   return 2;
-        case BallType::OddBall:    return 3;
-        case BallType::EightBall:  return 4;
-        case BallType::Icy:        return 4;
-        case BallType::Retrigger:  return 4;
-        default:                   return 1;
-    }
+    return getBallTokenCost(t);
 }
 
 static int pinTypeCost(PinType t) {
-    switch (t) {
-        case PinType::Gold:        return 2;
-        case PinType::Mischievous: return 2;
-        case PinType::Exploding:   return 4;
-        case PinType::Light:       return 2;
-        case PinType::Big:         return 3;
-        case PinType::Ice:         return 2;
-        case PinType::CopyCat:     return 3;
-        case PinType::LuckyDucky:  return 4;
-        case PinType::LevelUp:     return 1;
-        case PinType::Lover:       return 3;
-        case PinType::ChangeIsGood:return 3;
-        case PinType::ThirdTime:   return 3;
-        default:                   return 1;
-    }
+    return getPinTokenCost(t);
 }
 
 static int shoeTypeCost(ShoeType t) {
-    switch (t) {
-        case ShoeType::Clown:    return 0;
-        case ShoeType::Running:  return 3;
-        case ShoeType::Moon:     return 4;
-        case ShoeType::Slippers: return 3;
-        case ShoeType::HighHeels:return 3;
-        case ShoeType::SteelCap: return 4;
-        default:                 return 0;
-    }
+    return getShoeTokenCost(t);
 }
 
 static int powerTypeCost(PowerType t) {
-    switch (t) {
-        case PowerType::Greedy:              return 5;
-        case PowerType::RandomUpgrade:       return 3;
-        case PowerType::ExtraPins:           return 5;
-        case PowerType::ExtraBall:           return 7;
-        case PowerType::Duplicate:           return 2;
-        case PowerType::Bumpers:             return 5;
-        case PowerType::SwapPins:            return 2;
-        case PowerType::HomeBase:            return 5;
-        case PowerType::Confusion:           return 3;
-        case PowerType::Earthquake:          return 6;
-        case PowerType::Skip:                return 1;
-        case PowerType::UpgradesForEveryone: return 4;
-        case PowerType::Sales:               return 4;
-        case PowerType::PassedGo:            return 4;
-        case PowerType::MoMoney:             return 4;
-        case PowerType::SevenEightNine:      return 3;
-        case PowerType::ExtraPowerSlot:      return 4;
-        default:                             return 0;
-    }
+    return getPowerTokenCost(t);
 }
 
 static bool powerIsStackable(PowerType t) {
@@ -3424,9 +3372,9 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Ball, BallType::Fastball, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Fastball",     "5% lighter.\n15% faster.",                           2},
         {ShopItemCategory::Ball, BallType::OddBall, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Odd Ball",     "Odd pins x2.\nEven pins x0.75.",                     3},
+         "Odd Ball",     "Odd pins x2.\nEven pins x0.85.",                     3},
         {ShopItemCategory::Ball, BallType::EightBall, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "8-Ball",       "All pins worth 8.",                                   4},
+         "8-Ball",       "Pins are worth at least 8.",                          4},
         {ShopItemCategory::Ball, BallType::Icy, PinType::Normal, ShoeType::None, PowerType::Greedy,
          "Icy Ball",     "Each Ice pin hit\nadds +15 score.",                    4},
         {ShopItemCategory::Ball, BallType::Retrigger, PinType::Normal, ShoeType::None, PowerType::Greedy,
@@ -3471,7 +3419,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "Steel Caps",   "Pins cannot change\nduring a round.",                4},
         // Powers
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Greedy,
-         "Greedy",       "Gain +1 combo for\nevery 4 dollars.",                5},
+         "Greedy",       "Gain +1 combo for\nevery 6 dollars.",                5},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::RandomUpgrade,
          "Random Upgrade","After each frame,\nrandom pin +1 value.",             3},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::ExtraPins,
@@ -3514,6 +3462,22 @@ void UI::generateShopOffers(const ActiveItems& items) {
     filtered.reserve(pool.size());
     for (const auto& offer : pool) {
         RawOffer adjusted = offer;
+        switch (adjusted.category) {
+            case ShopItemCategory::Ball:
+                adjusted.cost = getBallTokenCost(adjusted.ballType);
+                break;
+            case ShopItemCategory::Pin:
+                adjusted.cost = getPinTokenCost(adjusted.pinType);
+                break;
+            case ShopItemCategory::Shoe:
+                adjusted.cost = getShoeTokenCost(adjusted.shoeType);
+                break;
+            case ShopItemCategory::Power:
+                adjusted.cost = getPowerTokenCost(adjusted.powerType);
+                break;
+            default:
+                break;
+        }
         if (items.powerSales && adjusted.cost > 0) {
             int discounted = static_cast<int>(std::lround(static_cast<float>(adjusted.cost) * 0.8f));
             adjusted.cost = std::max(1, discounted);

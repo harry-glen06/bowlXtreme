@@ -12,7 +12,6 @@
 #include "AudioManager.h"
 #include "UI.h"
 #include "Items.h"
-#include "Pin.h"
 
 class Game {
 public:
@@ -103,6 +102,7 @@ private:
 
     sf::RenderWindow window;
     sf::Clock clock;
+    float menuAnimDt = 0.0f;
 
     Lane lane;
     Ball ball;
@@ -128,6 +128,7 @@ private:
     float maxShotRollTime = 7.0f;
     float backlineJamTime = 0.70f;
     float explodingPinExtraResolveDelay = 1.2f;
+    bool oilEffectPendingThisFrame = false;
 
     // Gutter state
     bool inGutter = false;
@@ -194,7 +195,4 @@ private:
         float spin = 0.0f;
     };
     std::vector<ConfettiPiece> strikeConfetti;
-    
-    // High score
-    int highScore = 0;
 };

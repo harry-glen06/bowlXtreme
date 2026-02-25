@@ -91,55 +91,49 @@ void BowlingScorer::recordBall(int knockedPins) {
 }
 
 void BowlingScorer::calculateScore() {
+    int runningTotal = 0;
     totalScore = 0;
-    
+
     for (int i = 0; i < 10; i++) {
         if (!frames[i].isComplete && i != currentFrame) continue;
-        
+
+        int frameScore = 0;
         if (i < 9) {
             // Frames 1-9
             if (frames[i].isStrike) {
                 // Strike: 10 + next 2 balls
-                frames[i].score = 10;
-                
+                frameScore = 10;
+
                 if (i + 1 < 10) {
-                    frames[i].score += frames[i + 1].ball1;
-                    
+                    frameScore += frames[i + 1].ball1;
+
                     if (frames[i + 1].isStrike && i + 2 < 10) {
                         // Next frame is also strike
-                        frames[i].score += frames[i + 2].ball1;
+                        frameScore += frames[i + 2].ball1;
                     } else {
-                        frames[i].score += frames[i + 1].ball2;
+                        frameScore += frames[i + 1].ball2;
                     }
                 }
-                
             } else if (frames[i].isSpare) {
                 // Spare: 10 + next 1 ball
-                frames[i].score = 10;
-                
+                frameScore = 10;
                 if (i + 1 < 10) {
-                    frames[i].score += frames[i + 1].ball1;
+                    frameScore += frames[i + 1].ball1;
                 }
-                
             } else {
                 // Normal: just add the pins
-                frames[i].score = frames[i].ball1 + frames[i].ball2;
+                frameScore = frames[i].ball1 + frames[i].ball2;
             }
-            
         } else {
             // 10th frame - just add all balls
-            frames[i].score = frames[i].ball1 + frames[i].ball2 + frames[i].ball3;
+            frameScore = frames[i].ball1 + frames[i].ball2 + frames[i].ball3;
         }
-        
-        // Running total
-        if (i > 0) {
-            totalScore = frames[i - 1].score;
-        }
-        totalScore += frames[i].score;
-        
-        // Store running total in frame
-        frames[i].score = totalScore;
+
+        runningTotal += frameScore;
+        frames[i].score = runningTotal; // Display/API keeps cumulative frame score.
     }
+
+    totalScore = runningTotal;
 }
 
 bool BowlingScorer::shouldRemoveFallenPins() const {
@@ -165,7 +159,8 @@ bool BowlingScorer::shouldRemoveFallenPins() const {
 
 bool BowlingScorer::shouldResetAllPins() const {
     // Reset all pins after strike in frames 1-9
-    if (currentFrame < 9 && frames[currentFrame - 1].isStrike && currentBall == 1) {
+    if (currentFrame > 0 && currentFrame < 9 &&
+        frames[currentFrame - 1].isStrike && currentBall == 1) {
         return true;
     }
     

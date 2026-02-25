@@ -112,8 +112,8 @@ void Pin::update(float dt) {
         vel = dir * newSpeed;
     }
 
-    if (!fallen && speed < 40.f)   vel = {0.f, 0.f};
-    if (!fallen && speed < 120.f)  vel = {0.f, 0.f};
+    // Keep upright pins from micro-sliding, but avoid snapping them too early.
+    if (!fallen && speed < 40.f)  vel = {0.f, 0.f};
 
     if (fallen) {
         angle      += angularVel * dt;

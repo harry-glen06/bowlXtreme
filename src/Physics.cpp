@@ -1,5 +1,6 @@
 #include "Physics.h"
 #include <cmath>
+#include <cstdlib>
 
 float degToRad(float deg) {
     return deg * 3.1415926535f / 180.0f;
@@ -22,10 +23,16 @@ void resolveCircleCollision(
     float dist = length(delta);
     float minDist = r1 + r2;
 
-    if (dist <= 0.0001f) return;
     if (dist >= minDist) return;
-
-    sf::Vector2f n = delta / dist;
+    sf::Vector2f n;
+    if (dist <= 0.0001f) {
+        // Resolve perfect overlap with a random separating normal instead of bailing.
+        float angle = static_cast<float>(rand()) / static_cast<float>(RAND_MAX) * 6.283185307f;
+        n = sf::Vector2f(std::cos(angle), std::sin(angle));
+        dist = 0.0001f;
+    } else {
+        n = delta / dist;
+    }
 
     float penetration = minDist - dist;
     float totalMass = m1 + m2;

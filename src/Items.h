@@ -47,6 +47,74 @@ enum class PowerType {
     ExtraPowerSlot,
 };
 
+inline int getBallTokenCost(BallType t) {
+    switch (t) {
+        case BallType::BlackHole:  return 4;
+        case BallType::Midas:      return 5;
+        case BallType::Upgrade:    return 3;
+        case BallType::Heavy:      return 2;
+        case BallType::Fastball:   return 2;
+        case BallType::OddBall:    return 3;
+        case BallType::EightBall:  return 4;
+        case BallType::Icy:        return 4;
+        case BallType::Retrigger:  return 4;
+        default:                   return 1;
+    }
+}
+
+inline int getPinTokenCost(PinType t) {
+    switch (t) {
+        case PinType::Gold:         return 2;
+        case PinType::Mischievous:  return 2;
+        case PinType::Exploding:    return 5;
+        case PinType::Light:        return 2;
+        case PinType::Big:          return 3;
+        case PinType::Ice:          return 2;
+        case PinType::CopyCat:      return 3;
+        case PinType::LuckyDucky:   return 4;
+        case PinType::LevelUp:      return 1;
+        case PinType::Lover:        return 3;
+        case PinType::ChangeIsGood: return 3;
+        case PinType::ThirdTime:    return 3;
+        default:                    return 1;
+    }
+}
+
+inline int getShoeTokenCost(ShoeType t) {
+    switch (t) {
+        case ShoeType::Clown:     return 0;
+        case ShoeType::Running:   return 3;
+        case ShoeType::Moon:      return 4;
+        case ShoeType::Slippers:  return 3;
+        case ShoeType::HighHeels: return 3;
+        case ShoeType::SteelCap:  return 4;
+        default:                  return 0;
+    }
+}
+
+inline int getPowerTokenCost(PowerType t) {
+    switch (t) {
+        case PowerType::Greedy:              return 5;
+        case PowerType::RandomUpgrade:       return 3;
+        case PowerType::ExtraPins:           return 5;
+        case PowerType::ExtraBall:           return 7;
+        case PowerType::Duplicate:           return 2;
+        case PowerType::Bumpers:             return 5;
+        case PowerType::SwapPins:            return 2;
+        case PowerType::HomeBase:            return 5;
+        case PowerType::Confusion:           return 3;
+        case PowerType::Earthquake:          return 6;
+        case PowerType::Skip:                return 1;
+        case PowerType::UpgradesForEveryone: return 4;
+        case PowerType::Sales:               return 4;
+        case PowerType::PassedGo:            return 4;
+        case PowerType::MoMoney:             return 4;
+        case PowerType::SevenEightNine:      return 3;
+        case PowerType::ExtraPowerSlot:      return 4;
+        default:                             return 0;
+    }
+}
+
 struct ActiveItems {
     struct PinSlotAssignment {
         int slot = 1; // 1-based spawn-order slot
@@ -110,6 +178,7 @@ struct ActiveItems {
     int   thirdTimeComboBonus = 0;
     int   pinChangeEventsThisShot = 0;
     std::array<int, 12> pinChangeHitCountsThisShot{};
+    std::array<bool, 12> pinHitByBallThisShot{};
 
     // Purchased/assigned pin types by explicit rack slot (spawn order).
     std::vector<PinSlotAssignment> pinSlotAssignments;
@@ -124,6 +193,7 @@ struct ActiveItems {
         thirdTimeComboBonus    = 0;
         pinChangeEventsThisShot = 0;
         pinChangeHitCountsThisShot.fill(0);
+        pinHitByBallThisShot.fill(false);
     }
 
     void resetAll() {
@@ -313,6 +383,7 @@ struct ActiveItems {
                 break;
             case ShoeType::Clown:
                 launchSpeedMultiplier = 0.92f;
+                break;
             case ShoeType::None:
             default:
                 break;

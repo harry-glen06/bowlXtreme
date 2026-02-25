@@ -11,7 +11,15 @@ jobs:
   # macOS build
   # ────────────────────────────────────────────────────────────────
   build-mac:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-13
+          - arch: arm64
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -27,26 +35,42 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p release-mac
-          cp build/bowling release-mac/bowling
+          mkdir -p release-mac-${{ matrix.arch }}
+          cp build/bowling release-mac-${{ matrix.arch }}/bowling-${{ matrix.arch }}
           # Copy assets if they exist
           if [ -d assets ]; then
-            cp -r assets release-mac/assets
+            cp -r assets release-mac-${{ matrix.arch }}/assets
           fi
-          # Add a simple launch script so friends can double-click
-          cat > release-mac/Play\ Bowling.command << 'EOF'
-          #!/bin/bash
-          cd "$(dirname "$0")"
-          ./bowling
-          EOF
-          chmod +x release-mac/Play\ Bowling.command
-          zip -r bowling-mac.zip release-mac
+          # Use architecture-aware launcher when available.
+          if [ -f play_bowling.command ]; then
+            cp play_bowling.command release-mac-${{ matrix.arch }}/Play\ Bowling.command
+          else
+            cat > release-mac-${{ matrix.arch }}/Play\ Bowling.command << 'EOF'
+            #!/bin/bash
+            cd "$(dirname "$0")"
+            if [ -x ./bowling-mac-arm64 ] && [ "$(uname -m)" = "arm64" ]; then
+              exec ./bowling-mac-arm64
+            fi
+            if [ -x ./bowling-mac-x86_64 ] && [ "$(uname -m)" = "x86_64" ]; then
+              exec ./bowling-mac-x86_64
+            fi
+            if [ -x ./bowling-arm64 ] && [ "$(uname -m)" = "arm64" ]; then
+              exec ./bowling-arm64
+            fi
+            if [ -x ./bowling-x86_64 ] && [ "$(uname -m)" = "x86_64" ]; then
+              exec ./bowling-x86_64
+            fi
+            echo "No compatible binary found in this folder."
+            EOF
+          fi
+          chmod +x release-mac-${{ matrix.arch }}/Play\ Bowling.command
+          chmod +x release-mac-${{ matrix.arch }}/bowling-${{ matrix.arch }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bowling-mac
-          path: bowling-mac.zip
+          name: bowling-mac-${{ matrix.arch }}
+          path: release-mac-${{ matrix.arch }}
 
   # ────────────────────────────────────────────────────────────────
   # Windows build
@@ -100,10 +124,44 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Mac build
+      - name: Download Mac arm64 build
         uses: actions/download-artifact@v4
         with:
-          name: bowling-mac
+          name: bowling-mac-arm64
+          path: mac-arm64
+
+      - name: Download Mac x86_64 build
+        uses: actions/download-artifact@v4
+        with:
+          name: bowling-mac-x86_64
+          path: mac-x86_64
+
+      - name: Package combined Mac zip
+        run: |
+          mkdir -p release-mac
+
+          # Prefer the launcher from arm64 artifact, fallback to x86_64.
+          if [ -f mac-arm64/release-mac-arm64/Play\ Bowling.command ]; then
+            cp mac-arm64/release-mac-arm64/Play\ Bowling.command release-mac/Play\ Bowling.command
+          elif [ -f mac-x86_64/release-mac-x86_64/Play\ Bowling.command ]; then
+            cp mac-x86_64/release-mac-x86_64/Play\ Bowling.command release-mac/Play\ Bowling.command
+          fi
+
+          # Include both binaries so launcher can auto-pick.
+          cp mac-arm64/release-mac-arm64/bowling-arm64 release-mac/bowling-mac-arm64
+          cp mac-x86_64/release-mac-x86_64/bowling-x86_64 release-mac/bowling-mac-x86_64
+          chmod +x release-mac/Play\ Bowling.command
+          chmod +x release-mac/bowling-mac-arm64
+          chmod +x release-mac/bowling-mac-x86_64
+
+          # Copy assets once.
+          if [ -d mac-arm64/release-mac-arm64/assets ]; then
+            cp -r mac-arm64/release-mac-arm64/assets release-mac/assets
+          elif [ -d mac-x86_64/release-mac-x86_64/assets ]; then
+            cp -r mac-x86_64/release-mac-x86_64/assets release-mac/assets
+          fi
+
+          zip -r bowling-mac.zip release-mac
 
       - name: Download Windows build
         uses: actions/download-artifact@v4
