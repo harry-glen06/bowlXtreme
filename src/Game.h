@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "Lane.h"
@@ -27,6 +28,15 @@ private:
         SwapPickSecond
     };
 
+    enum class BossType {
+        None,
+        MissingPin,
+        DoubleTarget,
+        LowBaseScore,
+        RandomPowerDisabledEachShot,
+        HeavyPins
+    };
+
     void handleEvents();
     void update(float dt);
     void draw();
@@ -42,6 +52,15 @@ private:
     std::vector<Pin> createPins(float centerX, float startY);
     void applyPurchasedPinTypes(std::vector<Pin>& pinSet);
     void applyPowerPinLayout(std::vector<Pin>& pinSet);
+    void applyBossPinLayout(std::vector<Pin>& pinSet);
+    bool isBossRound(int round) const;
+    void refreshBossStateForCurrentRound();
+    void rollBossDisabledPowerForShot();
+    bool isPowerEnabledThisShot(PowerType p) const;
+    void playBossLaughForCurrentBoss(float volume);
+    int getShotBallSlot(int shotInFrame) const;
+    std::string getActiveBossName() const;
+    std::string getActiveBossDescription() const;
     void applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet);
     void applySavedPinSlotValues(std::vector<Pin>& pinSet);
     void updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet);
@@ -55,6 +74,7 @@ private:
     void applyManualSwap(int firstIndex, int secondIndex);
     void requestRunReset();
     void confirmRunReset();
+    void openBossIntroIfNeeded();
     void triggerStrikeCelebration();
     void updateStrikeConfetti(float dt);
     void drawStrikeConfetti();
@@ -121,6 +141,9 @@ private:
     bool pendingStrikeThisShot = false;
     int pendingRoundScoreBeforeShot = 0;
     int pendingTargetBeforeShot = 0;
+    int pendingDisplayRoundBeforeShot = 0;
+    int pendingDisplayFrameBeforeShot = 0;
+    int pendingDisplayShotBeforeShot = 0;
     float resetTimer = 0.0f;
     float maxResetWait = 2.0f;
     float pinsStillSpeed = 25.0f;
@@ -145,7 +168,14 @@ private:
     bool resetConfirmOpen = false;
 
     bool xtremeMode = false;
+    bool endlessMode = false;
     int bestRound = 0;
+    bool bossIntroOpen = false;
+    int bossIntroShownRound = 0;
+    BossType activeBoss = BossType::None;
+    int activeBossRound = 0;
+    int bossMissingPinSlot = -1;
+    std::optional<PowerType> bossDisabledPowerThisShot;
     PinPowerSelectionMode pinPowerSelectionMode = PinPowerSelectionMode::None;
     int pinPowerFirstIndex = -1;
 

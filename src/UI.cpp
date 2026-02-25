@@ -95,7 +95,7 @@ const std::array<TutorialPageData, 5> kTutorialPages = {{
         "SHOP AND INVENTORY",
         {
             "Buy Balls, Pins, Shoes, and Powers with tokens.",
-            "Balls are assigned per shot slot (Ball 1 and Ball 2).",
+            "Balls are assigned per shot slot (Ball 1/2, and Ball 3 with Extra Ball).",
             "Pins are assigned by pin slot (P1..P10/12).",
             "Hover inventory items to see live status.",
             "",
@@ -1075,9 +1075,15 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
                              const std::string& pinPowerHintLine2,
                              bool useLiveFormulaPreview,
                              int liveImpactPreview,
-                             int liveComboPreview) {
+                             int liveComboPreview,
+                             bool bossRound,
+                             const std::string& bossName,
+                             const std::string& bossDescription) {
     if (!fontLoaded) return GameAction::None;
     if (state != GameState::Xtreme) return GameAction::None;
+    if (!bossRound) {
+        bossInfoPopupOpen = false;
+    }
 
     float dt = 0.0f;
     if (!hudAnimClockPrimed) {
@@ -1162,6 +1168,12 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         }
     }
 
+    sf::Vector2f mouseWorld = window.mapPixelToCoords(sf::Mouse::getPosition(window));
+    bool mouseDownNow = sf::Mouse::isButtonPressed(sf::Mouse::Button::Left);
+    bool mousePressedEdge = mouseDownNow && !xtremeMouseWasDown;
+    xtremeMouseWasDown = mouseDownNow;
+    bool bossClickConsumed = false;
+
     const float sideMargin = std::clamp(windowW * 0.017f, 14.0f, 28.0f);
     const float panelTop = std::clamp(windowH * 0.03f, 18.0f, 34.0f);
     const float panelBottomMargin = std::clamp(windowH * 0.034f, 22.0f, 40.0f);
@@ -1199,6 +1211,12 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     float lx = leftPanelX + 18.0f;
     float y = leftPanelY + 9.0f;
     const float leftTextMaxW = sidePanelW - 34.0f;
+    static float bossPulseTime = 0.0f;
+    bossPulseTime += std::clamp(dt, 0.0f, 0.05f);
+    float bossPulse = 0.5f + 0.5f * std::sin(bossPulseTime * 6.2f);
+    float bossBadgeW = std::min(164.0f, sidePanelW * 0.52f);
+    sf::FloatRect bossBadgeRect{};
+    sf::FloatRect bossInfoRect{};
     auto fitTextToPanel = [&](sf::Text& text, float maxW, unsigned minSize) {
         while (text.getCharacterSize() > minSize && text.getLocalBounds().size.x > maxW) {
             text.setCharacterSize(text.getCharacterSize() - 1);
@@ -1206,10 +1224,41 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     };
 
     sf::Text modeText(font, "XTREME MODE", 30);
-    fitTextToPanel(modeText, leftTextMaxW, 18);
+    fitTextToPanel(modeText, leftTextMaxW, 15);
     modeText.setPosition({lx, y});
     modeText.setFillColor(sf::Color(19, 39, 82));
     window.draw(modeText);
+
+    if (bossRound) {
+        float badgeX = lx;
+        float badgeY = leftPanelY + 36.0f;
+        bossBadgeRect = sf::FloatRect({badgeX, badgeY}, {bossBadgeW, 24.0f});
+        sf::ConvexShape bossBadge = createRoundedRect(
+            {bossBadgeRect.size.x, bossBadgeRect.size.y},
+            8.0f,
+            sf::Color(255, (std::uint8_t)(115 + 34 * bossPulse), (std::uint8_t)(128 + 20 * bossPulse), 244));
+        bossBadge.setPosition(bossBadgeRect.position);
+        bossBadge.setOutlineColor(sf::Color(130, 36, 58));
+        bossBadge.setOutlineThickness(1.8f);
+        window.draw(bossBadge);
+
+        sf::Text bossText(font, bossName, 14);
+        fitTextToPanel(bossText, bossBadgeRect.size.x - 12.0f, 11);
+        sf::FloatRect bb = bossText.getLocalBounds();
+        bossText.setPosition({bossBadgeRect.position.x + bossBadgeRect.size.x * 0.5f -
+                                  (bb.position.x + bb.size.x * 0.5f),
+                              bossBadgeRect.position.y + 3.0f});
+        bossText.setFillColor(sf::Color(255, 248, 232));
+        bossText.setOutlineColor(sf::Color(111, 20, 39));
+        bossText.setOutlineThickness(1.0f);
+        window.draw(bossText);
+
+        if (mousePressedEdge && pointInRectPadded(bossBadgeRect, mouseWorld, 7.0f)) {
+            bossInfoPopupOpen = !bossInfoPopupOpen;
+        }
+    } else {
+        bossInfoPopupOpen = false;
+    }
     y += 64.0f;
 
     float targetProgress = 0.0f;
@@ -1217,18 +1266,20 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         targetProgress = std::clamp((float)roundScore / (float)targetScore, 0.0f, 1.0f);
     }
     const float targetCardH = 98.0f;
-    sf::ConvexShape targetCard = createRoundedRect({leftTextMaxW, targetCardH}, 10.0f, sf::Color(247, 240, 209, 246));
+    sf::Color targetCardFill = bossRound ? sf::Color(252, 228, 220, 246)
+                                         : sf::Color(247, 240, 209, 246);
+    sf::ConvexShape targetCard = createRoundedRect({leftTextMaxW, targetCardH}, 10.0f, targetCardFill);
     targetCard.setPosition({lx, y});
-    targetCard.setOutlineColor(targetProgress >= 1.0f
-                               ? sf::Color(110, 240, 145)
-                               : sf::Color(250, 214, 120));
+    targetCard.setOutlineColor(
+        targetProgress >= 1.0f ? sf::Color(110, 240, 145)
+                               : (bossRound ? sf::Color(245, 108, 122) : sf::Color(250, 214, 120)));
     targetCard.setOutlineThickness(2.0f);
     window.draw(targetCard);
 
-    sf::Text targetLabel(font, "TARGET SCORE", 20);
+    sf::Text targetLabel(font, bossRound ? "BOSS TARGET" : "TARGET SCORE", 20);
     fitTextToPanel(targetLabel, leftTextMaxW - 20.0f, 13);
     targetLabel.setPosition({lx + 10.0f, y + 8.0f});
-    targetLabel.setFillColor(sf::Color(109, 66, 26));
+    targetLabel.setFillColor(bossRound ? sf::Color(132, 42, 56) : sf::Color(109, 66, 26));
     window.draw(targetLabel);
 
     sf::Text targetValue(font,
@@ -1238,7 +1289,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     targetValue.setPosition({lx + 10.0f, y + 30.0f});
     targetValue.setFillColor(targetProgress >= 1.0f
                              ? sf::Color(33, 130, 78)
-                             : sf::Color(35, 58, 107));
+                             : (bossRound ? sf::Color(122, 39, 56) : sf::Color(35, 58, 107)));
     targetValue.setOutlineColor(sf::Color(246, 250, 255));
     targetValue.setOutlineThickness(2.0f);
     window.draw(targetValue);
@@ -1246,16 +1297,21 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     const float targetBarY = y + targetCardH - 18.0f;
     sf::RectangleShape targetTrack({leftTextMaxW - 14.0f, 10.0f});
     targetTrack.setPosition({lx + 7.0f, targetBarY});
-    targetTrack.setFillColor(sf::Color(221, 205, 157, 242));
-    targetTrack.setOutlineColor(sf::Color(174, 137, 76));
+    targetTrack.setFillColor(bossRound ? sf::Color(238, 190, 186, 242)
+                                       : sf::Color(221, 205, 157, 242));
+    targetTrack.setOutlineColor(bossRound ? sf::Color(173, 80, 94)
+                                          : sf::Color(174, 137, 76));
     targetTrack.setOutlineThickness(1.1f);
     window.draw(targetTrack);
 
     sf::RectangleShape targetFill({(leftTextMaxW - 14.0f) * targetProgress, 10.0f});
     targetFill.setPosition({lx + 7.0f, targetBarY});
-    targetFill.setFillColor(targetProgress >= 1.0f
-                            ? sf::Color(110, 244, 150)
-                            : sf::Color(243, 209, 98));
+    targetFill.setFillColor(
+        targetProgress >= 1.0f ? sf::Color(110, 244, 150)
+                               : (bossRound
+                                      ? sf::Color(252, (std::uint8_t)(124 + 24 * bossPulse),
+                                                  (std::uint8_t)(118 + 18 * bossPulse))
+                                      : sf::Color(243, 209, 98)));
     window.draw(targetFill);
 
     // Add more breathing room so all rows below target card start lower.
@@ -1409,8 +1465,65 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
 
     drawInventoryPanel(window, items, rightPanelX + 8.0f, rightPanelY + 62.0f, rightPanelW - 16.0f);
 
+    if (bossRound && bossInfoPopupOpen) {
+        float infoW = std::clamp(sidePanelW - 20.0f, 230.0f, 360.0f);
+        float infoH = 144.0f;
+        float infoX = leftPanelX + 10.0f;
+        float infoY = leftPanelY + 66.0f;
+        bossInfoRect = sf::FloatRect({infoX, infoY}, {infoW, infoH});
+
+        sf::RectangleShape infoShadow({infoW, infoH});
+        infoShadow.setPosition({infoX + 3.0f, infoY + 3.0f});
+        infoShadow.setFillColor(sf::Color(0, 0, 0, 70));
+        window.draw(infoShadow);
+
+        sf::ConvexShape infoPanel = createRoundedRect({infoW, infoH}, 10.0f, sf::Color(233, 241, 253, 250));
+        infoPanel.setPosition({infoX, infoY});
+        infoPanel.setOutlineColor(sf::Color(133, 39, 60));
+        infoPanel.setOutlineThickness(2.2f);
+        window.draw(infoPanel);
+
+        sf::RectangleShape infoBand({infoW - 4.0f, 30.0f});
+        infoBand.setPosition({infoX + 2.0f, infoY + 2.0f});
+        infoBand.setFillColor(sf::Color(247, 110, 126, 244));
+        window.draw(infoBand);
+
+        sf::Text name(font, bossName, 18);
+        sf::FloatRect nb = name.getLocalBounds();
+        name.setPosition({infoX + infoW * 0.5f - (nb.position.x + nb.size.x * 0.5f), infoY + 7.0f});
+        name.setFillColor(sf::Color(255, 247, 236));
+        name.setOutlineColor(sf::Color(109, 18, 37));
+        name.setOutlineThickness(1.0f);
+        window.draw(name);
+
+        sf::Text desc(font, bossDescription, 20);
+        fitTextToPanel(desc, infoW - 24.0f, 12);
+        sf::FloatRect db = desc.getLocalBounds();
+        float descX = infoX + infoW * 0.5f - (db.position.x + db.size.x * 0.5f);
+        float descMinX = infoX + 12.0f;
+        float descMaxX = infoX + infoW - db.size.x - 12.0f;
+        if (descX < descMinX) descX = descMinX;
+        if (descX > descMaxX) descX = descMaxX;
+        desc.setPosition({descX, infoY + 54.0f});
+        desc.setFillColor(sf::Color(35, 59, 109));
+        window.draw(desc);
+
+        sf::Text tip(font, "Click badge to hide", 14);
+        tip.setPosition({infoX + 12.0f, infoY + infoH - 24.0f});
+        tip.setFillColor(sf::Color(94, 112, 151));
+        window.draw(tip);
+    }
+
+    if (bossRound && bossInfoPopupOpen && mousePressedEdge) {
+        bossClickConsumed = true;
+        bool clickedPopup = pointInRectPadded(bossInfoRect, mouseWorld, 4.0f);
+        bool clickedBadge = pointInRectPadded(bossBadgeRect, mouseWorld, 7.0f);
+        if (!clickedPopup && !clickedBadge) {
+            bossInfoPopupOpen = false;
+        }
+    }
+
     // Menu button.
-    sf::Vector2f mouseWorld = window.mapPixelToCoords(sf::Mouse::getPosition(window));
     float exitW = 130.0f;
     float exitH = 44.0f;
     float exitX = rightPanelX - exitW - 14.0f;
@@ -1443,10 +1556,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     exitText.setFillColor(sf::Color(15, 33, 72));
     window.draw(exitText);
 
-    if (sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
-        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-        sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
-        if (pointInRectPadded(exitRect, worldPos, 8.0f)) {
+    if (mousePressedEdge && !bossClickConsumed) {
+        if (pointInRectPadded(exitRect, mouseWorld, 8.0f)) {
             return GameAction::ExitToMenu;
         }
     }
@@ -1569,6 +1680,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
                                float windowW,
                                float windowH) {
     if (!fontLoaded) return;
+    bool bossRound = (roundNumber > 0 && (roundNumber % 5) == 0);
 
     sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
     overlay.setFillColor(sf::Color(22, 44, 90, 122));
@@ -1586,6 +1698,121 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     panel.setOutlineThickness(3.f);
     window.draw(panel);
 
+    // Round track strip: boss rounds are shown with skull markers.
+    const float stripW = panelW;
+    const float stripH = 42.f;
+    const float stripX = panelX;
+    const float stripY = panelY - 40.f;
+    sf::ConvexShape strip = createRoundedRect({stripW, stripH}, 10.f, sf::Color(246, 234, 170, 245));
+    strip.setPosition({stripX, stripY});
+    strip.setFillColor(sf::Color(246, 234, 170, 245));
+    strip.setOutlineColor(sf::Color(117, 96, 42));
+    strip.setOutlineThickness(2.f);
+    window.draw(strip);
+
+    auto drawSkullMarker = [&](float cx, float cy, float scale, sf::Color fill, sf::Color outline) {
+        float headR = 6.8f * scale;
+        sf::CircleShape head(headR);
+        head.setOrigin({headR, headR});
+        head.setPosition({cx, cy - 1.2f * scale});
+        head.setFillColor(fill);
+        head.setOutlineColor(outline);
+        head.setOutlineThickness(1.1f);
+        window.draw(head);
+
+        sf::RectangleShape jaw({headR * 1.46f, headR * 0.86f});
+        jaw.setOrigin({jaw.getSize().x * 0.5f, 0.f});
+        jaw.setPosition({cx, cy + headR * 0.20f});
+        jaw.setFillColor(fill);
+        jaw.setOutlineColor(outline);
+        jaw.setOutlineThickness(1.0f);
+        window.draw(jaw);
+
+        sf::CircleShape eye(headR * 0.18f);
+        eye.setOrigin({eye.getRadius(), eye.getRadius()});
+        eye.setFillColor(sf::Color(20, 22, 28));
+        eye.setPosition({cx - headR * 0.42f, cy - headR * 0.14f});
+        window.draw(eye);
+        eye.setPosition({cx + headR * 0.42f, cy - headR * 0.14f});
+        window.draw(eye);
+    };
+
+    auto drawCheckMarker = [&](float cx, float cy, float scale) {
+        float r = 7.0f * scale;
+        sf::CircleShape bubble(r);
+        bubble.setOrigin({r, r});
+        bubble.setPosition({cx, cy});
+        bubble.setFillColor(sf::Color(76, 230, 123));
+        bubble.setOutlineColor(sf::Color(28, 94, 57));
+        bubble.setOutlineThickness(1.2f);
+        window.draw(bubble);
+
+        sf::RectangleShape segA({r * 0.72f, r * 0.20f});
+        segA.setOrigin({segA.getSize().x * 0.5f, segA.getSize().y * 0.5f});
+        segA.setPosition({cx - r * 0.20f, cy + r * 0.20f});
+        segA.setRotation(sf::degrees(42.0f));
+        segA.setFillColor(sf::Color(250, 255, 250));
+        window.draw(segA);
+
+        sf::RectangleShape segB({r * 1.18f, r * 0.20f});
+        segB.setOrigin({segB.getSize().x * 0.5f, segB.getSize().y * 0.5f});
+        segB.setPosition({cx + r * 0.18f, cy - r * 0.12f});
+        segB.setRotation(sf::degrees(-47.0f));
+        segB.setFillColor(sf::Color(250, 255, 250));
+        window.draw(segB);
+    };
+
+    const int markerCount = 15;
+    int startRound = std::max(1, roundNumber - 6);
+    int endRound = startRound + markerCount - 1;
+    if (roundNumber < 8) {
+        startRound = 1;
+        endRound = markerCount;
+    } else if (roundNumber > endRound) {
+        startRound = roundNumber - markerCount / 2;
+        if (startRound < 1) startRound = 1;
+    }
+    const float markerLeft = stripX + 20.f;
+    const float markerRight = stripX + stripW - 20.f;
+    const float markerY = stripY + stripH * 0.5f;
+    const float step = (markerCount > 1) ? ((markerRight - markerLeft) / (float)(markerCount - 1)) : 0.f;
+
+    for (int i = 0; i < markerCount; i++) {
+        int markerRound = startRound + i;
+        float cx = markerLeft + step * (float)i;
+        bool isBoss = (markerRound % 5 == 0);
+        bool isCurrent = (markerRound == roundNumber);
+        bool completed = (markerRound < roundNumber) || (isCurrent && passed);
+
+        if (completed) {
+            drawCheckMarker(cx, markerY, isCurrent ? 1.06f : 0.96f);
+            continue;
+        }
+
+        if (isBoss) {
+            sf::Color fill = sf::Color(206, 200, 176);
+            sf::Color outline = sf::Color(87, 77, 53);
+            if (isCurrent) {
+                fill = passed ? sf::Color(147, 252, 186) : sf::Color(255, 168, 182);
+                outline = passed ? sf::Color(20, 102, 60) : sf::Color(116, 30, 54);
+            }
+            drawSkullMarker(cx, markerY, 1.0f, fill, outline);
+        } else {
+            float r = 6.2f;
+            sf::CircleShape dot(r);
+            dot.setOrigin({r, r});
+            dot.setPosition({cx, markerY});
+            if (isCurrent) {
+                dot.setFillColor(passed ? sf::Color(81, 233, 133) : sf::Color(244, 98, 118));
+                dot.setOutlineColor(sf::Color(32, 51, 96));
+                dot.setOutlineThickness(1.3f);
+            } else {
+                dot.setFillColor(sf::Color(19, 22, 30));
+            }
+            window.draw(dot);
+        }
+    }
+
     sf::Text title(font, "ROUND " + std::to_string(roundNumber) + " SUMMARY", 42);
     sf::FloatRect titleBounds = title.getLocalBounds();
     title.setPosition(sf::Vector2f(panelX + panelW * 0.5f - titleBounds.size.x * 0.5f, panelY + 18.f));
@@ -1601,6 +1828,24 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     status.setOutlineColor(sf::Color(18, 35, 67));
     status.setOutlineThickness(1.5f);
     window.draw(status);
+
+    if (bossRound) {
+        sf::ConvexShape bossBadge =
+            createRoundedRect({170.0f, 32.0f}, 8.0f, sf::Color(245, 107, 122, 245));
+        bossBadge.setPosition({panelX + panelW - 186.0f, panelY + 82.0f});
+        bossBadge.setOutlineColor(sf::Color(130, 35, 56));
+        bossBadge.setOutlineThickness(1.8f);
+        window.draw(bossBadge);
+
+        sf::Text bossText(font, "BOSS ROUND", 19);
+        sf::FloatRect btb = bossText.getLocalBounds();
+        bossText.setPosition(
+            {panelX + panelW - 186.0f + 85.0f - (btb.position.x + btb.size.x * 0.5f), panelY + 87.0f});
+        bossText.setFillColor(sf::Color(255, 248, 232));
+        bossText.setOutlineColor(sf::Color(111, 20, 39));
+        bossText.setOutlineThickness(1.0f);
+        window.draw(bossText);
+    }
 
     sf::RectangleShape divider(sf::Vector2f(panelW - 70.f, 2.f));
     divider.setPosition(sf::Vector2f(panelX + 35.f, panelY + 132.f));
@@ -1658,6 +1903,131 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
 
 bool UI::handleRoundSummaryClick(sf::Vector2i mousePos) const {
     return pointInRectPadded(roundSummaryContinueRect, mousePos, 10.0f);
+}
+
+void UI::drawGameWonPopup(sf::RenderWindow& window,
+                          int roundsCleared,
+                          int tokensTotal,
+                          float windowW,
+                          float windowH) {
+    if (!fontLoaded) return;
+
+    sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
+    overlay.setFillColor(sf::Color(16, 32, 68, 150));
+    window.draw(overlay);
+
+    const float panelW = 680.f;
+    const float panelH = 430.f;
+    const float panelX = windowW * 0.5f - panelW * 0.5f;
+    const float panelY = windowH * 0.5f - panelH * 0.5f;
+
+    sf::RectangleShape panel(sf::Vector2f(panelW, panelH));
+    panel.setPosition({panelX, panelY});
+    panel.setFillColor(sf::Color(233, 241, 252, 249));
+    panel.setOutlineColor(sf::Color(95, 128, 194));
+    panel.setOutlineThickness(3.0f);
+    window.draw(panel);
+
+    sf::RectangleShape topBand(sf::Vector2f(panelW, 54.f));
+    topBand.setPosition({panelX, panelY});
+    topBand.setFillColor(sf::Color(247, 229, 153));
+    topBand.setOutlineColor(sf::Color(120, 96, 40));
+    topBand.setOutlineThickness(2.0f);
+    window.draw(topBand);
+
+    auto drawSkull = [&](float cx, float cy, float scale, sf::Color fill, sf::Color outline) {
+        float headR = 12.0f * scale;
+        sf::CircleShape head(headR);
+        head.setOrigin({headR, headR});
+        head.setPosition({cx, cy - 1.5f * scale});
+        head.setFillColor(fill);
+        head.setOutlineColor(outline);
+        head.setOutlineThickness(1.3f);
+        window.draw(head);
+
+        sf::RectangleShape jaw({headR * 1.48f, headR * 0.88f});
+        jaw.setOrigin({jaw.getSize().x * 0.5f, 0.0f});
+        jaw.setPosition({cx, cy + headR * 0.24f});
+        jaw.setFillColor(fill);
+        jaw.setOutlineColor(outline);
+        jaw.setOutlineThickness(1.1f);
+        window.draw(jaw);
+
+        sf::CircleShape eye(headR * 0.20f);
+        eye.setOrigin({eye.getRadius(), eye.getRadius()});
+        eye.setFillColor(sf::Color(22, 24, 30));
+        eye.setPosition({cx - headR * 0.42f, cy - headR * 0.16f});
+        window.draw(eye);
+        eye.setPosition({cx + headR * 0.42f, cy - headR * 0.16f});
+        window.draw(eye);
+    };
+
+    drawSkull(panelX + 42.f, panelY + 27.f, 1.0f, sf::Color(236, 244, 255), sf::Color(24, 43, 84));
+    drawSkull(panelX + panelW - 42.f, panelY + 27.f, 1.0f, sf::Color(236, 244, 255), sf::Color(24, 43, 84));
+
+    sf::Text title(font, "GAME WON", 58);
+    sf::FloatRect tb = title.getLocalBounds();
+    title.setPosition({panelX + panelW * 0.5f - (tb.position.x + tb.size.x * 0.5f), panelY + 78.f});
+    title.setFillColor(sf::Color(24, 47, 92));
+    title.setOutlineColor(sf::Color(247, 252, 255));
+    title.setOutlineThickness(1.8f);
+    window.draw(title);
+
+    sf::Text sub(font, "Third boss defeated", 36);
+    sf::FloatRect sb = sub.getLocalBounds();
+    sub.setPosition({panelX + panelW * 0.5f - (sb.position.x + sb.size.x * 0.5f), panelY + 150.f});
+    sub.setFillColor(sf::Color(40, 74, 138));
+    window.draw(sub);
+
+    sf::Text stats(font,
+                   "Rounds cleared: " + std::to_string(roundsCleared) +
+                   "    Tokens: " + std::to_string(tokensTotal),
+                   28);
+    sf::FloatRect stb = stats.getLocalBounds();
+    stats.setPosition({panelX + panelW * 0.5f - (stb.position.x + stb.size.x * 0.5f), panelY + 202.f});
+    stats.setFillColor(sf::Color(30, 58, 112));
+    window.draw(stats);
+
+    const float btnW = panelW - 96.f;
+    const float btnH = 58.f;
+    const float btnX = panelX + 48.f;
+    const float gap = 16.f;
+    float btnY = panelY + 250.f;
+
+    gameWonEndlessRect = sf::FloatRect({btnX, btnY}, {btnW, btnH});
+    gameWonRestartRect = sf::FloatRect({btnX, btnY + btnH + gap}, {btnW, btnH});
+    gameWonMenuRect = sf::FloatRect({btnX, btnY + (btnH + gap) * 2.0f}, {btnW, btnH});
+
+    auto drawButton = [&](const sf::FloatRect& rect, const std::string& label, sf::Color fill, sf::Color textColor) {
+        sf::RectangleShape btn(rect.size);
+        btn.setPosition(rect.position);
+        btn.setFillColor(fill);
+        btn.setOutlineColor(sf::Color(75, 111, 186));
+        btn.setOutlineThickness(2.5f);
+        window.draw(btn);
+
+        sf::Text txt(font, label, 31);
+        sf::FloatRect bb = txt.getLocalBounds();
+        txt.setPosition({
+            rect.position.x + rect.size.x * 0.5f - (bb.position.x + bb.size.x * 0.5f),
+            rect.position.y + rect.size.y * 0.5f - (bb.position.y + bb.size.y * 0.56f)
+        });
+        txt.setFillColor(textColor);
+        txt.setOutlineColor(sf::Color(18, 33, 69));
+        txt.setOutlineThickness(1.0f);
+        window.draw(txt);
+    };
+
+    drawButton(gameWonEndlessRect, "ENDLESS MODE", sf::Color(96, 220, 241), sf::Color(16, 42, 90));
+    drawButton(gameWonRestartRect, "RESTART RUN", sf::Color(124, 167, 248), sf::Color(18, 37, 77));
+    drawButton(gameWonMenuRect, "GAME MENU", sf::Color(245, 225, 84), sf::Color(38, 34, 15));
+}
+
+GameWonAction UI::handleGameWonClick(sf::Vector2i mousePos) const {
+    if (pointInRectPadded(gameWonEndlessRect, mousePos, 10.0f)) return GameWonAction::EndlessMode;
+    if (pointInRectPadded(gameWonRestartRect, mousePos, 10.0f)) return GameWonAction::RestartRun;
+    if (pointInRectPadded(gameWonMenuRect, mousePos, 10.0f)) return GameWonAction::GoToMenu;
+    return GameWonAction::None;
 }
 
 // ─── Inventory helpers ────────────────────────────────────────────────────────
@@ -2068,16 +2438,17 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
     const sf::Color textNormal = sf::Color(39, 63, 113);
     const sf::Color textSpecial = sf::Color(26, 51, 101);
 
-    // ── Ball section (2 slots: shot 1 + shot 2) ─────────────────────────────
+    // ── Ball section (shot slots) ───────────────────────────────────────────
     sf::Text ballLabel(font, "BALLS", 20);
     ballLabel.setPosition({x + 10.f, iy});
     ballLabel.setFillColor(sectionColor);
     window.draw(ballLabel);
     iy += 28.f;
 
-    float ballR = 22.f;
-    float slot1X = x + width * 0.28f;
-    float slot2X = x + width * 0.72f;
+    bool hasExtraBallSlot =
+        items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall);
+    int ballSlotCount = hasExtraBallSlot ? 3 : 2;
+    float ballR = hasExtraBallSlot ? 18.f : 22.f;
 
     auto drawBallSlot = [&](int slot, float sx, BallType bt) {
         sf::Text slotLabel(font, "Ball " + std::to_string(slot), 14);
@@ -2109,8 +2480,14 @@ void UI::drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items,
                  ballPreviewColor(bt));
     };
 
-    drawBallSlot(1, slot1X, items.getBallForShot(1));
-    drawBallSlot(2, slot2X, items.getBallForShot(2));
+    if (ballSlotCount == 3) {
+        drawBallSlot(1, x + width * 0.20f, items.getBallForSlot(1));
+        drawBallSlot(2, x + width * 0.50f, items.getBallForSlot(2));
+        drawBallSlot(3, x + width * 0.80f, items.getBallForSlot(3));
+    } else {
+        drawBallSlot(1, x + width * 0.28f, items.getBallForSlot(1));
+        drawBallSlot(2, x + width * 0.72f, items.getBallForSlot(2));
+    }
     iy += ballR * 2.f + 52.f;
 
     // ── Shoes section ────────────────────────────────────────────────────────
@@ -2352,8 +2729,11 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
     if (!fontLoaded) return;
     if (state != GameState::Xtreme) return;
     // Only show if player has something non-default
-    bool hasBall = (items.getBallForShot(1) != BallType::Normal) ||
-                   (items.getBallForShot(2) != BallType::Normal);
+    bool hasExtraBallSlot =
+        items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall);
+    bool hasBall = (items.getBallForSlot(1) != BallType::Normal) ||
+                   (items.getBallForSlot(2) != BallType::Normal) ||
+                   (hasExtraBallSlot && items.getBallForSlot(3) != BallType::Normal);
     bool hasShoe = (items.shoeType != ShoeType::None);
     bool hasPins = !items.pinSlotAssignments.empty();
     if (!hasBall && !hasPins && !hasShoe) return;
@@ -2375,37 +2755,32 @@ void UI::drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items,
 
     // Ball icon
     if (hasBall) {
-        float br = iconSize;
-        sf::CircleShape ball1(br);
-        ball1.setOrigin({br, br});
-        ball1.setPosition({cx, barY + barH/2.f - 11.f});
-        ball1.setFillColor(ballPreviewColor(items.getBallForShot(1)));
-        ball1.setOutlineColor({255,255,255,60});
-        ball1.setOutlineThickness(2.f);
-        window.draw(ball1);
+        float br = iconSize * 0.82f;
+        int rowCount = hasExtraBallSlot ? 3 : 2;
+        float rowStep = 11.f;
+        float startY = barY + barH * 0.5f - rowStep * (rowCount - 1) * 0.5f;
+        float maxNameW = 0.0f;
 
-        sf::Text b1(font, "Ball 1 " + ballShortName(items.getBallForShot(1)), 13);
-        b1.setPosition({cx + br + 4.f, barY + barH/2.f - 20.f});
-        b1.setFillColor(sf::Color::White);
-        window.draw(b1);
+        for (int slot = 1; slot <= rowCount; slot++) {
+            float rowY = startY + (slot - 1) * rowStep;
+            sf::CircleShape ballIcon(br);
+            ballIcon.setOrigin({br, br});
+            ballIcon.setPosition({cx, rowY});
+            ballIcon.setFillColor(ballPreviewColor(items.getBallForSlot(slot)));
+            ballIcon.setOutlineColor({255, 255, 255, 60});
+            ballIcon.setOutlineThickness(2.f);
+            window.draw(ballIcon);
 
-        sf::CircleShape ball2(br);
-        ball2.setOrigin({br, br});
-        ball2.setPosition({cx, barY + barH/2.f + 11.f});
-        ball2.setFillColor(ballPreviewColor(items.getBallForShot(2)));
-        ball2.setOutlineColor({255,255,255,60});
-        ball2.setOutlineThickness(2.f);
-        window.draw(ball2);
+            sf::Text label(font, "Ball " + std::to_string(slot) + " " +
+                                     ballShortName(items.getBallForSlot(slot)), 12);
+            label.setPosition({cx + br + 4.f, rowY - 9.f});
+            label.setFillColor(sf::Color::White);
+            window.draw(label);
 
-        sf::Text b2(font, "Ball 2 " + ballShortName(items.getBallForShot(2)), 13);
-        b2.setPosition({cx + br + 4.f, barY + barH/2.f + 2.f});
-        b2.setFillColor(sf::Color::White);
-        window.draw(b2);
+            sf::FloatRect lb = label.getLocalBounds();
+            maxNameW = std::max(maxNameW, lb.size.x);
+        }
 
-        // Measure text to advance cx
-        sf::FloatRect b1b = b1.getLocalBounds();
-        sf::FloatRect b2b = b2.getLocalBounds();
-        float maxNameW = std::max(b1b.size.x, b2b.size.x);
         cx += br + maxNameW + padding * 2.f + 10.f;
 
         // Divider
@@ -2468,7 +2843,9 @@ struct ShopOwnedPanelLayout {
     float panelH = 0.f;
     sf::FloatRect sellBall1;
     sf::FloatRect sellBall2;
+    sf::FloatRect sellBall3;
     sf::FloatRect sellShoe;
+    bool hasExtraBallSlot = false;
 };
 
 struct ShopOwnedDynamicLayout {
@@ -2495,7 +2872,9 @@ static bool pointInRect(const sf::FloatRect& rect, sf::Vector2i point, float pad
     return pointInRectPadded(rect, point, pad);
 }
 
-static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float windowH, std::size_t offerCount) {
+static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float windowH,
+                                                        std::size_t offerCount,
+                                                        const ActiveItems& items) {
     ShopOwnedPanelLayout layout;
     layout.panelW = std::clamp(windowW * 0.24f, 270.f, 330.f);
     layout.panelH = std::clamp(windowH - 130.f, 430.f, 760.f);
@@ -2515,6 +2894,9 @@ static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float win
         layout.panelY = std::max(40.f, windowH - layout.panelH - 16.f);
     }
 
+    layout.hasExtraBallSlot =
+        items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall);
+
     const float pad = 12.f;
     const float gap = 8.f;
     const float btnH = 34.f;
@@ -2524,7 +2906,13 @@ static ShopOwnedPanelLayout computeShopOwnedPanelLayout(float windowW, float win
 
     layout.sellBall1 = sf::FloatRect({layout.panelX + pad, actionTop}, {halfW, btnH});
     layout.sellBall2 = sf::FloatRect({layout.panelX + pad + halfW + gap, actionTop}, {halfW, btnH});
-    layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {actionW, btnH});
+    if (layout.hasExtraBallSlot) {
+        layout.sellBall3 = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {actionW, btnH});
+        layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + (btnH + gap) * 2.0f}, {actionW, btnH});
+    } else {
+        layout.sellBall3 = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {0.f, 0.f});
+        layout.sellShoe  = sf::FloatRect({layout.panelX + pad, actionTop + btnH + gap}, {actionW, btnH});
+    }
     return layout;
 }
 
@@ -2647,7 +3035,7 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     if (!fontLoaded) return;
     if (state != GameState::Shop) return;
 
-    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size());
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
 
     sf::RectangleShape panel({layout.panelW, layout.panelH});
     panel.setPosition({layout.panelX, layout.panelY});
@@ -2681,11 +3069,14 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
 
     BallType slot1Ball = items.getBallForSlot(1);
     BallType slot2Ball = items.getBallForSlot(2);
+    BallType slot3Ball = items.getBallForSlot(3);
     bool canSellS1 = (slot1Ball != BallType::Normal);
     bool canSellS2 = (slot2Ball != BallType::Normal);
+    bool canSellS3 = layout.hasExtraBallSlot && (slot3Ball != BallType::Normal);
     bool canSellShoe = (items.shoeType != ShoeType::None);
     int s1Value = canSellS1 ? (ballTypeCost(slot1Ball) / 2) : 0;
     int s2Value = canSellS2 ? (ballTypeCost(slot2Ball) / 2) : 0;
+    int s3Value = canSellS3 ? (ballTypeCost(slot3Ball) / 2) : 0;
     int shoeValue = canSellShoe ? (shoeTypeCost(items.shoeType) / 2) : 0;
 
     sf::Text quick(font, "QUICK SELL", 14);
@@ -2709,6 +3100,9 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
 
     drawSellButton(layout.sellBall1, "Sell Ball 1 (+" + std::to_string(s1Value) + ")", canSellS1, 15);
     drawSellButton(layout.sellBall2, "Sell Ball 2 (+" + std::to_string(s2Value) + ")", canSellS2, 15);
+    if (layout.hasExtraBallSlot) {
+        drawSellButton(layout.sellBall3, "Sell Ball 3 (+" + std::to_string(s3Value) + ")", canSellS3, 15);
+    }
     drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe, 18);
 
     sf::Text pinHeader(font, "SELL PINS", 15);
@@ -3104,7 +3498,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     if (state != GameState::Shop) return;
 
     if (shopOffers.empty()) generateShopOffers(items);
-    ShopOwnedPanelLayout ownedLayout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size());
+    ShopOwnedPanelLayout ownedLayout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
 
     // Background (menu-style sky gradient).
     sf::VertexArray bg(sf::PrimitiveType::TriangleStrip, 4);
@@ -3159,6 +3553,10 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins);
     int pinBuyLimit = hasExtraPinsPower ? 12 : 10;
     selectedPinSlot = std::clamp(selectedPinSlot, 1, pinBuyLimit);
+    bool hasExtraBallSlot =
+        items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall);
+    int ballSlotCount = hasExtraBallSlot ? 3 : 2;
+    selectedBallSlot = std::clamp(selectedBallSlot, 1, ballSlotCount);
 
     // Ball slot selector (which slot a purchased ball should fill)
     sf::Text slotTitle(font, "Ball Slot", 22);
@@ -3167,10 +3565,10 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     window.draw(slotTitle);
 
     const float slotY = 70.f;
-    const float slotW = 130.f;
+    const float slotW = (ballSlotCount == 3) ? 88.f : 130.f;
     const float slotH = 44.f;
     const float slot1X = 40.f;
-    const float slot2X = slot1X + slotW + 12.f;
+    const float slotGap = (ballSlotCount == 3) ? 8.f : 12.f;
 
     auto drawSlotButton = [&](int slot, float x) {
         bool selected = (selectedBallSlot == slot);
@@ -3181,14 +3579,18 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         b.setOutlineThickness(2.f);
         window.draw(b);
 
-        sf::Text t(font, "SHOT " + std::to_string(slot), 20);
-        t.setPosition({x + 14.f, slotY + 10.f});
+        int slotTextSize = (ballSlotCount == 3) ? 17 : 20;
+        sf::Text t(font, "SHOT " + std::to_string(slot), slotTextSize);
+        t.setPosition({x + (ballSlotCount == 3 ? 10.f : 14.f),
+                       slotY + (ballSlotCount == 3 ? 12.f : 10.f)});
         t.setFillColor(sf::Color(19, 39, 82));
         window.draw(t);
     };
 
-    drawSlotButton(1, slot1X);
-    drawSlotButton(2, slot2X);
+    for (int slot = 1; slot <= ballSlotCount; slot++) {
+        float slotX = slot1X + (slot - 1) * (slotW + slotGap);
+        drawSlotButton(slot, slotX);
+    }
 
     sf::Text slotCurrent(font, "Current: " + ballShortName(items.getBallForSlot(selectedBallSlot)), 20);
     slotCurrent.setPosition({40.f, 122.f});
@@ -3503,23 +3905,25 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     float windowH = v.getSize().y;
 
     // Slot selector buttons
+    bool hasExtraBallSlot =
+        items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall);
+    int ballSlotCount = hasExtraBallSlot ? 3 : 2;
+    selectedBallSlot = std::clamp(selectedBallSlot, 1, ballSlotCount);
+
     const float slotY = 70.f;
-    const float slotW = 130.f;
+    const float slotW = (ballSlotCount == 3) ? 88.f : 130.f;
     const float slotH = 44.f;
     const float slot1X = 40.f;
-    const float slot2X = slot1X + slotW + 12.f;
+    const float slotGap = (ballSlotCount == 3) ? 8.f : 12.f;
     const float buttonPad = 10.0f;
 
-    sf::FloatRect slot1Rect(sf::Vector2f(slot1X, slotY), sf::Vector2f(slotW, slotH));
-    sf::FloatRect slot2Rect(sf::Vector2f(slot2X, slotY), sf::Vector2f(slotW, slotH));
-
-    if (pointInRect(slot1Rect, mousePos, buttonPad)) {
-        selectedBallSlot = 1;
-        return ShopActionNone;
-    }
-    if (pointInRect(slot2Rect, mousePos, buttonPad)) {
-        selectedBallSlot = 2;
-        return ShopActionNone;
+    for (int slot = 1; slot <= ballSlotCount; slot++) {
+        float slotX = slot1X + (slot - 1) * (slotW + slotGap);
+        sf::FloatRect slotRect(sf::Vector2f(slotX, slotY), sf::Vector2f(slotW, slotH));
+        if (pointInRect(slotRect, mousePos, buttonPad)) {
+            selectedBallSlot = slot;
+            return ShopActionNone;
+        }
     }
 
     bool hasExtraPinsPower =
@@ -3558,13 +3962,18 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         return ShopActionNone;
     }
 
-    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size());
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
     if (pointInRect(layout.sellBall1, mousePos, 6.0f) && items.getBallForSlot(1) != BallType::Normal) {
         return ShopActionSellBallSlot1;
     }
     if (pointInRect(layout.sellBall2, mousePos, 6.0f) && items.getBallForSlot(2) != BallType::Normal) {
         return ShopActionSellBallSlot2;
+    }
+    if (layout.hasExtraBallSlot &&
+        pointInRect(layout.sellBall3, mousePos, 6.0f) &&
+        items.getBallForSlot(3) != BallType::Normal) {
+        return ShopActionSellBallSlot3;
     }
     if (pointInRect(layout.sellShoe, mousePos, 6.0f) && items.shoeType != ShoeType::None) {
         return ShopActionSellShoe;

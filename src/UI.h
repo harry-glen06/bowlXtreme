@@ -16,7 +16,15 @@ enum class GameState {
     Xtreme,
     Shop,
     RoundSummary,
+    GameWon,
     GameOver
+};
+
+enum class GameWonAction {
+    None,
+    EndlessMode,
+    RestartRun,
+    GoToMenu
 };
 
 enum class GameOverMode {
@@ -57,8 +65,9 @@ public:
     static constexpr int ShopActionSellPin = -3;
     static constexpr int ShopActionSellBallSlot1 = -4;
     static constexpr int ShopActionSellBallSlot2 = -5;
-    static constexpr int ShopActionSellShoe = -6;
-    static constexpr int ShopActionSellPower = -7;
+    static constexpr int ShopActionSellBallSlot3 = -6;
+    static constexpr int ShopActionSellShoe = -7;
+    static constexpr int ShopActionSellPower = -8;
     static constexpr int ShopActionSellPinByIndexBase = -1000;   // action = base - pinIndex
     static constexpr int ShopActionSellPowerByIndexBase = -2000; // action = base - powerIndex
 
@@ -122,7 +131,10 @@ public:
                              const std::string& pinPowerHintLine2,
                              bool useLiveFormulaPreview,
                              int liveImpactPreview,
-                             int liveComboPreview);
+                             int liveComboPreview,
+                             bool bossRound,
+                             const std::string& bossName,
+                             const std::string& bossDescription);
     
     void drawGameOverScreen(sf::RenderWindow& window,
                            GameOverMode mode,
@@ -143,6 +155,12 @@ public:
                                float windowW,
                                float windowH);
     bool handleRoundSummaryClick(sf::Vector2i mousePos) const;
+    void drawGameWonPopup(sf::RenderWindow& window,
+                          int roundsCleared,
+                          int tokensTotal,
+                          float windowW,
+                          float windowH);
+    GameWonAction handleGameWonClick(sf::Vector2i mousePos) const;
     
     // State management
     GameState getState() const { return state; }
@@ -204,6 +222,8 @@ private:
     float hudBigTimer = 0.0f;
     sf::Clock hudAnimClock;
     bool hudAnimClockPrimed = false;
+    bool bossInfoPopupOpen = false;
+    bool xtremeMouseWasDown = false;
 
     struct PickRateEntry {
         std::string category;
@@ -222,4 +242,7 @@ private:
     // Shared inventory rendering core
     void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);
     sf::FloatRect roundSummaryContinueRect{};
+    sf::FloatRect gameWonEndlessRect{};
+    sf::FloatRect gameWonRestartRect{};
+    sf::FloatRect gameWonMenuRect{};
 };

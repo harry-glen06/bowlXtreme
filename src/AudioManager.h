@@ -4,6 +4,14 @@
 
 class AudioManager {
 public:
+    enum class BossLaughType {
+        Enchantress,
+        Overlord,
+        Twins,
+        Emperor,
+        Monster
+    };
+
     AudioManager();
     
     // Initialization
@@ -14,6 +22,7 @@ public:
     void playPinCollision(float volume = 50.0f);
     void playExplodingPin(float volume = 75.0f);
     void playStrikeCheer(float volume = 85.0f);
+    void playBossLaugh(BossLaughType boss, float volume = 70.0f);
     void startBallRoll();
     void stopBallRoll();
     
@@ -39,6 +48,11 @@ private:
     sf::SoundBuffer pinCollisionBuffer;
     sf::SoundBuffer explodingPinBuffer;
     sf::SoundBuffer strikeCheerBuffer;
+    sf::SoundBuffer enchantressLaughBuffer;
+    sf::SoundBuffer overlordLaughBuffer;
+    sf::SoundBuffer twinsLaughBuffer;
+    sf::SoundBuffer emperorLaughBuffer;
+    sf::SoundBuffer monsterLaughBuffer;
     
     // Sound objects (Using unique_ptr for safe memory management)
     std::unique_ptr<sf::Sound> ballRollSound;
@@ -50,6 +64,11 @@ private:
     std::unique_ptr<sf::Sound> pinCollisionSound;
     std::unique_ptr<sf::Sound> explodingPinSound;
     std::unique_ptr<sf::Sound> strikeCheerSound;
+    std::unique_ptr<sf::Sound> enchantressLaughSound;
+    std::unique_ptr<sf::Sound> overlordLaughSound;
+    std::unique_ptr<sf::Sound> twinsLaughSound;
+    std::unique_ptr<sf::Sound> emperorLaughSound;
+    std::unique_ptr<sf::Sound> monsterLaughSound;
     
     // Music objects (Streamed from disk to save memory)
     sf::Music menuMusic1;   // For assets/music1.wav

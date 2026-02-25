@@ -18,6 +18,11 @@ struct ResetConfirmLayout {
     sf::FloatRect noButton;
 };
 
+struct BossIntroLayout {
+    sf::FloatRect panel;
+    sf::FloatRect continueButton;
+};
+
 ResetConfirmLayout makeResetConfirmLayout(float windowW, float windowH) {
     ResetConfirmLayout out;
     float panelW = std::clamp(windowW * 0.34f, 360.0f, 560.0f);
@@ -34,6 +39,22 @@ ResetConfirmLayout makeResetConfirmLayout(float windowW, float windowH) {
 
     out.yesButton = sf::FloatRect(sf::Vector2f(btnStartX, btnY), sf::Vector2f(btnW, btnH));
     out.noButton = sf::FloatRect(sf::Vector2f(btnStartX + btnW + btnGap, btnY), sf::Vector2f(btnW, btnH));
+    return out;
+}
+
+BossIntroLayout makeBossIntroLayout(float windowW, float windowH) {
+    BossIntroLayout out;
+    float panelW = std::clamp(windowW * 0.48f, 420.0f, 760.0f);
+    float panelH = std::clamp(windowH * 0.34f, 260.0f, 430.0f);
+    float panelX = windowW * 0.5f - panelW * 0.5f;
+    float panelY = windowH * 0.5f - panelH * 0.5f;
+    out.panel = sf::FloatRect(sf::Vector2f(panelX, panelY), sf::Vector2f(panelW, panelH));
+
+    float btnW = std::clamp(panelW * 0.30f, 150.0f, 240.0f);
+    float btnH = 54.0f;
+    float btnX = panelX + panelW * 0.5f - btnW * 0.5f;
+    float btnY = panelY + panelH - btnH - 20.0f;
+    out.continueButton = sf::FloatRect(sf::Vector2f(btnX, btnY), sf::Vector2f(btnW, btnH));
     return out;
 }
 
@@ -185,9 +206,206 @@ void Game::applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet) {
 }
 
 void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
+    if (ui.getState() == GameState::Xtreme) {
+        refreshBossStateForCurrentRound();
+    }
     // Duplicate and Swap are now manual (player-chosen), not random-on-rerack.
     applyPendingRandomPinUpgrades(pinSet);
+    applyBossPinLayout(pinSet);
+
+    // Keep 7 8 9's pin-9 destruction persistent across all rerack/layout paths.
+    if (activeItems.sevenEightNinePin9Destroyed) {
+        int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+        constexpr int idx9 = 8;
+        if (maxSlot > idx9) {
+            pinSet[idx9].setFallen(true);
+            pinSet[idx9].setVel({0.0f, 0.0f});
+            pinSet[idx9].setAngularVel(0.0f);
+            pinSet[idx9].setActive(false);
+        }
+    }
+
     updatePinSlotValueSnapshot(pinSet);
+}
+
+bool Game::isBossRound(int round) const {
+    return round > 0 && (round % 5 == 0);
+}
+
+int Game::getShotBallSlot(int shotInFrame) const {
+    if (shotInFrame <= 1) return 1;
+    if (shotInFrame == 2) return 2;
+    return 3;
+}
+
+std::string Game::getActiveBossName() const {
+    switch (activeBoss) {
+        case BossType::MissingPin: return "THE ENCHANTRESS";
+        case BossType::DoubleTarget: return "THE OVERLORD";
+        case BossType::LowBaseScore: return "THE TWINS";
+        case BossType::RandomPowerDisabledEachShot: return "THE EMPEROR";
+        case BossType::HeavyPins: return "THE MONSTER";
+        case BossType::None:
+        default: return "BOSS";
+    }
+}
+
+std::string Game::getActiveBossDescription() const {
+    switch (activeBoss) {
+        case BossType::MissingPin:
+            return "One random pin is missing every round.";
+        case BossType::DoubleTarget:
+            return "Double the normal amount of the target score.";
+        case BossType::LowBaseScore:
+            return "Base score is 5 x 0.5.";
+        case BossType::RandomPowerDisabledEachShot:
+            return "One random power disabled every shot.";
+        case BossType::HeavyPins:
+            return "All pins are 15% heavier.";
+        case BossType::None:
+        default:
+            return "Special round rules active.";
+    }
+}
+
+void Game::playBossLaughForCurrentBoss(float volume) {
+    switch (activeBoss) {
+        case BossType::MissingPin:
+            audio.playBossLaugh(AudioManager::BossLaughType::Enchantress, volume);
+            break;
+        case BossType::DoubleTarget:
+            audio.playBossLaugh(AudioManager::BossLaughType::Overlord, volume);
+            break;
+        case BossType::LowBaseScore:
+            audio.playBossLaugh(AudioManager::BossLaughType::Twins, volume);
+            break;
+        case BossType::RandomPowerDisabledEachShot:
+            audio.playBossLaugh(AudioManager::BossLaughType::Emperor, volume);
+            break;
+        case BossType::HeavyPins:
+            audio.playBossLaugh(AudioManager::BossLaughType::Monster, volume);
+            break;
+        case BossType::None:
+        default:
+            break;
+    }
+}
+
+void Game::openBossIntroIfNeeded() {
+    if (ui.getState() != GameState::Xtreme) return;
+    int round = xtreme.getRound();
+    if (!isBossRound(round)) return;
+    if (bossIntroShownRound == round) return;
+
+    refreshBossStateForCurrentRound();
+    bossIntroOpen = true;
+    bossIntroShownRound = round;
+    playBossLaughForCurrentBoss(70.0f);
+}
+
+bool Game::isPowerEnabledThisShot(PowerType p) const {
+    bool owned = activeItems.hasPower(p) || activeItems.hasPurchasedPower(p);
+    if (!owned) return false;
+
+    if (ui.getState() == GameState::Xtreme &&
+        activeBoss == BossType::RandomPowerDisabledEachShot &&
+        activeBossRound == xtreme.getRound() &&
+        bossDisabledPowerThisShot.has_value() &&
+        bossDisabledPowerThisShot.value() == p) {
+        return false;
+    }
+    return true;
+}
+
+void Game::refreshBossStateForCurrentRound() {
+    if (ui.getState() != GameState::Xtreme) {
+        activeBoss = BossType::None;
+        activeBossRound = 0;
+        bossMissingPinSlot = -1;
+        bossDisabledPowerThisShot.reset();
+        xtreme.setRoundTargetMultiplier(1.0f);
+        xtreme.setRoundClearRewardBonus(0);
+        return;
+    }
+
+    int round = xtreme.getRound();
+    if (!isBossRound(round)) {
+        activeBoss = BossType::None;
+        activeBossRound = 0;
+        bossMissingPinSlot = -1;
+        bossDisabledPowerThisShot.reset();
+        xtreme.setRoundTargetMultiplier(1.0f);
+        xtreme.setRoundClearRewardBonus(0);
+        return;
+    }
+
+    if (activeBossRound != round || activeBoss == BossType::None) {
+        activeBossRound = round;
+        bossDisabledPowerThisShot.reset();
+        bossMissingPinSlot = -1;
+
+        int pick = rand() % 5;
+        switch (pick) {
+            case 0: activeBoss = BossType::MissingPin; break;
+            case 1: activeBoss = BossType::DoubleTarget; break;
+            case 2: activeBoss = BossType::LowBaseScore; break;
+            case 3: activeBoss = BossType::RandomPowerDisabledEachShot; break;
+            default: activeBoss = BossType::HeavyPins; break;
+        }
+
+        if (activeBoss == BossType::MissingPin) {
+            int maxSlots = std::max(1, activeItems.getActivePinSlotCount());
+            bossMissingPinSlot = 1 + (rand() % maxSlots);
+        }
+    }
+
+    float targetMultiplier = (activeBoss == BossType::DoubleTarget) ? 2.0f : 1.0f;
+    xtreme.setRoundTargetMultiplier(targetMultiplier);
+    xtreme.setRoundClearRewardBonus(3); // Boss round clear pays +3.
+}
+
+void Game::applyBossPinLayout(std::vector<Pin>& pinSet) {
+    if (ui.getState() != GameState::Xtreme) return;
+    if (activeBoss != BossType::MissingPin) return;
+    if (activeBossRound != xtreme.getRound()) return;
+    if (pinSet.empty()) return;
+
+    int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+    if (maxSlot <= 0) return;
+    if (bossMissingPinSlot < 1 || bossMissingPinSlot > maxSlot) {
+        bossMissingPinSlot = 1 + (rand() % maxSlot);
+    }
+
+    int idx = bossMissingPinSlot - 1;
+    pinSet[idx].setFallen(true);
+    pinSet[idx].setActive(false);
+    pinSet[idx].setVel({0.0f, 0.0f});
+    pinSet[idx].setAngularVel(0.0f);
+}
+
+void Game::rollBossDisabledPowerForShot() {
+    bossDisabledPowerThisShot.reset();
+    if (ui.getState() != GameState::Xtreme) return;
+    if (activeBoss != BossType::RandomPowerDisabledEachShot) return;
+    if (activeBossRound != xtreme.getRound()) return;
+
+    std::vector<PowerType> candidates;
+    auto addIfOwned = [&](PowerType p) {
+        if (activeItems.hasPower(p) || activeItems.hasPurchasedPower(p)) {
+            candidates.push_back(p);
+        }
+    };
+
+    // Limit to powers that materially affect gameplay each shot.
+    addIfOwned(PowerType::Greedy);
+    addIfOwned(PowerType::RandomUpgrade);
+    addIfOwned(PowerType::Bumpers);
+    addIfOwned(PowerType::HomeBase);
+    addIfOwned(PowerType::Confusion);
+    addIfOwned(PowerType::Earthquake);
+
+    if (candidates.empty()) return;
+    bossDisabledPowerThisShot = candidates[rand() % candidates.size()];
 }
 
 void Game::applySavedPinSlotValues(std::vector<Pin>& pinSet) {
@@ -374,6 +592,7 @@ void Game::confirmRunReset() {
     bool inXtremeRun = (ui.getState() == GameState::Xtreme) ||
                        (ui.getState() == GameState::Shop) ||
                        (ui.getState() == GameState::RoundSummary) ||
+                       (ui.getState() == GameState::GameWon) ||
                        xtremeMode;
 
     if (inXtremeRun) {
@@ -388,12 +607,15 @@ void Game::confirmRunReset() {
     }
 
     gameOver = false;
+    endlessMode = false;
     resetConfirmOpen = false;
     roundSummaryLeadsToGameOver = false;
     roundSummaryPassed = false;
     pendingGameOverFromScore = false;
     postScorePauseTimer = 0.0f;
     pendingReset = false;
+    bossIntroOpen = false;
+    bossIntroShownRound = 0;
     xtremeLastRoundScoreProgress = 0;
     xtremeLastRoundTargetProgress = 0;
     equipBall(BallType::Normal);
@@ -515,6 +737,16 @@ void Game::handleEvents() {
             }
             continue;
         }
+
+        if (ev->is<sf::Event::KeyPressed>() && bossIntroOpen) {
+            auto keyEv = ev->getIf<sf::Event::KeyPressed>();
+            if (keyEv->code == sf::Keyboard::Key::Enter ||
+                keyEv->code == sf::Keyboard::Key::Space ||
+                keyEv->code == sf::Keyboard::Key::Escape) {
+                bossIntroOpen = false;
+            }
+            continue;
+        }
         
         // Handle mouse clicks for menu
         if (ev->is<sf::Event::MouseButtonPressed>()) {
@@ -524,6 +756,14 @@ void Game::handleEvents() {
                 
                 // Convert to world coordinates
                 sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+
+                if (bossIntroOpen) {
+                    BossIntroLayout modal = makeBossIntroLayout(windowW, windowH);
+                    if (pointInRectWithPad(modal.continueButton, worldPos, 8.0f)) {
+                        bossIntroOpen = false;
+                    }
+                    continue;
+                }
 
                 if (resetConfirmOpen) {
                     ResetConfirmLayout modal = makeResetConfirmLayout(windowW, windowH);
@@ -546,6 +786,9 @@ void Game::handleEvents() {
                     
                     if (clicked == MenuButton::Normal) {
                         xtremeMode = false;
+                        endlessMode = false;
+                        bossIntroOpen = false;
+                        bossIntroShownRound = 0;
                         ui.setState(GameState::Playing);
                         strikeConfetti.clear();
                         scorer.resetGame();
@@ -569,7 +812,10 @@ void Game::handleEvents() {
                         ui.setState(GameState::Xtreme);
                         strikeConfetti.clear();
                         xtreme.reset();
+                        bossIntroOpen = false;
+                        bossIntroShownRound = 0;
                         xtremeMode = true;
+                        endlessMode = false;
                         gameOver = false;
                         roundSummaryLeadsToGameOver = false;
                         roundSummaryPassed = false;
@@ -622,6 +868,51 @@ void Game::handleEvents() {
                         }
                         roundSummaryLeadsToGameOver = false;
                         cancelPinPowerSelection();
+                        continue;
+                    }
+                }
+                if (ui.getState() == GameState::GameWon) {
+                    GameWonAction wonAction = ui.handleGameWonClick(sf::Vector2i(worldPos.x, worldPos.y));
+                    if (wonAction == GameWonAction::EndlessMode) {
+                        endlessMode = true;
+                        ui.setState(GameState::Shop);
+                        cancelPinPowerSelection();
+                        xtreme.consumeShopReady();
+                        if (activeItems.powerSkip || activeItems.hasPurchasedPower(PowerType::Skip)) {
+                            activeItems.powerSkip = true;
+                            activeItems.skipCharges = 2;
+                        }
+                        continue;
+                    }
+                    if (wonAction == GameWonAction::RestartRun) {
+                        confirmRunReset();
+                        continue;
+                    }
+                    if (wonAction == GameWonAction::GoToMenu) {
+                        ui.setState(GameState::Menu);
+                        strikeConfetti.clear();
+                        scorer.resetGame();
+                        xtreme.reset();
+                        bossIntroOpen = false;
+                        bossIntroShownRound = 0;
+                        xtremeMode = false;
+                        endlessMode = false;
+                        roundSummaryLeadsToGameOver = false;
+                        roundSummaryPassed = false;
+                        pendingGameOverFromScore = false;
+                        postScorePauseTimer = 0.0f;
+                        xtremeLastRoundScoreProgress = 0;
+                        xtremeLastRoundTargetProgress = 0;
+                        xtremeRoundStartTokens = xtreme.getTokens();
+                        equipBall(BallType::Normal);
+                        activeItems.resetAll();
+                        ui.resetEquippedBall();
+                        cancelPinPowerSelection();
+                        resetBall();
+                        pins = createPins(lane.centerX(), 240.0f);
+                        audio.stopBackgroundMusic();
+                        audio.stopBallRoll();
+                        audio.playMenuMusic();
                         continue;
                     }
                 }
@@ -906,8 +1197,11 @@ void Game::handleEvents() {
                             if (sellValue > 0) xtreme.addTokens(sellValue);
                         }
                     } else if (purchased == UI::ShopActionSellBallSlot1 ||
-                               purchased == UI::ShopActionSellBallSlot2) {
-                        int slot = (purchased == UI::ShopActionSellBallSlot2) ? 2 : 1;
+                               purchased == UI::ShopActionSellBallSlot2 ||
+                               purchased == UI::ShopActionSellBallSlot3) {
+                        int slot = 1;
+                        if (purchased == UI::ShopActionSellBallSlot2) slot = 2;
+                        else if (purchased == UI::ShopActionSellBallSlot3) slot = 3;
                         BallType owned = activeItems.getBallForSlot(slot);
                         if (owned != BallType::Normal) {
                             activeItems.setBallForSlot(slot, BallType::Normal);
@@ -941,7 +1235,10 @@ void Game::handleEvents() {
                         bool canBuy = true;
 
                         if (offer.category == ShopItemCategory::Ball) {
-                            int slot = ui.getSelectedBallSlot();
+                            bool hasExtraBall = activeItems.powerExtraBall ||
+                                                activeItems.hasPurchasedPower(PowerType::ExtraBall);
+                            int slotLimit = hasExtraBall ? 3 : 2;
+                            int slot = std::clamp(ui.getSelectedBallSlot(), 1, slotLimit);
                             if (activeItems.getBallForSlot(slot) == offer.ballType) {
                                 canBuy = false;
                             }
@@ -1000,7 +1297,10 @@ void Game::handleEvents() {
                             // blocked by caps/rules; ignore click
                         } else if (offer.category == ShopItemCategory::Ball) {
                             xtreme.addTokens(-offer.cost);
-                            int slot = ui.getSelectedBallSlot();
+                            bool hasExtraBall = activeItems.powerExtraBall ||
+                                                activeItems.hasPurchasedPower(PowerType::ExtraBall);
+                            int slotLimit = hasExtraBall ? 3 : 2;
+                            int slot = std::clamp(ui.getSelectedBallSlot(), 1, slotLimit);
                             BallType oldBall = activeItems.getBallForSlot(slot);
                             if (oldBall != BallType::Normal && oldBall != offer.ballType) {
                                 xtreme.addTokens(ballTypeCost(oldBall) / 2);
@@ -1056,6 +1356,7 @@ void Game::handleEvents() {
                         applyPowerPinLayout(pins);
                         cancelPinPowerSelection();
                         resetBall();
+                        openBossIntroIfNeeded();
                     }
                 }
             }
@@ -1077,27 +1378,38 @@ void Game::resetBall() {
     activeItems.resetForNewShot();
 
     if (ui.getState() == GameState::Xtreme) {
-        bool hasExtraBall = activeItems.powerExtraBall ||
-                            activeItems.hasPurchasedPower(PowerType::ExtraBall);
-        bool hasPassedGo = activeItems.powerPassedGo ||
-                           activeItems.hasPurchasedPower(PowerType::PassedGo);
-        bool hasMoMoney = activeItems.powerMoMoney ||
-                          activeItems.hasPurchasedPower(PowerType::MoMoney);
+        refreshBossStateForCurrentRound();
+        rollBossDisabledPowerForShot();
+
+        bool hasExtraBall = isPowerEnabledThisShot(PowerType::ExtraBall);
+        bool hasPassedGo = isPowerEnabledThisShot(PowerType::PassedGo);
+        bool hasMoMoney = isPowerEnabledThisShot(PowerType::MoMoney);
         xtreme.setExtraBallEnabled(hasExtraBall);
         xtreme.setPowerPassedGo(hasPassedGo);
         xtreme.setPowerMoMoney(hasMoMoney);
-        float clampedBonus = std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
-        xtreme.setBaseCombo(1.0f + clampedBonus);
-    }
-    if (activeItems.powerBumpers) {
-        lane.bumpersOn = true;
+
+        float homeBaseBonus = isPowerEnabledThisShot(PowerType::HomeBase)
+            ? std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap)
+            : 0.0f;
+        float baseComboFloor =
+            (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound())
+                ? 0.5f
+                : 1.0f;
+        xtreme.setBaseCombo(baseComboFloor + homeBaseBonus);
+        xtreme.setBaseImpact(
+            (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound()) ? 5 : 10);
+
+        lane.bumpersOn = isPowerEnabledThisShot(PowerType::Bumpers);
+    } else if (activeItems.powerBumpers) {
+        lane.bumpersOn = ui.getBumpersDefault() || activeItems.powerBumpers;
     }
 
     // Pick the active ball based on mode + shot number.
-    // Xtreme has two shots per frame, so slot 1 -> shot 1 and slot 2 -> shot 2.
+    // Xtreme maps shot 1/2/3 to Ball slot 1/2/3.
     if (ui.getState() == GameState::Xtreme) {
         int shot = xtreme.getShotInFrame();
-        equipBall(activeItems.getBallForShot(shot));
+        BallType shotBall = activeItems.getBallForShot(shot);
+        equipBall(shotBall);
     } else {
         equipBall(activeItems.getBallForShot(1));
     }
@@ -1237,7 +1549,20 @@ void Game::prepareNewShot() {
             pins[idx9].setVel({0.0f, 0.0f});
             pins[idx9].setAngularVel(0.0f);
             pins[idx9].setActive(false);
+            activeItems.sevenEightNinePin9Destroyed = true;
             activeItems.sevenEightNineCharges--;
+        }
+    }
+
+    // Persist 7 8 9 destruction across reracks for the rest of the run.
+    if (activeItems.sevenEightNinePin9Destroyed) {
+        int maxSlot = std::min((int)pins.size(), activeItems.getActivePinSlotCount());
+        constexpr int idx9 = 8;
+        if (maxSlot > idx9 && pins[idx9].isActive()) {
+            pins[idx9].setFallen(true);
+            pins[idx9].setVel({0.0f, 0.0f});
+            pins[idx9].setAngularVel(0.0f);
+            pins[idx9].setActive(false);
         }
     }
 
@@ -1289,11 +1614,13 @@ void Game::finishPendingResetIfReady(float dt) {
         }
         int physicalPinsDownThisShot = knockedThisBall;
         int shotBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getShotInFrame() : 0;
+        int frameBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getFrameInRound() : 0;
+        int roundBeforeRecord = (ui.getState() == GameState::Xtreme) ? xtreme.getRound() : 0;
         int roundScoreBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getRoundScore() : 0;
         int targetBeforeShot = (ui.getState() == GameState::Xtreme) ? xtreme.getTargetScore() : 0;
         bool earthquakeStrikeThisShot = false;
 
-        if (ui.getState() == GameState::Xtreme && activeItems.powerEarthquake) {
+        if (ui.getState() == GameState::Xtreme && isPowerEnabledThisShot(PowerType::Earthquake)) {
             activeItems.earthquakeShotCounter++;
             if (activeItems.earthquakeShotCounter >= 10) {
                 activeItems.earthquakeShotCounter = 0;
@@ -1369,7 +1696,7 @@ void Game::finishPendingResetIfReady(float dt) {
         if (pinValueSumThisBall < 0) pinValueSumThisBall = 0;
 
         int greedyComboBonus = 0;
-        if (ui.getState() == GameState::Xtreme && activeItems.powerGreedy) {
+        if (ui.getState() == GameState::Xtreme && isPowerEnabledThisShot(PowerType::Greedy)) {
             greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
         }
 
@@ -1392,7 +1719,7 @@ void Game::finishPendingResetIfReady(float dt) {
                               physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
             bool spareThisShot = (shotBeforeRecord > 1 &&
                                   physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
-            if (activeItems.powerConfusion && spareThisShot) {
+            if (isPowerEnabledThisShot(PowerType::Confusion) && spareThisShot) {
                 strikeThisShot = true;
             }
             if (earthquakeStrikeThisShot) {
@@ -1409,7 +1736,7 @@ void Game::finishPendingResetIfReady(float dt) {
 
             triggerStrikeFx = strikeThisShot;
 
-            if (activeItems.powerHomeBase && physicalPinsDownThisShot > 0) {
+            if (isPowerEnabledThisShot(PowerType::HomeBase) && physicalPinsDownThisShot > 0) {
                 activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
                 while (activeItems.homeBasePinsTowardNextCombo >= 20) {
                     activeItems.homeBasePinsTowardNextCombo -= 20;
@@ -1419,11 +1746,15 @@ void Game::finishPendingResetIfReady(float dt) {
                     }
                 }
                 float clampedBonus = std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
-                xtreme.setBaseCombo(1.0f + clampedBonus);
+                float baseComboFloor =
+                    (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound())
+                        ? 0.5f
+                        : 1.0f;
+                xtreme.setBaseCombo(baseComboFloor + clampedBonus);
             }
 
             // Random upgrade applies once after each completed frame.
-            if (xtreme.getShotInFrame() == 1 && activeItems.powerRandomUpgrade) {
+            if (xtreme.getShotInFrame() == 1 && isPowerEnabledThisShot(PowerType::RandomUpgrade)) {
                 activeItems.pendingRandomPinUpgrades += 1;
             }
         } else {
@@ -1447,6 +1778,9 @@ void Game::finishPendingResetIfReady(float dt) {
         pendingStrikeThisShot = strikeThisShot;
         pendingRoundScoreBeforeShot = roundScoreBeforeShot;
         pendingTargetBeforeShot = targetBeforeShot;
+        pendingDisplayRoundBeforeShot = roundBeforeRecord;
+        pendingDisplayFrameBeforeShot = frameBeforeRecord;
+        pendingDisplayShotBeforeShot = shotBeforeRecord;
         pendingShotScored = true;
         pendingScoreVisualTimer = 0.0f;
         pendingScoreVisualDuration = 0.0f;
@@ -1593,6 +1927,14 @@ void Game::finishPendingResetIfReady(float dt) {
     bool needsPostScorePause = false;
     if (ui.getState() == GameState::Xtreme) {
         if (xtreme.isGameOver()) {
+            bool lostOnActiveBossRound =
+                (activeBoss != BossType::None &&
+                 activeBossRound == xtreme.getRound() &&
+                 isBossRound(xtreme.getRound()));
+            if (lostOnActiveBossRound) {
+                playBossLaughForCurrentBoss(100.0f);
+            }
+
             finalXtremeRoundsCleared = std::max(0, xtreme.getRound() - 1);
             xtremeLastRoundScoreProgress = pendingRoundScoreBeforeShot + xtreme.getLastShotScore();
             xtremeLastRoundTargetProgress = pendingTargetBeforeShot;
@@ -1622,7 +1964,12 @@ void Game::finishPendingResetIfReady(float dt) {
             roundSummaryTokensTotal = xtreme.getTokens();
             roundSummaryPassed = true;
             roundSummaryLeadsToGameOver = false;
-            ui.setState(GameState::RoundSummary);
+            int bossesCleared = roundSummaryRoundNumber / 5;
+            if (!endlessMode && bossesCleared >= 3) {
+                ui.setState(GameState::GameWon);
+            } else {
+                ui.setState(GameState::RoundSummary);
+            }
             cancelPinPowerSelection();
             pendingGameOverFromScore = false;
             postScorePauseTimer = 0.0f;
@@ -1650,6 +1997,9 @@ void Game::finishPendingResetIfReady(float dt) {
     pendingStrikeThisShot = false;
     pendingRoundScoreBeforeShot = 0;
     pendingTargetBeforeShot = 0;
+    pendingDisplayRoundBeforeShot = 0;
+    pendingDisplayFrameBeforeShot = 0;
+    pendingDisplayShotBeforeShot = 0;
     if (needsPostScorePause && ui.getState() != GameState::RoundSummary) {
         postScorePauseTimer = pendingGameOverFromScore
             ? postScorePauseDurationGameOver
@@ -1679,7 +2029,7 @@ void Game::applyGuttersAndBumpers() {
         float targetVy = -420.0f;
         v.y += (targetVy - v.y) * 0.14f;
     } else {
-        bool bumpersActive = lane.bumpersOn || activeItems.powerBumpers;
+        bool bumpersActive = lane.bumpersOn || isPowerEnabledThisShot(PowerType::Bumpers);
         if (bumpersActive) {
             // Left bumper
             if (p.x < playL + r && v.x < 0.0f) {
@@ -1710,6 +2060,13 @@ void Game::applyGuttersAndBumpers() {
 }
 
 void Game::doCollisions() {
+    float bossPinMassMult = 1.0f;
+    if (ui.getState() == GameState::Xtreme &&
+        activeBoss == BossType::HeavyPins &&
+        activeBossRound == xtreme.getRound()) {
+        bossPinMassMult = 1.15f;
+    }
+
     // Ball -> pin
     {
         sf::Vector2f bp = ball.getPos();
@@ -1733,7 +2090,8 @@ void Game::doCollisions() {
             resolveCircleCollision(
                 bp, bv, bm, br,
                 pp, pv,
-                (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f) * activeItems.pinMassMultiplier,
+                (pin.isFallen() ? pin.getMass() : pin.getMass() * 0.6f) *
+                    activeItems.pinMassMultiplier * bossPinMassMult,
                 pinCollisionRadius,
                 0.12f
             );
@@ -1861,9 +2219,9 @@ void Game::doCollisions() {
                 float r1 = pins[i].getRadius() * (pins[i].isFallen() ? 0.86f : 1.00f);
                 float r2 = pins[j].getRadius() * (pins[j].isFallen() ? 0.86f : 1.00f);
                 resolveCircleCollision(p1, v1,
-                                       pins[i].getMass() * activeItems.pinMassMultiplier, r1,
+                                       pins[i].getMass() * activeItems.pinMassMultiplier * bossPinMassMult, r1,
                                        p2, v2,
-                                       pins[j].getMass() * activeItems.pinMassMultiplier, r2,
+                                       pins[j].getMass() * activeItems.pinMassMultiplier * bossPinMassMult, r2,
                                        0.50f);
                 
                 // Play collision sound
@@ -1922,11 +2280,16 @@ void Game::update(float dt) {
     }
 
     if (ui.getState() == GameState::RoundSummary ||
-        ui.getState() == GameState::Shop) {
+        ui.getState() == GameState::Shop ||
+        ui.getState() == GameState::GameWon) {
         return;
     }
 
     if (resetConfirmOpen) {
+        return;
+    }
+
+    if (bossIntroOpen) {
         return;
     }
     
@@ -1943,6 +2306,9 @@ void Game::update(float dt) {
             ui.setState(GameState::Menu);
             strikeConfetti.clear();
             gameOver = false;
+            endlessMode = false;
+            bossIntroOpen = false;
+            bossIntroShownRound = 0;
             roundSummaryLeadsToGameOver = false;
             roundSummaryPassed = false;
             pendingGameOverFromScore = false;
@@ -2261,7 +2627,9 @@ void Game::draw() {
     }
 
     // Draw aim line
-    if (!rollLocked && !pendingReset && ui.getState() != GameState::RoundSummary) {
+    if (!rollLocked && !pendingReset &&
+        ui.getState() != GameState::RoundSummary &&
+        ui.getState() != GameState::GameWon) {
         float a = degToRad(aimDeg);
         sf::Vector2f dir(std::cos(a), std::sin(a));
         sf::Vertex line[2] = { 
@@ -2302,11 +2670,20 @@ void Game::draw() {
             if (livePinValueSum < 0) livePinValueSum = 0;
 
             int greedyComboBonus = 0;
-            if (activeItems.powerGreedy) greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
-            float liveBaseCombo = 1.0f + std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
+            if (isPowerEnabledThisShot(PowerType::Greedy)) {
+                greedyComboBonus = std::max(0, xtreme.getTokens() / 4);
+            }
+            float homeBaseBonus = isPowerEnabledThisShot(PowerType::HomeBase)
+                ? std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap)
+                : 0.0f;
+            float liveBaseCombo =
+                ((activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound()) ? 0.5f : 1.0f) +
+                homeBaseBonus;
             float liveComboValue = static_cast<float>(livePinsHit + greedyComboBonus) + liveBaseCombo;
 
-            liveImpactPreview = 10 + livePinValueSum;
+            int liveBaseImpact =
+                (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound()) ? 5 : 10;
+            liveImpactPreview = liveBaseImpact + livePinValueSum;
             liveComboPreview = std::max(1, static_cast<int>(std::lround(liveComboValue)));
         }
         if (pendingReset && pendingShotScored &&
@@ -2339,11 +2716,25 @@ void Game::draw() {
         }
     }
     if (ui.getState() == GameState::Xtreme) {
+        int displayedRound = xtreme.getRound();
+        int displayedFrame = xtreme.getFrameInRound();
+        int displayedShot = xtreme.getShotInFrame();
+        bool bossRoundNow =
+            (activeBoss != BossType::None && activeBossRound == xtreme.getRound());
+
+        if (pendingReset && pendingShotScored &&
+            pendingScoreVisualTimer < pendingScoreVisualDuration &&
+            pendingDisplayRoundBeforeShot > 0) {
+            displayedRound = pendingDisplayRoundBeforeShot;
+            displayedFrame = pendingDisplayFrameBeforeShot;
+            displayedShot = pendingDisplayShotBeforeShot;
+        }
+
         action = ui.drawXtremeHUD(
             window,
-            xtreme.getRound(),
-            xtreme.getFrameInRound(),
-            xtreme.getShotInFrame(),
+            displayedRound,
+            displayedFrame,
+            displayedShot,
             xtreme.getTotalShots(),
             xtreme.getTargetScore(),
             displayedRoundScore,
@@ -2358,7 +2749,10 @@ void Game::draw() {
             pinPowerHintLine2,
             useLiveFormulaPreview,
             liveImpactPreview,
-            liveComboPreview
+            liveComboPreview,
+            bossRoundNow,
+            bossRoundNow ? getActiveBossName() : "",
+            bossRoundNow ? getActiveBossDescription() : ""
         );
     } else if (ui.getState() == GameState::Playing) {
         action = ui.drawScorecard(window, scorer.getFrames(), scorer.getCurrentFrame(),
@@ -2375,6 +2769,15 @@ void Game::draw() {
             roundSummaryTokensTotal,
             roundSummaryPassed,
             roundSummaryLeadsToGameOver,
+            windowW,
+            windowH
+        );
+    }
+    if (ui.getState() == GameState::GameWon) {
+        ui.drawGameWonPopup(
+            window,
+            std::max(0, xtreme.getRound() - 1),
+            xtreme.getTokens(),
             windowW,
             windowH
         );
@@ -2398,6 +2801,96 @@ void Game::draw() {
                 windowW,
                 windowH);
         }
+    }
+
+    if (bossIntroOpen) {
+        BossIntroLayout modal = makeBossIntroLayout(windowW, windowH);
+
+        sf::RectangleShape dim(sf::Vector2f(windowW, windowH));
+        dim.setFillColor(sf::Color(8, 12, 26, 170));
+        window.draw(dim);
+
+        sf::RectangleShape panel(modal.panel.size);
+        panel.setPosition(modal.panel.position);
+        panel.setFillColor(sf::Color(236, 241, 251, 250));
+        panel.setOutlineColor(sf::Color(138, 36, 58));
+        panel.setOutlineThickness(3.2f);
+        window.draw(panel);
+
+        sf::RectangleShape topBand(sf::Vector2f(modal.panel.size.x, 54.0f));
+        topBand.setPosition({modal.panel.position.x, modal.panel.position.y});
+        topBand.setFillColor(sf::Color(246, 96, 118, 250));
+        topBand.setOutlineColor(sf::Color(121, 26, 46));
+        topBand.setOutlineThickness(2.0f);
+        window.draw(topBand);
+
+        std::string bossName = getActiveBossName();
+        std::string bossDesc = getActiveBossDescription();
+
+        if (ui.isFontLoaded()) {
+            sf::Text title(ui.getFont(), "BOSS ROUND " + std::to_string(xtreme.getRound()), 34);
+            sf::FloatRect tb = title.getLocalBounds();
+            title.setPosition({
+                modal.panel.position.x + modal.panel.size.x * 0.5f - (tb.position.x + tb.size.x * 0.5f),
+                modal.panel.position.y + 10.0f
+            });
+            title.setFillColor(sf::Color(255, 247, 236));
+            title.setOutlineColor(sf::Color(111, 20, 39));
+            title.setOutlineThickness(1.2f);
+            window.draw(title);
+
+            sf::Text name(ui.getFont(), bossName, 44);
+            sf::FloatRect nb = name.getLocalBounds();
+            name.setPosition({
+                modal.panel.position.x + modal.panel.size.x * 0.5f - (nb.position.x + nb.size.x * 0.5f),
+                modal.panel.position.y + 78.0f
+            });
+            name.setFillColor(sf::Color(24, 41, 80));
+            name.setOutlineColor(sf::Color(246, 250, 255));
+            name.setOutlineThickness(1.4f);
+            window.draw(name);
+
+            sf::Text desc(ui.getFont(), bossDesc, 28);
+            sf::FloatRect db = desc.getLocalBounds();
+            float descX = modal.panel.position.x + modal.panel.size.x * 0.5f - (db.position.x + db.size.x * 0.5f);
+            float descMaxX = modal.panel.position.x + modal.panel.size.x - 30.0f - db.size.x;
+            if (descX > descMaxX) descX = descMaxX;
+            if (descX < modal.panel.position.x + 30.0f) descX = modal.panel.position.x + 30.0f;
+            desc.setPosition({descX, modal.panel.position.y + 145.0f});
+            desc.setFillColor(sf::Color(38, 62, 112));
+            window.draw(desc);
+
+            sf::Text reward(ui.getFont(), "Boss clear reward: +3 dollars", 24);
+            sf::FloatRect rb = reward.getLocalBounds();
+            reward.setPosition({
+                modal.panel.position.x + modal.panel.size.x * 0.5f - (rb.position.x + rb.size.x * 0.5f),
+                modal.panel.position.y + 205.0f
+            });
+            reward.setFillColor(sf::Color(204, 128, 24));
+            reward.setOutlineColor(sf::Color(248, 252, 255));
+            reward.setOutlineThickness(1.0f);
+            window.draw(reward);
+
+            sf::RectangleShape btn(modal.continueButton.size);
+            btn.setPosition(modal.continueButton.position);
+            btn.setFillColor(sf::Color(89, 213, 242));
+            btn.setOutlineColor(sf::Color(54, 109, 194));
+            btn.setOutlineThickness(2.8f);
+            window.draw(btn);
+
+            sf::Text btnText(ui.getFont(), "START FIGHT", 31);
+            sf::FloatRect bb2 = btnText.getLocalBounds();
+            btnText.setPosition({
+                modal.continueButton.position.x + modal.continueButton.size.x * 0.5f -
+                    (bb2.position.x + bb2.size.x * 0.5f),
+                modal.continueButton.position.y + modal.continueButton.size.y * 0.5f -
+                    (bb2.position.y + bb2.size.y * 0.58f)
+            });
+            btnText.setFillColor(sf::Color(16, 41, 88));
+            window.draw(btnText);
+        }
+
+        action = GameAction::None;
     }
 
     if (resetConfirmOpen) {
@@ -2481,7 +2974,10 @@ void Game::draw() {
         strikeConfetti.clear();
         scorer.resetGame();
         xtreme.reset();
+        bossIntroOpen = false;
+        bossIntroShownRound = 0;
         xtremeMode = false;
+        endlessMode = false;
         roundSummaryLeadsToGameOver = false;
         roundSummaryPassed = false;
         pendingGameOverFromScore = false;

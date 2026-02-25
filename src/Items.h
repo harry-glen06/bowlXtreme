@@ -55,9 +55,11 @@ struct ActiveItems {
 
     // Ball currently active for this shot (set by Game::resetBall)
     BallType ballType = BallType::Normal;
-    // Persistent loadout: shot 1 uses slot 1, shot 2 uses slot 2
+    // Persistent loadout: shot 1 uses slot 1, shot 2 uses slot 2,
+    // and shot 3 uses slot 3 when Extra Ball is active.
     BallType ballSlot1 = BallType::Normal;
     BallType ballSlot2 = BallType::Normal;
+    BallType ballSlot3 = BallType::Normal;
     ShoeType shoeType  = ShoeType::None;
     std::vector<int> purchasedPowers; // cast from PowerType
 
@@ -90,6 +92,7 @@ struct ActiveItems {
     int duplicateCharges = 0;
     int swapCharges = 0;
     int sevenEightNineCharges = 0;
+    bool sevenEightNinePin9Destroyed = false;
     int skipCharges = 0;
     int earthquakeShotCounter = 0;
     int pendingRandomPinUpgrades = 0;
@@ -133,6 +136,7 @@ struct ActiveItems {
         ballType         = BallType::Normal;
         ballSlot1        = BallType::Normal;
         ballSlot2        = BallType::Normal;
+        ballSlot3        = BallType::Normal;
         shoeType         = ShoeType::None;
         radiusMultiplier = 1.0f;
         speedMultiplier  = 1.0f;
@@ -162,6 +166,7 @@ struct ActiveItems {
         duplicateCharges = 0;
         swapCharges = 0;
         sevenEightNineCharges = 0;
+        sevenEightNinePin9Destroyed = false;
         skipCharges = 0;
         earthquakeShotCounter = 0;
         pendingRandomPinUpgrades = 0;
@@ -172,15 +177,20 @@ struct ActiveItems {
     }
 
     BallType getBallForShot(int shot) const {
-        return (shot >= 2) ? ballSlot2 : ballSlot1;
+        if (shot <= 1) return ballSlot1;
+        if (shot == 2) return ballSlot2;
+        return ballSlot3;
     }
 
     BallType getBallForSlot(int slot) const {
-        return (slot == 2) ? ballSlot2 : ballSlot1;
+        if (slot == 2) return ballSlot2;
+        if (slot == 3) return ballSlot3;
+        return ballSlot1;
     }
 
     void setBallForSlot(int slot, BallType type) {
         if (slot == 2) ballSlot2 = type;
+        else if (slot == 3) ballSlot3 = type;
         else           ballSlot1 = type;
     }
 

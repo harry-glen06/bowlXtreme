@@ -49,6 +49,8 @@ public:
     void setExtraBallEnabled(bool enabled) { shotsPerFrame = enabled ? 3 : 2; }
     void setPowerPassedGo(bool enabled) { powerPassedGo = enabled; }
     void setPowerMoMoney(bool enabled) { powerMoMoney = enabled; }
+    void setRoundTargetMultiplier(float multiplier);
+    void setRoundClearRewardBonus(int bonus) { roundClearRewardBonus = (bonus < 0) ? 0 : bonus; }
 
     // Shop
     bool shopReady = false;
@@ -90,4 +92,6 @@ private:
     bool roundPassed = false;
     bool powerPassedGo = false;
     bool powerMoMoney = false;
+    float roundTargetMultiplier = 1.0f;
+    int roundClearRewardBonus = 0;
 };

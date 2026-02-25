@@ -1,5 +1,22 @@
 #include "XtremeScorer.h"
+#include <algorithm>
 #include <cmath>
+
+void XtremeScorer::setRoundTargetMultiplier(float multiplier) {
+    if (multiplier < 1.0f) multiplier = 1.0f;
+    if (std::abs(multiplier - roundTargetMultiplier) < 0.0001f) return;
+
+    float baseTarget = static_cast<float>(targetScore) / std::max(1.0f, roundTargetMultiplier);
+    int normalizedBase = static_cast<int>(std::round(baseTarget / 25.0f)) * 25;
+    if (normalizedBase < 25) normalizedBase = 25;
+
+    int adjusted = static_cast<int>(std::round(static_cast<float>(normalizedBase) * multiplier / 25.0f)) * 25;
+    if (adjusted < 25) adjusted = 25;
+
+    roundTargetMultiplier = multiplier;
+    targetScore = adjusted;
+    roundPassed = (roundScore >= targetScore);
+}
 
 void XtremeScorer::reset() {
     round = 1;
@@ -24,6 +41,8 @@ void XtremeScorer::reset() {
     roundPassed = false;
     powerPassedGo = false;
     powerMoMoney = false;
+    roundTargetMultiplier = 1.0f;
+    roundClearRewardBonus = 0;
 }
 
 void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, bool spare,
@@ -64,6 +83,15 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, bool sp
         return;
     }
 
+    auto normalizeRoundTarget = [&]() {
+        if (roundTargetMultiplier <= 1.0f) return;
+        float baseTarget = static_cast<float>(targetScore) / roundTargetMultiplier;
+        int normalizedBase = static_cast<int>(std::round(baseTarget / 25.0f)) * 25;
+        if (normalizedBase < 25) normalizedBase = 25;
+        targetScore = normalizedBase;
+        roundTargetMultiplier = 1.0f;
+    };
+
     auto nextTargetFromPercent = [&]() {
         int pct = targetIncreasePercent;
         if (round >= 15) {
@@ -95,10 +123,13 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, bool sp
             if (interest > interestCap) interest = interestCap;
             int reward = 6;     // 3 base + 3 bonus for early clear
             if (powerPassedGo) reward += 3;
+            reward += roundClearRewardBonus;
             tokenCounter += interest + reward;
 
             shopReady = true; 
 
+            normalizeRoundTarget();
+            roundClearRewardBonus = 0;
             round++;
             nextTargetFromPercent();
             roundScore = 0;
@@ -131,10 +162,13 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, bool sp
     if (interest > interestCap) interest = interestCap;
     int reward = 3;     // normal clear reward
     if (powerPassedGo) reward += 3;
+    reward += roundClearRewardBonus;
     tokenCounter += interest + reward;
 
     shopReady = true; 
 
+    normalizeRoundTarget();
+    roundClearRewardBonus = 0;
     round++;
     nextTargetFromPercent();
     roundScore = 0;

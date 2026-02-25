@@ -1,6 +1,16 @@
 #include "AudioManager.h"
 #include <cstdlib>
 #include <algorithm>
+#include <initializer_list>
+
+namespace {
+bool loadBufferFromCandidates(sf::SoundBuffer& buffer, std::initializer_list<const char*> paths) {
+    for (const char* path : paths) {
+        if (buffer.loadFromFile(path)) return true;
+    }
+    return false;
+}
+}
 
 AudioManager::AudioManager() {
     loadSounds();
@@ -43,6 +53,22 @@ void AudioManager::loadSounds() {
     if (strikeCheerBuffer.loadFromFile("assets/cheering.wav")) {
         strikeCheerSound = std::make_unique<sf::Sound>(strikeCheerBuffer);
         strikeCheerSound->setVolume(85.0f);
+    }
+
+    if (loadBufferFromCandidates(enchantressLaughBuffer, {"assets/EnchantressLaugh.wav"})) {
+        enchantressLaughSound = std::make_unique<sf::Sound>(enchantressLaughBuffer);
+    }
+    if (loadBufferFromCandidates(overlordLaughBuffer, {"assets/OverlordLaugh.wav"})) {
+        overlordLaughSound = std::make_unique<sf::Sound>(overlordLaughBuffer);
+    }
+    if (loadBufferFromCandidates(twinsLaughBuffer, {"assets/TwinsLaugh.wav"})) {
+        twinsLaughSound = std::make_unique<sf::Sound>(twinsLaughBuffer);
+    }
+    if (loadBufferFromCandidates(emperorLaughBuffer, {"assets/EmperorLaugh.wav", "assets/EmeperorLaugh.wav"})) {
+        emperorLaughSound = std::make_unique<sf::Sound>(emperorLaughBuffer);
+    }
+    if (loadBufferFromCandidates(monsterLaughBuffer, {"assets/MonsterLaugh.wav"})) {
+        monsterLaughSound = std::make_unique<sf::Sound>(monsterLaughBuffer);
     }
     
     // --- Music Files (Using if checks to silence [[nodiscard]] warnings) ---
@@ -157,6 +183,25 @@ void AudioManager::playStrikeCheer(float volume) {
         strikeCheerSound->setVolume(volume * (sfxVolume / 100.0f));
         strikeCheerSound->play();
     }
+}
+
+void AudioManager::playBossLaugh(BossLaughType boss, float volume) {
+    if (!soundsLoaded) return;
+
+    sf::Sound* sound = nullptr;
+    switch (boss) {
+        case BossLaughType::Enchantress: sound = enchantressLaughSound.get(); break;
+        case BossLaughType::Overlord:    sound = overlordLaughSound.get(); break;
+        case BossLaughType::Twins:       sound = twinsLaughSound.get(); break;
+        case BossLaughType::Emperor:     sound = emperorLaughSound.get(); break;
+        case BossLaughType::Monster:     sound = monsterLaughSound.get(); break;
+    }
+    if (!sound) return;
+
+    // Restart so boss intro / boss loss always fires audibly when requested.
+    sound->stop();
+    sound->setVolume(volume * (sfxVolume / 100.0f));
+    sound->play();
 }
 
 void AudioManager::startBallRoll() {
