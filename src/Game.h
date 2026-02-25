@@ -127,6 +127,7 @@ private:
     float backlineJamTimer = 0.0f;
     float maxShotRollTime = 7.0f;
     float backlineJamTime = 0.70f;
+    float explodingPinExtraResolveDelay = 1.2f;
 
     // Gutter state
     bool inGutter = false;
@@ -162,6 +163,7 @@ private:
     int roundSummaryTarget = 0;
     int roundSummaryTokensEarned = 0;
     int roundSummaryTokensTotal = 0;
+    std::string roundSummaryBossName;
 
     // Game over state
     bool gameOver = false;
@@ -169,6 +171,8 @@ private:
 
     bool xtremeMode = false;
     bool endlessMode = false;
+    bool devTestMode = false;
+    bool xtremeFirstShotStrikeThisFrame = false;
     int bestRound = 0;
     bool bossIntroOpen = false;
     int bossIntroShownRound = 0;

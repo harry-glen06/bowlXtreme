@@ -257,7 +257,7 @@ std::string Game::getActiveBossDescription() const {
         case BossType::DoubleTarget:
             return "Double the normal amount of the target score.";
         case BossType::LowBaseScore:
-            return "Base score is 5 x 0.5.";
+            return "Base score is 5 x 0.";
         case BossType::RandomPowerDisabledEachShot:
             return "One random power disabled every shot.";
         case BossType::HeavyPins:
@@ -300,7 +300,7 @@ void Game::openBossIntroIfNeeded() {
     refreshBossStateForCurrentRound();
     bossIntroOpen = true;
     bossIntroShownRound = round;
-    playBossLaughForCurrentBoss(70.0f);
+    playBossLaughForCurrentBoss(59.5f);
 }
 
 bool Game::isPowerEnabledThisShot(PowerType p) const {
@@ -611,6 +611,7 @@ void Game::confirmRunReset() {
     resetConfirmOpen = false;
     roundSummaryLeadsToGameOver = false;
     roundSummaryPassed = false;
+    roundSummaryBossName.clear();
     pendingGameOverFromScore = false;
     postScorePauseTimer = 0.0f;
     pendingReset = false;
@@ -724,6 +725,62 @@ void Game::handleEvents() {
                 ball.setPos(ball.getPos() + sf::Vector2f(dx, 0.0f));
                 for (auto& pin : pins) {
                     pin.translate(sf::Vector2f(dx, 0.0f));
+                }
+            }
+        }
+
+        if (ev->is<sf::Event::KeyPressed>()) {
+            auto keyEv = ev->getIf<sf::Event::KeyPressed>();
+            auto state = ui.getState();
+            bool inXtremeOrShop = (state == GameState::Xtreme || state == GameState::Shop);
+
+            if (keyEv->code == sf::Keyboard::Key::F1) {
+                devTestMode = !devTestMode;
+                continue;
+            }
+
+            if (devTestMode && inXtremeOrShop) {
+                if (keyEv->code == sf::Keyboard::Key::F2) {
+                    xtreme.addTokens(10);
+                    continue;
+                }
+
+                if (keyEv->code == sf::Keyboard::Key::F3) {
+                    if (state == GameState::Shop) {
+                        ui.generateShopOffers(activeItems);
+                    }
+                    continue;
+                }
+
+                if (keyEv->code == sf::Keyboard::Key::F4) {
+                    xtreme.debugAdvanceRounds(1);
+                    xtremeRoundStartTokens = xtreme.getTokens();
+                    xtremeLastRoundScoreProgress = 0;
+                    xtremeLastRoundTargetProgress = xtreme.getTargetScore();
+                    pendingReset = false;
+                    pendingShotScored = false;
+                    pendingScoreVisualTimer = 0.0f;
+                    pendingScoreVisualDuration = 0.0f;
+                    pendingGameOverFromScore = false;
+                    postScorePauseTimer = 0.0f;
+                    roundSummaryLeadsToGameOver = false;
+                    roundSummaryPassed = false;
+                    gameOver = false;
+                    bossIntroOpen = false;
+                    bossIntroShownRound = 0;
+                    refreshBossStateForCurrentRound();
+
+                    if (state == GameState::Xtreme) {
+                        pins = createPins(lane.centerX(), 240.0f);
+                        applyPurchasedPinTypes(pins);
+                        applyPowerPinLayout(pins);
+                        cancelPinPowerSelection();
+                        resetBall();
+                        openBossIntroIfNeeded();
+                    } else {
+                        ui.generateShopOffers(activeItems);
+                    }
+                    continue;
                 }
             }
         }
@@ -867,6 +924,7 @@ void Game::handleEvents() {
                             }
                         }
                         roundSummaryLeadsToGameOver = false;
+                        roundSummaryBossName.clear();
                         cancelPinPowerSelection();
                         continue;
                     }
@@ -899,6 +957,7 @@ void Game::handleEvents() {
                         endlessMode = false;
                         roundSummaryLeadsToGameOver = false;
                         roundSummaryPassed = false;
+                        roundSummaryBossName.clear();
                         pendingGameOverFromScore = false;
                         postScorePauseTimer = 0.0f;
                         xtremeLastRoundScoreProgress = 0;
@@ -1378,6 +1437,9 @@ void Game::resetBall() {
     activeItems.resetForNewShot();
 
     if (ui.getState() == GameState::Xtreme) {
+        if (xtreme.getShotInFrame() == 1) {
+            xtremeFirstShotStrikeThisFrame = false;
+        }
         refreshBossStateForCurrentRound();
         rollBossDisabledPowerForShot();
 
@@ -1393,7 +1455,7 @@ void Game::resetBall() {
             : 0.0f;
         float baseComboFloor =
             (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound())
-                ? 0.5f
+                ? 0.0f
                 : 1.0f;
         xtreme.setBaseCombo(baseComboFloor + homeBaseBonus);
         xtreme.setBaseImpact(
@@ -1599,7 +1661,26 @@ void Game::finishPendingResetIfReady(float dt) {
             }
         }
 
-        bool ready = (pinsStill && resetTimer >= endBuffer) || (resetTimer >= maxResetWait);
+        bool hasExplodingPinEquipped = false;
+        for (const auto& assignment : activeItems.pinSlotAssignments) {
+            if (assignment.type == PinType::Exploding) {
+                hasExplodingPinEquipped = true;
+                break;
+            }
+        }
+        if (!hasExplodingPinEquipped) {
+            for (const auto& pin : pins) {
+                if (!pin.isActive()) continue;
+                if (pin.getPinType() == PinType::Exploding) {
+                    hasExplodingPinEquipped = true;
+                    break;
+                }
+            }
+        }
+
+        float extraResolveDelay = hasExplodingPinEquipped ? explodingPinExtraResolveDelay : 0.0f;
+        bool ready = (pinsStill && resetTimer >= (endBuffer + extraResolveDelay)) ||
+                     (resetTimer >= (maxResetWait + extraResolveDelay));
         if (!ready) return;
 
         // Count pins knocked THIS ball and apply item modifiers
@@ -1711,6 +1792,7 @@ void Game::finishPendingResetIfReady(float dt) {
         }
 
         bool strikeThisShot = false;
+        bool chainStrikeCheerThisShot = false;
         bool triggerStrikeFx = false;
         if (ui.getState() == GameState::Xtreme) {
             // shotBeforeRecord is intentionally captured before recordShot(),
@@ -1725,6 +1807,29 @@ void Game::finishPendingResetIfReady(float dt) {
             if (earthquakeStrikeThisShot) {
                 strikeThisShot = true;
             }
+
+            if (shotBeforeRecord == 1) {
+                // Track if this frame started with a strike. Used for strike cheer
+                // eligibility on later shots in the same frame.
+                xtremeFirstShotStrikeThisFrame = strikeThisShot;
+            } else {
+                // Later shots can still play strike cheer when the frame began
+                // with a strike and this shot clears a fresh rack.
+                int expectedFreshRackStanding = activeItems.getActivePinSlotCount();
+                if (activeBoss == BossType::MissingPin && activeBossRound == xtreme.getRound()) {
+                    expectedFreshRackStanding = std::max(1, expectedFreshRackStanding - 1);
+                }
+                if (activeItems.sevenEightNinePin9Destroyed) {
+                    expectedFreshRackStanding = std::max(1, expectedFreshRackStanding - 1);
+                }
+                bool startedOnFreshRack =
+                    (activeItems.pinsStandingAtShotStart >= expectedFreshRackStanding);
+                bool clearedAllStandingThisShot =
+                    (physicalPinsDownThisShot >= activeItems.pinsStandingAtShotStart);
+                chainStrikeCheerThisShot =
+                    xtremeFirstShotStrikeThisFrame && startedOnFreshRack && clearedAllStandingThisShot;
+            }
+
             bool spareBonusThisShot = spareThisShot && !strikeThisShot;
             xtreme.recordShot(
                 knockedThisBall,
@@ -1734,7 +1839,7 @@ void Game::finishPendingResetIfReady(float dt) {
                 static_cast<float>(thirdTimeComboMultiplier),
                 greedyComboBonus);
 
-            triggerStrikeFx = strikeThisShot;
+            triggerStrikeFx = strikeThisShot || chainStrikeCheerThisShot;
 
             if (isPowerEnabledThisShot(PowerType::HomeBase) && physicalPinsDownThisShot > 0) {
                 activeItems.homeBasePinsTowardNextCombo += physicalPinsDownThisShot;
@@ -1748,7 +1853,7 @@ void Game::finishPendingResetIfReady(float dt) {
                 float clampedBonus = std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap);
                 float baseComboFloor =
                     (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound())
-                        ? 0.5f
+                        ? 0.0f
                         : 1.0f;
                 xtreme.setBaseCombo(baseComboFloor + clampedBonus);
             }
@@ -1932,7 +2037,7 @@ void Game::finishPendingResetIfReady(float dt) {
                  activeBossRound == xtreme.getRound() &&
                  isBossRound(xtreme.getRound()));
             if (lostOnActiveBossRound) {
-                playBossLaughForCurrentBoss(100.0f);
+                playBossLaughForCurrentBoss(115.0f);
             }
 
             finalXtremeRoundsCleared = std::max(0, xtreme.getRound() - 1);
@@ -1945,6 +2050,8 @@ void Game::finishPendingResetIfReady(float dt) {
             roundSummaryTokensTotal = xtreme.getTokens();
             roundSummaryPassed = false;
             roundSummaryLeadsToGameOver = true;
+            roundSummaryBossName =
+                isBossRound(roundSummaryRoundNumber) ? getActiveBossName() : "";
             ui.setState(GameState::RoundSummary);
             cancelPinPowerSelection();
             pendingGameOverFromScore = false;
@@ -1964,6 +2071,8 @@ void Game::finishPendingResetIfReady(float dt) {
             roundSummaryTokensTotal = xtreme.getTokens();
             roundSummaryPassed = true;
             roundSummaryLeadsToGameOver = false;
+            roundSummaryBossName =
+                isBossRound(roundSummaryRoundNumber) ? getActiveBossName() : "";
             int bossesCleared = roundSummaryRoundNumber / 5;
             if (!endlessMode && bossesCleared >= 3) {
                 ui.setState(GameState::GameWon);
@@ -2309,9 +2418,10 @@ void Game::update(float dt) {
             endlessMode = false;
             bossIntroOpen = false;
             bossIntroShownRound = 0;
-            roundSummaryLeadsToGameOver = false;
-            roundSummaryPassed = false;
-            pendingGameOverFromScore = false;
+                        roundSummaryLeadsToGameOver = false;
+                        roundSummaryPassed = false;
+                        roundSummaryBossName.clear();
+                        pendingGameOverFromScore = false;
             postScorePauseTimer = 0.0f;
             pendingReset = false;
             xtremeLastRoundScoreProgress = 0;
@@ -2573,12 +2683,26 @@ void Game::update(float dt) {
 }
 
 void Game::draw() {
+    auto drawDevOverlay = [&]() {
+        if (!devTestMode || !ui.isFontLoaded()) return;
+        sf::Text dev(ui.getFont(),
+                     "DEV MODE  F1:TOGGLE  F2:+10 TOKENS  F3:REROLL SHOP  F4:+1 ROUND",
+                     18);
+        dev.setFillColor(sf::Color(249, 245, 176));
+        dev.setOutlineColor(sf::Color(22, 28, 48));
+        dev.setOutlineThickness(1.2f);
+        sf::FloatRect db = dev.getLocalBounds();
+        dev.setPosition({windowW * 0.5f - (db.position.x + db.size.x * 0.5f), windowH - 30.0f});
+        window.draw(dev);
+    };
+
     window.clear(sf::Color(84, 128, 208));
 
     // Draw menu if in menu state
     if (ui.getState() == GameState::Menu) {
         float dt = clock.getElapsedTime().asSeconds();
         ui.drawMenu(window, windowW, windowH, dt);
+        drawDevOverlay();
         window.display();
         return;
     }
@@ -2587,6 +2711,7 @@ void Game::draw() {
         float dt = clock.getElapsedTime().asSeconds();
         ui.drawMenu(window, windowW, windowH, dt);
         ui.drawSettings(window, windowW, windowH);
+        drawDevOverlay();
         window.display();
         return;
     }
@@ -2595,12 +2720,14 @@ void Game::draw() {
         float dt = clock.getElapsedTime().asSeconds();
         ui.drawMenu(window, windowW, windowH, dt);
         ui.drawTutorial(window, windowW, windowH);
+        drawDevOverlay();
         window.display();
         return;
     }
 
     if (ui.getState() == GameState::Shop) {
         ui.drawShop(window, xtreme.getTokens(), windowW, windowH, activeItems);
+        drawDevOverlay();
         window.display();
         return;
     }
@@ -2650,6 +2777,7 @@ void Game::draw() {
     int liveImpactPreview = xtreme.getLastImpact();
     int liveComboPreview = xtreme.getLastCombo();
     int displayedRoundScore = xtreme.getRoundScore();
+    int displayedTargetScore = xtreme.getTargetScore();
     if (ui.getState() == GameState::Xtreme) {
         if (rollLocked || pendingReset) {
             useLiveFormulaPreview = true;
@@ -2677,18 +2805,19 @@ void Game::draw() {
                 ? std::min(activeItems.homeBaseComboBonus, kHomeBaseComboBonusCap)
                 : 0.0f;
             float liveBaseCombo =
-                ((activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound()) ? 0.5f : 1.0f) +
+                ((activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound()) ? 0.0f : 1.0f) +
                 homeBaseBonus;
             float liveComboValue = static_cast<float>(livePinsHit + greedyComboBonus) + liveBaseCombo;
 
             int liveBaseImpact =
                 (activeBoss == BossType::LowBaseScore && activeBossRound == xtreme.getRound()) ? 5 : 10;
             liveImpactPreview = liveBaseImpact + livePinValueSum;
-            liveComboPreview = std::max(1, static_cast<int>(std::lround(liveComboValue)));
+            liveComboPreview = std::max(0, static_cast<int>(std::lround(liveComboValue)));
         }
         if (pendingReset && pendingShotScored &&
             pendingScoreVisualTimer < pendingScoreVisualDuration) {
             displayedRoundScore = pendingRoundScoreBeforeShot;
+            displayedTargetScore = pendingTargetBeforeShot;
         }
 
         if (activeItems.duplicateCharges > 0) {
@@ -2736,7 +2865,7 @@ void Game::draw() {
             displayedFrame,
             displayedShot,
             xtreme.getTotalShots(),
-            xtreme.getTargetScore(),
+            displayedTargetScore,
             displayedRoundScore,
             xtreme.getTokens(),
             xtreme.getLastImpact(),
@@ -2769,6 +2898,7 @@ void Game::draw() {
             roundSummaryTokensTotal,
             roundSummaryPassed,
             roundSummaryLeadsToGameOver,
+            roundSummaryBossName,
             windowW,
             windowH
         );
@@ -2980,6 +3110,7 @@ void Game::draw() {
         endlessMode = false;
         roundSummaryLeadsToGameOver = false;
         roundSummaryPassed = false;
+        roundSummaryBossName.clear();
         pendingGameOverFromScore = false;
         postScorePauseTimer = 0.0f;
         xtremeLastRoundScoreProgress = 0;
@@ -2996,6 +3127,7 @@ void Game::draw() {
         audio.playMenuMusic();
     }
 
+    drawDevOverlay();
     window.display();
 }
 

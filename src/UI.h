@@ -152,6 +152,7 @@ public:
                                int tokensTotal,
                                bool passed,
                                bool leadsToGameOver,
+                               const std::string& bossName,
                                float windowW,
                                float windowH);
     bool handleRoundSummaryClick(sf::Vector2i mousePos) const;
@@ -216,6 +217,8 @@ private:
     int hudComboTarget = 1;
     float hudImpactValue = 10.0f;
     float hudComboValue = 1.0f;
+    int hudFormulaBaseImpact = 10;
+    int hudFormulaBaseCombo = 1;
     bool hudCounting = false;
     bool hudCountingFormula = false;
     bool hudShowBigScore = false;

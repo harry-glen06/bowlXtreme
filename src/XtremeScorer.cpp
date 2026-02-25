@@ -2,6 +2,24 @@
 #include <algorithm>
 #include <cmath>
 
+void XtremeScorer::refreshLastPreviewFromBase() {
+    lastImpact = baseImpact;
+    lastCombo = static_cast<int>(std::lround(baseCombo));
+    lastShotScore = static_cast<int>(std::lround(static_cast<float>(lastImpact) * baseCombo));
+}
+
+void XtremeScorer::setBaseImpact(int v) {
+    if (v < 0) v = 0;
+    baseImpact = v;
+    refreshLastPreviewFromBase();
+}
+
+void XtremeScorer::setBaseCombo(float v) {
+    if (v < 0.0f) v = 0.0f;
+    baseCombo = v;
+    refreshLastPreviewFromBase();
+}
+
 void XtremeScorer::setRoundTargetMultiplier(float multiplier) {
     if (multiplier < 1.0f) multiplier = 1.0f;
     if (std::abs(multiplier - roundTargetMultiplier) < 0.0001f) return;
@@ -33,9 +51,7 @@ void XtremeScorer::reset() {
 
     targetScore = targetStart;
 
-    lastImpact = baseImpact;
-    lastCombo = static_cast<int>(std::lround(baseCombo));
-    lastShotScore = static_cast<int>(std::lround(baseImpact * baseCombo));
+    refreshLastPreviewFromBase();
     lastPinsHit = 0;
     lastPinValueSum = 0;
     roundPassed = false;
@@ -173,4 +189,48 @@ void XtremeScorer::recordShot(int pinsHit, int pinValueSum, bool strike, bool sp
     nextTargetFromPercent();
     roundScore = 0;
     roundPassed = false;
+}
+
+void XtremeScorer::debugAdvanceRounds(int roundsToAdvance) {
+    if (lost) return;
+    if (roundsToAdvance <= 0) return;
+
+    auto normalizeRoundTarget = [&]() {
+        if (roundTargetMultiplier <= 1.0f) return;
+        float baseTarget = static_cast<float>(targetScore) / roundTargetMultiplier;
+        int normalizedBase = static_cast<int>(std::round(baseTarget / 25.0f)) * 25;
+        if (normalizedBase < 25) normalizedBase = 25;
+        targetScore = normalizedBase;
+        roundTargetMultiplier = 1.0f;
+    };
+
+    auto nextTargetFromPercent = [&]() {
+        int pct = targetIncreasePercent;
+        if (round >= 15) {
+            pct = targetIncreasePercentRound15Plus;
+        } else if (round >= 10) {
+            pct = targetIncreasePercentRound10Plus;
+        }
+        if (pct < 1) pct = 1;
+        float scaled = static_cast<float>(targetScore) * (100.0f + static_cast<float>(pct)) / 100.0f;
+        int snapped = static_cast<int>(std::round(scaled / 25.0f)) * 25;
+        if (snapped <= targetScore) snapped = targetScore + 25;
+        targetScore = snapped;
+    };
+
+    for (int i = 0; i < roundsToAdvance; i++) {
+        normalizeRoundTarget();
+        roundClearRewardBonus = 0;
+        shopReady = false;
+        roundPassed = false;
+        roundScore = 0;
+        frameInRound = 1;
+        shotInFrame = 1;
+        round++;
+        nextTargetFromPercent();
+    }
+
+    lastPinsHit = 0;
+    lastPinValueSum = 0;
+    refreshLastPreviewFromBase();
 }

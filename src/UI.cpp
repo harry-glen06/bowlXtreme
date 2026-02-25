@@ -1093,16 +1093,34 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         dt = hudAnimClock.restart().asSeconds();
     }
 
+    int formulaBaseImpact = 10;
+    int formulaBaseCombo = 1;
+    if (bossRound && bossName == "THE TWINS") {
+        formulaBaseImpact = 5;
+        formulaBaseCombo = 0;
+    }
+    if (!hudCounting && !hudCountingFormula && !hudShowBigScore &&
+        (hudFormulaBaseImpact != formulaBaseImpact || hudFormulaBaseCombo != formulaBaseCombo)) {
+        hudFormulaBaseImpact = formulaBaseImpact;
+        hudFormulaBaseCombo = formulaBaseCombo;
+        hudImpactTarget = formulaBaseImpact;
+        hudComboTarget = formulaBaseCombo;
+        hudImpactValue = static_cast<float>(formulaBaseImpact);
+        hudComboValue = static_cast<float>(formulaBaseCombo);
+    }
+
     if (totalShots <= 0) {
         hudLastShotCounter = 0;
         hudCountTarget = 0;
         hudCountValue = 0.0f;
         hudCountTimer = 0.0f;
         hudFormulaTimer = 0.0f;
-        hudImpactTarget = 10;
-        hudComboTarget = 1;
-        hudImpactValue = 10.0f;
-        hudComboValue = 1.0f;
+        hudFormulaBaseImpact = formulaBaseImpact;
+        hudFormulaBaseCombo = formulaBaseCombo;
+        hudImpactTarget = formulaBaseImpact;
+        hudComboTarget = formulaBaseCombo;
+        hudImpactValue = static_cast<float>(formulaBaseImpact);
+        hudComboValue = static_cast<float>(formulaBaseCombo);
         hudCounting = false;
         hudCountingFormula = false;
         hudShowBigScore = false;
@@ -1110,13 +1128,15 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     } else if (totalShots != hudLastShotCounter) {
         hudLastShotCounter = totalShots;
         hudCountTarget = std::max(0, lastShotScore);
-        hudImpactTarget = std::max(10, impact);
-        hudComboTarget = std::max(1, combo);
+        hudImpactTarget = std::max(0, impact);
+        hudComboTarget = std::max(0, combo);
         hudCountValue = 0.0f;
-        hudImpactValue = 10.0f;
-        hudComboValue = 1.0f;
+        hudImpactValue = static_cast<float>(formulaBaseImpact);
+        hudComboValue = static_cast<float>(formulaBaseCombo);
         hudFormulaTimer = 0.0f;
-        int formulaDelta = (hudImpactTarget - 10) + (hudComboTarget - 1) * 3;
+        int formulaDelta = std::max(
+            0,
+            (hudImpactTarget - formulaBaseImpact) + (hudComboTarget - formulaBaseCombo) * 3);
         hudFormulaDuration = std::clamp(0.25f + (float)formulaDelta * 0.02f, 0.25f, 0.75f);
         hudCountTimer = 0.0f;
         hudCountDuration = std::clamp(0.30f + (float)hudCountTarget / 320.0f, 0.30f, 1.10f);
@@ -1131,8 +1151,8 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         float t = (hudFormulaDuration > 0.001f) ? (hudFormulaTimer / hudFormulaDuration) : 1.0f;
         t = std::clamp(t, 0.0f, 1.0f);
         float eased = 1.0f - std::pow(1.0f - t, 3.0f);
-        hudImpactValue = 10.0f + (float)(hudImpactTarget - 10) * eased;
-        hudComboValue = 1.0f + (float)(hudComboTarget - 1) * eased;
+        hudImpactValue = (float)formulaBaseImpact + (float)(hudImpactTarget - formulaBaseImpact) * eased;
+        hudComboValue = (float)formulaBaseCombo + (float)(hudComboTarget - formulaBaseCombo) * eased;
 
         if (t >= 1.0f) {
             hudImpactValue = (float)hudImpactTarget;
@@ -1161,10 +1181,12 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
             hudCountTarget = 0;
             hudCountValue = 0.0f;
             hudFormulaTimer = 0.0f;
-            hudImpactTarget = 10;
-            hudComboTarget = 1;
-            hudImpactValue = 10.0f;
-            hudComboValue = 1.0f;
+            hudFormulaBaseImpact = formulaBaseImpact;
+            hudFormulaBaseCombo = formulaBaseCombo;
+            hudImpactTarget = formulaBaseImpact;
+            hudComboTarget = formulaBaseCombo;
+            hudImpactValue = static_cast<float>(formulaBaseImpact);
+            hudComboValue = static_cast<float>(formulaBaseCombo);
         }
     }
 
@@ -1210,6 +1232,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
 
     float lx = leftPanelX + 18.0f;
     float y = leftPanelY + 9.0f;
+    float bossBadgeBottomY = leftPanelY;
     const float leftTextMaxW = sidePanelW - 34.0f;
     static float bossPulseTime = 0.0f;
     bossPulseTime += std::clamp(dt, 0.0f, 0.05f);
@@ -1231,7 +1254,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
 
     if (bossRound) {
         float badgeX = lx;
-        float badgeY = leftPanelY + 36.0f;
+        float badgeY = leftPanelY + 58.0f;
         bossBadgeRect = sf::FloatRect({badgeX, badgeY}, {bossBadgeW, 24.0f});
         sf::ConvexShape bossBadge = createRoundedRect(
             {bossBadgeRect.size.x, bossBadgeRect.size.y},
@@ -1256,10 +1279,15 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         if (mousePressedEdge && pointInRectPadded(bossBadgeRect, mouseWorld, 7.0f)) {
             bossInfoPopupOpen = !bossInfoPopupOpen;
         }
+        bossBadgeBottomY = badgeY + bossBadgeRect.size.y;
     } else {
         bossInfoPopupOpen = false;
     }
-    y += 64.0f;
+    if (bossRound) {
+        y = std::max(y + 64.0f, bossBadgeBottomY + 12.0f);
+    } else {
+        y += 64.0f;
+    }
 
     float targetProgress = 0.0f;
     if (targetScore > 0) {
@@ -1335,11 +1363,11 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     window.draw(t3);
     y += 48;
 
-    int shownImpact = std::max(10, (int)std::round(hudImpactValue));
-    int shownCombo = std::max(1, (int)std::round(hudComboValue));
+    int shownImpact = std::max(0, (int)std::round(hudImpactValue));
+    int shownCombo = std::max(0, (int)std::round(hudComboValue));
     if (useLiveFormulaPreview) {
-        shownImpact = std::max(10, liveImpactPreview);
-        shownCombo = std::max(1, liveComboPreview);
+        shownImpact = std::max(0, liveImpactPreview);
+        shownCombo = std::max(0, liveComboPreview);
     }
     sf::Text big(font, formatCompactScore(shownImpact) + " X " + formatCompactScore(shownCombo), 58);
     fitTextToPanel(big, leftTextMaxW, 24);
@@ -1469,7 +1497,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         float infoW = std::clamp(sidePanelW - 20.0f, 230.0f, 360.0f);
         float infoH = 144.0f;
         float infoX = leftPanelX + 10.0f;
-        float infoY = leftPanelY + 66.0f;
+        float infoY = leftPanelY + 96.0f;
         bossInfoRect = sf::FloatRect({infoX, infoY}, {infoW, infoH});
 
         sf::RectangleShape infoShadow({infoW, infoH});
@@ -1677,6 +1705,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
                                int tokensTotal,
                                bool passed,
                                bool leadsToGameOver,
+                               const std::string& bossName,
                                float windowW,
                                float windowH) {
     if (!fontLoaded) return;
@@ -1772,8 +1801,13 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
         startRound = roundNumber - markerCount / 2;
         if (startRound < 1) startRound = 1;
     }
+    const float bossStripBadgeW = 150.f;
     const float markerLeft = stripX + 20.f;
-    const float markerRight = stripX + stripW - 20.f;
+    float markerRight = stripX + stripW - 20.f;
+    if (bossRound) {
+        // Reserve room on the right side of the strip for the boss badge.
+        markerRight -= (bossStripBadgeW + 16.f);
+    }
     const float markerY = stripY + stripH * 0.5f;
     const float step = (markerCount > 1) ? ((markerRight - markerLeft) / (float)(markerCount - 1)) : 0.f;
 
@@ -1829,18 +1863,44 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     status.setOutlineThickness(1.5f);
     window.draw(status);
 
+    auto fitPopupText = [&](sf::Text& text, float maxW, unsigned minSize) {
+        while (text.getCharacterSize() > minSize && text.getLocalBounds().size.x > maxW) {
+            text.setCharacterSize(text.getCharacterSize() - 1);
+        }
+    };
+
+    bool showBossDefeatedLine = bossRound && passed && !bossName.empty();
+    float summaryYOffset = 0.f;
+    if (showBossDefeatedLine) {
+        sf::Text bossDefeated(font, bossName + " DEFEATED", 30);
+        fitPopupText(bossDefeated, panelW - 80.f, 18);
+        sf::FloatRect bdb = bossDefeated.getLocalBounds();
+        bossDefeated.setPosition({
+            panelX + panelW * 0.5f - (bdb.position.x + bdb.size.x * 0.5f),
+            panelY + 116.f
+        });
+        bossDefeated.setFillColor(sf::Color(245, 92, 112));
+        bossDefeated.setOutlineColor(sf::Color(18, 35, 67));
+        bossDefeated.setOutlineThickness(1.2f);
+        window.draw(bossDefeated);
+        summaryYOffset = 24.f;
+    }
+
     if (bossRound) {
+        const float bossStripBadgeH = 30.f;
+        const float bossBadgeX = stripX + stripW - bossStripBadgeW - 10.f;
+        const float bossBadgeY = stripY + (stripH - bossStripBadgeH) * 0.5f;
         sf::ConvexShape bossBadge =
-            createRoundedRect({170.0f, 32.0f}, 8.0f, sf::Color(245, 107, 122, 245));
-        bossBadge.setPosition({panelX + panelW - 186.0f, panelY + 82.0f});
+            createRoundedRect({bossStripBadgeW, bossStripBadgeH}, 8.0f, sf::Color(245, 107, 122, 245));
+        bossBadge.setPosition({bossBadgeX, bossBadgeY});
         bossBadge.setOutlineColor(sf::Color(130, 35, 56));
         bossBadge.setOutlineThickness(1.8f);
         window.draw(bossBadge);
 
         sf::Text bossText(font, "BOSS ROUND", 19);
         sf::FloatRect btb = bossText.getLocalBounds();
-        bossText.setPosition(
-            {panelX + panelW - 186.0f + 85.0f - (btb.position.x + btb.size.x * 0.5f), panelY + 87.0f});
+        bossText.setPosition({bossBadgeX + bossStripBadgeW * 0.5f - (btb.position.x + btb.size.x * 0.5f),
+                              bossBadgeY + 4.0f});
         bossText.setFillColor(sf::Color(255, 248, 232));
         bossText.setOutlineColor(sf::Color(111, 20, 39));
         bossText.setOutlineThickness(1.0f);
@@ -1848,14 +1908,14 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     }
 
     sf::RectangleShape divider(sf::Vector2f(panelW - 70.f, 2.f));
-    divider.setPosition(sf::Vector2f(panelX + 35.f, panelY + 132.f));
+    divider.setPosition(sf::Vector2f(panelX + 35.f, panelY + 132.f + summaryYOffset));
     divider.setFillColor(sf::Color(132, 162, 220, 190));
     window.draw(divider);
 
     sf::Text ratio(font,
                    "Score: " + std::to_string(roundScore) + "/" + std::to_string(targetScore),
                    40);
-    ratio.setPosition(sf::Vector2f(panelX + 36.f, panelY + 150.f));
+    ratio.setPosition(sf::Vector2f(panelX + 36.f, panelY + 150.f + summaryYOffset));
     ratio.setFillColor(sf::Color(246, 224, 79));
     ratio.setOutlineColor(sf::Color(16, 34, 68));
     ratio.setOutlineThickness(1.4f);
@@ -1865,14 +1925,14 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     if (tokensEarned >= 0) tokenEarnedText += "+";
     tokenEarnedText += std::to_string(tokensEarned);
     sf::Text earned(font, tokenEarnedText, 34);
-    earned.setPosition(sf::Vector2f(panelX + 36.f, panelY + 222.f));
+    earned.setPosition(sf::Vector2f(panelX + 36.f, panelY + 222.f + summaryYOffset));
     earned.setFillColor(sf::Color(46, 202, 232));
     earned.setOutlineColor(sf::Color(16, 34, 68));
     earned.setOutlineThickness(1.2f);
     window.draw(earned);
 
     sf::Text total(font, "Tokens total: " + std::to_string(tokensTotal), 30);
-    total.setPosition(sf::Vector2f(panelX + 36.f, panelY + 274.f));
+    total.setPosition(sf::Vector2f(panelX + 36.f, panelY + 274.f + summaryYOffset));
     total.setFillColor(sf::Color(25, 46, 92));
     total.setOutlineColor(sf::Color(244, 249, 255));
     total.setOutlineThickness(1.0f);
@@ -1917,7 +1977,7 @@ void UI::drawGameWonPopup(sf::RenderWindow& window,
     window.draw(overlay);
 
     const float panelW = 680.f;
-    const float panelH = 430.f;
+    const float panelH = 500.f;
     const float panelX = windowW * 0.5f - panelW * 0.5f;
     const float panelY = windowH * 0.5f - panelH * 0.5f;
 
@@ -1992,7 +2052,13 @@ void UI::drawGameWonPopup(sf::RenderWindow& window,
     const float btnH = 58.f;
     const float btnX = panelX + 48.f;
     const float gap = 16.f;
-    float btnY = panelY + 250.f;
+    const float buttonsTotalH = btnH * 3.0f + gap * 2.0f;
+    const float minBtnY = stats.getPosition().y + stats.getLocalBounds().size.y + 20.0f;
+    float btnY = panelY + panelH - buttonsTotalH - 18.0f;
+    if (btnY < minBtnY) btnY = minBtnY;
+    if (btnY + buttonsTotalH > panelY + panelH - 10.0f) {
+        btnY = panelY + panelH - buttonsTotalH - 10.0f;
+    }
 
     gameWonEndlessRect = sf::FloatRect({btnX, btnY}, {btnW, btnH});
     gameWonRestartRect = sf::FloatRect({btnX, btnY + btnH + gap}, {btnW, btnH});
@@ -3389,7 +3455,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Pin, BallType::Normal, PinType::ChangeIsGood, ShoeType::None, PowerType::Greedy,
          "Change Is Good","When another pin changes,\nthis pin gains +2 value.", 3},
         {ShopItemCategory::Pin, BallType::Normal, PinType::ThirdTime, ShoeType::None, PowerType::Greedy,
-         "3rd Time",     "Every 3rd-Time hit this pin is hit:\ncombo x2 this shot.",     3},
+         "3rd Time",     "Every 3rd-Time this pin is hit:\ncombo x2 this shot.",     3},
         // Shoes
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Clown, PowerType::Greedy,
          "Clown Shoes",  "Wobble launch angle.\n8% slower.\nFirst buy: +10 dollars.", 0},
@@ -3499,6 +3565,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
     if (shopOffers.empty()) generateShopOffers(items);
     ShopOwnedPanelLayout ownedLayout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
+    ShopCardLayout cardLayout = computeShopCardLayout(windowW, ownedLayout, shopOffers.size());
 
     // Background (menu-style sky gradient).
     sf::VertexArray bg(sf::PrimitiveType::TriangleStrip, 4);
@@ -3528,10 +3595,11 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     tokenText.setOutlineThickness(2);
     window.draw(tokenText);
 
-    const float skipX = windowW - 250.f;
-    const float skipY = 88.f;
     const float skipW = 220.f;
     const float skipH = 40.f;
+    float skipX = cardLayout.areaMinX + (cardLayout.areaW - skipW) * 0.5f;
+    float skipY = cardLayout.firstCardY - skipH - 12.f;
+    if (skipY < 88.f) skipY = 88.f;
     if (items.skipCharges > 0) {
         bool canUseSkip = tokens >= 1;
         sf::RectangleShape skipBtn({skipW, skipH});
@@ -3658,7 +3726,6 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     pinSlotCurrent.setFillColor({24, 46, 95});
     window.draw(pinSlotCurrent);
 
-    ShopCardLayout cardLayout = computeShopCardLayout(windowW, ownedLayout, shopOffers.size());
     const bool compactCards = shopOffers.size() > 4;
     const float buyBtnH = compactCards ? 38.f : 44.f;
     const float buyBtnBottomMargin = compactCards ? 10.f : 12.f;
@@ -3952,17 +4019,20 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         return ShopActionNone;
     }
 
-    const float skipX = windowW - 250.f;
-    const float skipY = 88.f;
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
+    ShopCardLayout cardLayout = computeShopCardLayout(windowW, layout, shopOffers.size());
+
     const float skipW = 220.f;
     const float skipH = 40.f;
+    float skipX = cardLayout.areaMinX + (cardLayout.areaW - skipW) * 0.5f;
+    float skipY = cardLayout.firstCardY - skipH - 12.f;
+    if (skipY < 88.f) skipY = 88.f;
     sf::FloatRect rerollRect(sf::Vector2f(skipX, skipY), sf::Vector2f(skipW, skipH));
     if (items.skipCharges > 0 && pointInRect(rerollRect, mousePos, buttonPad)) {
         if (tokens >= 1) return ShopActionReroll;
         return ShopActionNone;
     }
 
-    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
     if (pointInRect(layout.sellBall1, mousePos, 6.0f) && items.getBallForSlot(1) != BallType::Normal) {
         return ShopActionSellBallSlot1;
@@ -3989,7 +4059,6 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
         }
     }
 
-    ShopCardLayout cardLayout = computeShopCardLayout(windowW, layout, shopOffers.size());
     const int maxPermanentPowers = items.getMaxPermanentPowerSlots();
     const bool compactCards = shopOffers.size() > 4;
     const float buyBtnH = compactCards ? 38.f : 44.f;

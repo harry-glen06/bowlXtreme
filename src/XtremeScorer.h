@@ -41,8 +41,8 @@ public:
     int getLastPinValueSum() const { return lastPinValueSum; }
 
     // Tuning
-    void setBaseImpact(int v) { baseImpact = v; }
-    void setBaseCombo(float v) { baseCombo = v; }
+    void setBaseImpact(int v);
+    void setBaseCombo(float v);
     void setTargetStart(int v) { targetStart = v; }
     void setTargetIncrease(int v) { targetIncreasePercent = v; } // percent
     void setTargetIncreasePercent(int v) { targetIncreasePercent = v; }
@@ -56,6 +56,9 @@ public:
     bool shopReady = false;
     bool isShopReady() const { return shopReady; }
     void consumeShopReady() { shopReady = false; }
+
+    // Dev/Test helper: jump ahead by N rounds and recalc target progression.
+    void debugAdvanceRounds(int roundsToAdvance = 1);
 
 private:
     int round = 1;
@@ -94,4 +97,6 @@ private:
     bool powerMoMoney = false;
     float roundTargetMultiplier = 1.0f;
     int roundClearRewardBonus = 0;
+
+    void refreshLastPreviewFromBase();
 };
