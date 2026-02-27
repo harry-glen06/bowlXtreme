@@ -1,39 +1,39 @@
 category,item,shown,picked,pick_rate_percent
-BALL,8-Ball,52,6,11.54
-BALL,Black Hole,34,3,8.82
-BALL,Fastball,34,8,23.53
-BALL,Heavy Ball,41,11,26.83
-BALL,Icy Ball,17,0,0.00
-BALL,Midas Ball,32,4,12.50
-BALL,Odd Ball,42,3,7.14
-BALL,Retrigger,25,1,4.00
-BALL,Upgrade Ball,38,12,31.58
-PIN,3rd Time,37,16,43.24
-PIN,Big Pin,37,12,32.43
-PIN,Change Is Good,25,4,16.00
-PIN,Copy Cat,34,3,8.82
-PIN,Exploding Pin,43,16,37.21
-PIN,Gold Pin,29,9,31.03
-PIN,Ice Pin,39,11,28.21
-PIN,Level Up,16,3,18.75
-PIN,Light Pin,44,5,11.36
-PIN,Lover,18,7,38.89
-PIN,Lucky Ducky,31,9,29.03
-PIN,Mischievous,34,2,5.88
-POWER,7 8 9,25,3,12.00
-POWER,Bumpers,37,3,8.11
-POWER,Confusion,38,6,15.79
-POWER,Duplicate,43,10,23.26
-POWER,Earthquake,38,1,2.63
-POWER,Extra Ball,44,8,18.18
-POWER,Extra Pins,38,12,31.58
-POWER,Extra Slot,34,4,11.76
-POWER,Greedy,39,3,7.69
-POWER,Home Base,39,9,23.08
-POWER,Mo Money,30,7,23.33
-POWER,Passed Go,31,7,22.58
-POWER,Random Upgrade,26,3,11.54
-POWER,Reroll,35,2,5.71
-POWER,Sales,34,6,17.65
-POWER,Swap Pins,44,3,6.82
-POWER,Upgrades+3,36,2,5.56
+BALL,8-Ball,57,12,21.05
+BALL,Black Hole,37,3,8.11
+BALL,Fastball,38,9,23.68
+BALL,Heavy Ball,45,13,28.89
+BALL,Icy Ball,18,0,0.00
+BALL,Midas Ball,34,5,14.71
+BALL,Odd Ball,47,3,6.38
+BALL,Retrigger,33,3,9.09
+BALL,Upgrade Ball,41,13,31.71
+PIN,3rd Time,41,16,39.02
+PIN,Big Pin,42,13,30.95
+PIN,Change Is Good,29,6,20.69
+PIN,Copy Cat,36,4,11.11
+PIN,Exploding Pin,46,19,41.30
+PIN,Gold Pin,33,11,33.33
+PIN,Ice Pin,44,12,27.27
+PIN,Level Up,19,5,26.32
+PIN,Light Pin,46,5,10.87
+PIN,Lover,21,7,33.33
+PIN,Lucky Ducky,35,9,25.71
+PIN,Mischievous,40,4,10.00
+POWER,7 8 9,28,3,10.71
+POWER,Bumpers,40,4,10.00
+POWER,Confusion,39,7,17.95
+POWER,Duplicate,47,11,23.40
+POWER,Earthquake,43,2,4.65
+POWER,Extra Ball,49,10,20.41
+POWER,Extra Pins,40,13,32.50
+POWER,Extra Slot,37,5,13.51
+POWER,Greedy,42,4,9.52
+POWER,Home Base,44,12,27.27
+POWER,Mo Money,35,8,22.86
+POWER,Passed Go,38,7,18.42
+POWER,Random Upgrade,30,4,13.33
+POWER,Reroll,39,4,10.26
+POWER,Sales,37,8,21.62
+POWER,Swap Pins,50,3,6.00
+POWER,Upgrades+3,39,2,5.13

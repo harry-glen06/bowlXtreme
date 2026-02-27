@@ -136,32 +136,10 @@ jobs:
           name: bowling-mac-x86_64
           path: mac-x86_64
 
-      - name: Package combined Mac zip
+      - name: Package separate Mac zips
         run: |
-          mkdir -p release-mac
-
-          # Prefer the launcher from arm64 artifact, fallback to x86_64.
-          if [ -f mac-arm64/release-mac-arm64/Play\ Bowling.command ]; then
-            cp mac-arm64/release-mac-arm64/Play\ Bowling.command release-mac/Play\ Bowling.command
-          elif [ -f mac-x86_64/release-mac-x86_64/Play\ Bowling.command ]; then
-            cp mac-x86_64/release-mac-x86_64/Play\ Bowling.command release-mac/Play\ Bowling.command
-          fi
-
-          # Include both binaries so launcher can auto-pick.
-          cp mac-arm64/release-mac-arm64/bowling-arm64 release-mac/bowling-mac-arm64
-          cp mac-x86_64/release-mac-x86_64/bowling-x86_64 release-mac/bowling-mac-x86_64
-          chmod +x release-mac/Play\ Bowling.command
-          chmod +x release-mac/bowling-mac-arm64
-          chmod +x release-mac/bowling-mac-x86_64
-
-          # Copy assets once.
-          if [ -d mac-arm64/release-mac-arm64/assets ]; then
-            cp -r mac-arm64/release-mac-arm64/assets release-mac/assets
-          elif [ -d mac-x86_64/release-mac-x86_64/assets ]; then
-            cp -r mac-x86_64/release-mac-x86_64/assets release-mac/assets
-          fi
-
-          zip -r bowling-mac.zip release-mac
+          zip -r bowling-mac-arm64.zip mac-arm64/release-mac-arm64
+          zip -r bowling-mac-x86_64.zip mac-x86_64/release-mac-x86_64
 
       - name: Download Windows build
         uses: actions/download-artifact@v4
@@ -172,12 +150,14 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            bowling-mac.zip
+            bowling-mac-arm64.zip
+            bowling-mac-x86_64.zip
             bowling-windows.zip
           body: |
             ## How to play
 
-            **Mac:** Download `bowling-mac.zip`, unzip it, and double-click `Play Bowling.command`.
-            > If macOS blocks it: right-click → Open → Open anyway.
+            **Mac (Apple Silicon M1/M2/M3):** Download `bowling-mac-arm64.zip`, unzip it, and double-click `Play Bowling.command`.
+            **Mac (Intel):** Download `bowling-mac-x86_64.zip`, unzip it, and double-click `Play Bowling.command`.
+            > If macOS blocks it: right-click -> Open -> Open anyway.
 
             **Windows:** Download `bowling-windows.zip`, unzip it, and double-click `bowling.exe`.

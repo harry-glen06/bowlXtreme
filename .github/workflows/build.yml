@@ -3,15 +3,20 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'          # triggers when you push a tag like v1.0, v1.1 etc
-  workflow_dispatch:  # lets you trigger manually from GitHub's UI
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
-  # ────────────────────────────────────────────────────────────────
-  # macOS build
-  # ────────────────────────────────────────────────────────────────
   build-mac:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: macos-13
+          - arch: arm64
+            runner: macos-14
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -25,32 +30,28 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
-      - name: Package
+      - name: Package Mac zip (${{ matrix.arch }})
         run: |
-          mkdir -p release-mac
-          cp build/bowling release-mac/bowling
-          # Copy assets if they exist
+          mkdir -p release-mac-${{ matrix.arch }}
+          cp build/bowling release-mac-${{ matrix.arch }}/bowling
           if [ -d assets ]; then
-            cp -r assets release-mac/assets
+            cp -r assets release-mac-${{ matrix.arch }}/assets
           fi
-          # Add a simple launch script so friends can double-click
-          cat > release-mac/Play\ Bowling.command << 'EOF'
+          cat > release-mac-${{ matrix.arch }}/Play\ Bowling.command << 'EOF'
           #!/bin/bash
           cd "$(dirname "$0")"
           ./bowling
           EOF
-          chmod +x release-mac/Play\ Bowling.command
-          zip -r bowling-mac.zip release-mac
+          chmod +x release-mac-${{ matrix.arch }}/Play\ Bowling.command
+          chmod +x release-mac-${{ matrix.arch }}/bowling
+          zip -r bowling-mac-${{ matrix.arch }}.zip release-mac-${{ matrix.arch }}
 
-      - name: Upload artifact
+      - name: Upload Mac artifact (${{ matrix.arch }})
         uses: actions/upload-artifact@v4
         with:
-          name: bowling-mac
-          path: bowling-mac.zip
+          name: bowling-mac-${{ matrix.arch }}-zip
+          path: bowling-mac-${{ matrix.arch }}.zip
 
-  # ────────────────────────────────────────────────────────────────
-  # Windows build
-  # ────────────────────────────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
     steps:
@@ -76,23 +77,18 @@ jobs:
         run: |
           mkdir release-windows
           copy build\Release\bowling.exe release-windows\bowling.exe
-          # Copy SFML DLLs
           copy build\Release\*.dll release-windows\ 2>nul || true
-          # Copy assets if they exist
           if (Test-Path assets) {
             Copy-Item -Recurse assets release-windows\assets
           }
           Compress-Archive -Path release-windows\* -DestinationPath bowling-windows.zip
 
-      - name: Upload artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: bowling-windows
           path: bowling-windows.zip
 
-  # ────────────────────────────────────────────────────────────────
-  # Create a GitHub Release with both zips attached
-  # ────────────────────────────────────────────────────────────────
   release:
     needs: [build-mac, build-windows]
     runs-on: ubuntu-latest
@@ -100,26 +96,41 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download Mac build
+      - name: Download Mac arm64 build
         uses: actions/download-artifact@v4
         with:
-          name: bowling-mac
+          name: bowling-mac-arm64-zip
+          path: artifacts/macos-arm64
+
+      - name: Download Mac x86_64 build
+        uses: actions/download-artifact@v4
+        with:
+          name: bowling-mac-x86_64-zip
+          path: artifacts/macos-x86_64
 
       - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
           name: bowling-windows
+          path: artifacts/windows
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            bowling-mac.zip
-            bowling-windows.zip
+            artifacts/macos-arm64/bowling-mac-arm64.zip
+            artifacts/macos-x86_64/bowling-mac-x86_64.zip
+            artifacts/windows/bowling-windows.zip
           body: |
             ## How to play
 
-            **Mac:** Download `bowling-mac.zip`, unzip it, and double-click `Play Bowling.command`.
-            > If macOS blocks it: right-click → Open → Open anyway.
+            **Mac (Apple Silicon M1/M2/M3):**
+            Download `bowling-mac-arm64.zip`, unzip, then open `Play Bowling.command`.
 
-            **Windows:** Download `bowling-windows.zip`, unzip it, and double-click `bowling.exe`.
+            **Mac (Intel):**
+            Download `bowling-mac-x86_64.zip`, unzip, then open `Play Bowling.command`.
+
+            > If macOS blocks it: right-click `Play Bowling.command` -> Open.
+
+            **Windows:**
+            Download `bowling-windows.zip`, unzip, and run `bowling.exe`.

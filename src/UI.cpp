@@ -64,7 +64,82 @@ struct TutorialPageData {
     sf::Color accent;
 };
 
-const std::array<TutorialPageData, 5> kTutorialPages = {{
+struct TutorialLayout {
+    float panelW = 0.0f;
+    float panelH = 0.0f;
+    float panelX = 0.0f;
+    float panelY = 0.0f;
+    float sidePad = 0.0f;
+    float buttonW = 0.0f;
+    float buttonH = 0.0f;
+    float buttonY = 0.0f;
+    sf::FloatRect menuRect{};
+    sf::FloatRect backRect{};
+    sf::FloatRect nextRect{};
+};
+
+static TutorialLayout computeTutorialLayout(float windowW, float windowH) {
+    TutorialLayout layout;
+
+    const float maxPanelW = std::max(420.0f, windowW - 20.0f);
+    const float maxPanelH = std::max(360.0f, windowH - 20.0f);
+    layout.panelW = std::min(920.0f, windowW * 0.90f);
+    layout.panelH = std::min(700.0f, windowH * 0.90f);
+    layout.panelW = std::min(layout.panelW, maxPanelW);
+    layout.panelH = std::min(layout.panelH, maxPanelH);
+    layout.panelX = windowW * 0.5f - layout.panelW * 0.5f;
+    layout.panelY = windowH * 0.5f - layout.panelH * 0.5f;
+
+    layout.sidePad = std::clamp(layout.panelW * 0.055f, 24.0f, 48.0f);
+    const float buttonGap = 20.0f;
+    const float maxButtonW = (layout.panelW - layout.sidePad * 2.0f - buttonGap * 2.0f) / 3.0f;
+    layout.buttonW = std::clamp(layout.panelW * 0.20f, 110.0f, 188.0f);
+    layout.buttonW = std::min(layout.buttonW, maxButtonW);
+    layout.buttonH = std::clamp(layout.panelH * 0.095f, 48.0f, 58.0f);
+    layout.buttonY = layout.panelY + layout.panelH - layout.buttonH - 32.0f;
+
+    const float leftX = layout.panelX + layout.sidePad;
+    const float centerX = layout.panelX + layout.panelW * 0.5f - layout.buttonW * 0.5f;
+    const float rightX = layout.panelX + layout.panelW - layout.sidePad - layout.buttonW;
+    layout.menuRect = sf::FloatRect({leftX, layout.buttonY}, {layout.buttonW, layout.buttonH});
+    layout.backRect = sf::FloatRect({centerX, layout.buttonY}, {layout.buttonW, layout.buttonH});
+    layout.nextRect = sf::FloatRect({rightX, layout.buttonY}, {layout.buttonW, layout.buttonH});
+    return layout;
+}
+
+static std::vector<std::string> wrapLineToWidth(const sf::Font& font,
+                                                const std::string& line,
+                                                unsigned size,
+                                                float maxWidth) {
+    std::vector<std::string> out;
+    if (line.empty()) {
+        out.push_back("");
+        return out;
+    }
+
+    std::istringstream words(line);
+    std::string word;
+    std::string current;
+    while (words >> word) {
+        std::string candidate = current.empty() ? word : current + " " + word;
+        sf::Text probe(font, candidate, size);
+        if (!current.empty() && probe.getLocalBounds().size.x > maxWidth) {
+            out.push_back(current);
+            current = word;
+        } else {
+            current = candidate;
+        }
+    }
+    if (!current.empty()) {
+        out.push_back(current);
+    }
+    if (out.empty()) {
+        out.push_back(line);
+    }
+    return out;
+}
+
+const std::array<TutorialPageData, 6> kTutorialPages = {{
     {
         "BASICS",
         {
@@ -116,6 +191,19 @@ const std::array<TutorialPageData, 5> kTutorialPages = {{
         },
         4,
         sf::Color(250, 210, 90)
+    },
+    {
+        "BOSS ROUNDS",
+        {
+            "Every 5th round is a boss round.",
+            "Boss rounds apply special rule changes for that round.",
+            "Look for skull markers and the red BOSS TARGET card.",
+            "Click the boss badge in-game to see the active boss rule.",
+            "",
+            ""
+        },
+        4,
+        sf::Color(246, 124, 148)
     },
     {
         "POWER HOTKEYS",
@@ -604,82 +692,114 @@ void UI::drawTutorial(sf::RenderWindow& window, float windowW, float windowH) {
     if (tutorialPage < 0) tutorialPage = 0;
     if (tutorialPage >= (int)kTutorialPages.size()) tutorialPage = (int)kTutorialPages.size() - 1;
     const TutorialPageData& page = kTutorialPages[(size_t)tutorialPage];
+    const TutorialLayout layout = computeTutorialLayout(windowW, windowH);
 
     sf::RectangleShape overlay(sf::Vector2f(windowW, windowH));
     overlay.setFillColor(sf::Color(22, 44, 90, 130));
     window.draw(overlay);
 
-    float panelW = std::min(900.0f, windowW * 0.84f);
-    float panelH = std::min(680.0f, windowH * 0.82f);
-    float panelX = windowW * 0.5f - panelW * 0.5f;
-    float panelY = windowH * 0.5f - panelH * 0.5f;
-
-    sf::RectangleShape panel(sf::Vector2f(panelW, panelH));
-    panel.setPosition(sf::Vector2f(panelX, panelY));
+    sf::RectangleShape panel(sf::Vector2f(layout.panelW, layout.panelH));
+    panel.setPosition(sf::Vector2f(layout.panelX, layout.panelY));
     panel.setFillColor(sf::Color(229, 239, 252, 246));
     panel.setOutlineColor(sf::Color(98, 130, 198));
     panel.setOutlineThickness(3.0f);
     window.draw(panel);
 
-    sf::RectangleShape accentBar(sf::Vector2f(panelW, 8.0f));
-    accentBar.setPosition(sf::Vector2f(panelX, panelY));
+    sf::RectangleShape accentBar(sf::Vector2f(layout.panelW, 8.0f));
+    accentBar.setPosition(sf::Vector2f(layout.panelX, layout.panelY));
     accentBar.setFillColor(page.accent);
     window.draw(accentBar);
 
-    sf::Text header(font, "TUTORIAL", 56);
-    header.setPosition(sf::Vector2f(panelX + 42.0f, panelY + 30.0f));
+    const unsigned headerSize = layout.panelW < 760.0f ? 46 : 56;
+    const unsigned pageSize = layout.panelW < 760.0f ? 22 : 26;
+    const unsigned titleSize = layout.panelW < 760.0f ? 34 : 40;
+    sf::Text header(font, "TUTORIAL", headerSize);
+    header.setPosition(sf::Vector2f(layout.panelX + layout.sidePad, layout.panelY + 28.0f));
     header.setFillColor(sf::Color(19, 39, 82));
     window.draw(header);
 
     sf::Text pageIndex(
         font,
         "Page " + std::to_string(tutorialPage + 1) + "/" + std::to_string((int)kTutorialPages.size()),
-        26);
+        pageSize);
     sf::FloatRect pageBounds = pageIndex.getLocalBounds();
-    pageIndex.setPosition(sf::Vector2f(panelX + panelW - pageBounds.size.x - 46.0f, panelY + 44.0f));
+    pageIndex.setPosition(sf::Vector2f(
+        layout.panelX + layout.panelW - layout.sidePad - (pageBounds.position.x + pageBounds.size.x),
+        layout.panelY + 40.0f));
     pageIndex.setFillColor(sf::Color(59, 93, 157));
     window.draw(pageIndex);
 
-    sf::Text title(font, page.title, 40);
-    title.setPosition(sf::Vector2f(panelX + 42.0f, panelY + 120.0f));
+    float titleY = layout.panelY + (layout.panelH < 560.0f ? 104.0f : 120.0f);
+    sf::Text title(font, page.title, titleSize);
+    title.setPosition(sf::Vector2f(layout.panelX + layout.sidePad, titleY));
     title.setFillColor(page.accent);
     window.draw(title);
 
-    float lineY = panelY + 200.0f;
-    for (int i = 0; i < page.lineCount; i++) {
-        sf::Text line(font, std::string("- ") + page.lines[(size_t)i], 30);
-        line.setPosition(sf::Vector2f(panelX + 50.0f, lineY));
-        line.setFillColor(sf::Color(33, 58, 106));
-        window.draw(line);
-        lineY += 62.0f;
+    float helperY = layout.buttonY - 54.0f;
+    float bodyTop = titleY + (float)titleSize + 20.0f;
+    float bodyBottom = helperY - 18.0f;
+    float bodyWidth = layout.panelW - layout.sidePad * 2.0f;
+    float bulletWrapWidth = std::max(160.0f, bodyWidth - 26.0f);
+
+    std::vector<std::vector<std::string>> wrappedLines;
+    int bodySize = layout.panelW < 760.0f ? 30 : 32;
+    int chosenBodySize = 18;
+    float chosenLineStep = 0.0f;
+    float chosenBulletGap = 0.0f;
+    const float availableBodyH = std::max(90.0f, bodyBottom - bodyTop);
+    for (int size = bodySize; size >= 18; --size) {
+        wrappedLines.clear();
+        float lineStep = (float)size + std::max(9.0f, (float)size * 0.42f);
+        float bulletGap = std::max(8.0f, (float)size * 0.20f);
+        float usedH = 0.0f;
+        for (int i = 0; i < page.lineCount; i++) {
+            wrappedLines.push_back(wrapLineToWidth(font, page.lines[(size_t)i], (unsigned)size, bulletWrapWidth));
+            usedH += lineStep * (float)wrappedLines.back().size();
+            if (i + 1 < page.lineCount) usedH += bulletGap;
+        }
+        if (usedH <= availableBodyH || size == 18) {
+            chosenBodySize = size;
+            chosenLineStep = lineStep;
+            chosenBulletGap = bulletGap;
+            break;
+        }
     }
 
-    sf::Text helper(font, "Read each page, then press DONE.", 24);
-    helper.setPosition(sf::Vector2f(panelX + 50.0f, panelY + panelH - 170.0f));
+    float lineY = bodyTop;
+    for (size_t i = 0; i < wrappedLines.size(); i++) {
+        for (size_t j = 0; j < wrappedLines[i].size(); j++) {
+            std::string rowText = (j == 0 ? "- " : "  ") + wrappedLines[i][j];
+            sf::Text line(font, rowText, (unsigned)chosenBodySize);
+            line.setPosition(sf::Vector2f(layout.panelX + layout.sidePad, lineY));
+            line.setFillColor(sf::Color(33, 58, 106));
+            window.draw(line);
+            lineY += chosenLineStep;
+        }
+        if (i + 1 < wrappedLines.size()) lineY += chosenBulletGap;
+    }
+
+    const unsigned helperSize = layout.panelW < 760.0f ? 22 : 24;
+    sf::Text helper(font, "Read each page, then press DONE.", helperSize);
+    helper.setPosition(sf::Vector2f(layout.panelX + layout.sidePad, helperY));
     helper.setFillColor(sf::Color(62, 92, 148));
     window.draw(helper);
 
-    float buttonY = panelY + panelH - 108.0f;
-    sf::FloatRect menuRect(sf::Vector2f(panelX + 40.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
-    sf::FloatRect backRect(sf::Vector2f(panelX + panelW * 0.5f - 85.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
-    sf::FloatRect nextRect(sf::Vector2f(panelX + panelW - 210.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
-
-    sf::RectangleShape menuButton(menuRect.size);
-    menuButton.setPosition(menuRect.position);
+    sf::RectangleShape menuButton(layout.menuRect.size);
+    menuButton.setPosition(layout.menuRect.position);
     menuButton.setFillColor(sf::Color(245, 65, 91));
     menuButton.setOutlineColor(sf::Color(132, 28, 45));
     menuButton.setOutlineThickness(2.0f);
     window.draw(menuButton);
 
-    sf::RectangleShape backButton(backRect.size);
-    backButton.setPosition(backRect.position);
+    sf::RectangleShape backButton(layout.backRect.size);
+    backButton.setPosition(layout.backRect.position);
     backButton.setFillColor(tutorialPage > 0 ? sf::Color(95, 216, 241) : sf::Color(175, 195, 229));
     backButton.setOutlineColor(sf::Color(67, 111, 194));
     backButton.setOutlineThickness(2.0f);
     window.draw(backButton);
 
-    sf::RectangleShape nextButton(nextRect.size);
-    nextButton.setPosition(nextRect.position);
+    sf::RectangleShape nextButton(layout.nextRect.size);
+    nextButton.setPosition(layout.nextRect.position);
     nextButton.setFillColor(tutorialPage + 1 < (int)kTutorialPages.size()
         ? sf::Color(245, 228, 70)
         : sf::Color(101, 236, 162));
@@ -696,9 +816,12 @@ void UI::drawTutorial(sf::RenderWindow& window, float windowW, float windowH) {
         label.setFillColor(sf::Color(20, 40, 82));
         window.draw(label);
     };
-    drawCenteredButtonText(menuRect, "MENU", 30);
-    drawCenteredButtonText(backRect, "BACK", 30);
-    drawCenteredButtonText(nextRect, (tutorialPage + 1 < (int)kTutorialPages.size()) ? "NEXT" : "DONE", 30);
+    unsigned buttonTextSize = layout.buttonW < 150.0f ? 24 : 30;
+    drawCenteredButtonText(layout.menuRect, "MENU", buttonTextSize);
+    drawCenteredButtonText(layout.backRect, "BACK", buttonTextSize);
+    drawCenteredButtonText(layout.nextRect,
+                           (tutorialPage + 1 < (int)kTutorialPages.size()) ? "NEXT" : "DONE",
+                           buttonTextSize);
 }
 
 bool UI::handleTutorialClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
@@ -709,28 +832,20 @@ bool UI::handleTutorialClick(sf::RenderWindow& window, sf::Vector2i mousePos) {
     if (tutorialPage < 0) tutorialPage = 0;
     if (tutorialPage >= (int)kTutorialPages.size()) tutorialPage = (int)kTutorialPages.size() - 1;
 
-    float panelW = std::min(900.0f, windowW * 0.84f);
-    float panelH = std::min(680.0f, windowH * 0.82f);
-    float panelX = windowW * 0.5f - panelW * 0.5f;
-    float panelY = windowH * 0.5f - panelH * 0.5f;
-
-    float buttonY = panelY + panelH - 108.0f;
-    sf::FloatRect menuRect(sf::Vector2f(panelX + 40.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
-    sf::FloatRect backRect(sf::Vector2f(panelX + panelW * 0.5f - 85.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
-    sf::FloatRect nextRect(sf::Vector2f(panelX + panelW - 210.0f, buttonY), sf::Vector2f(170.0f, 56.0f));
+    const TutorialLayout layout = computeTutorialLayout(windowW, windowH);
     const float clickPad = 12.0f;
 
-    if (pointInRectPadded(menuRect, mousePos, clickPad)) {
+    if (pointInRectPadded(layout.menuRect, mousePos, clickPad)) {
         tutorialPage = 0;
         return true;
     }
 
-    if (pointInRectPadded(backRect, mousePos, clickPad) && tutorialPage > 0) {
+    if (pointInRectPadded(layout.backRect, mousePos, clickPad) && tutorialPage > 0) {
         tutorialPage--;
         return false;
     }
 
-    if (pointInRectPadded(nextRect, mousePos, clickPad)) {
+    if (pointInRectPadded(layout.nextRect, mousePos, clickPad)) {
         if (tutorialPage + 1 < (int)kTutorialPages.size()) {
             tutorialPage++;
             return false;
@@ -1397,7 +1512,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
     shotRow.setOutlineThickness(1.4f);
     window.draw(shotRow);
 
-    sf::Text shotScore(font, "shot add: " + formatCompactScore(shownShotAdd), 23);
+    sf::Text shotScore(font, "shot add: " + std::to_string(shownShotAdd), 23);
     fitTextToPanel(shotScore, leftTextMaxW - 10.0f, 14);
     shotScore.setPosition(sf::Vector2f(lx + 8.0f, y + 1.0f));
     shotScore.setFillColor(hudCounting ? sf::Color(18, 158, 112) : sf::Color(25, 44, 88));
@@ -1446,7 +1561,7 @@ GameAction UI::drawXtremeHUD(sf::RenderWindow& window,
         fade = std::clamp(fade, 0.0f, 1.0f);
         std::uint8_t alpha = (std::uint8_t)(255.0f * fade);
 
-        sf::Text bigShot(font, "+" + formatCompactScore(hudCountTarget), 88);
+        sf::Text bigShot(font, "+" + std::to_string(hudCountTarget), 88);
         fitTextToPanel(bigShot, sidePanelW * 0.82f, 40);
         bigShot.setStyle(sf::Text::Bold);
         bigShot.setScale({pulse, pulse});
@@ -1939,9 +2054,9 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     window.draw(total);
 
     const float btnW = 320.f;
-    const float btnH = 62.f;
+    const float btnH = 56.f;
     const float btnX = panelX + panelW * 0.5f - btnW * 0.5f;
-    const float btnY = panelY + panelH - 86.f;
+    const float btnY = panelY + panelH - 94.f;
     roundSummaryContinueRect = sf::FloatRect(sf::Vector2f(btnX, btnY), sf::Vector2f(btnW, btnH));
 
     sf::RectangleShape btn(sf::Vector2f(btnW, btnH));
@@ -1959,6 +2074,20 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     btnText.setOutlineColor(leadsToGameOver ? sf::Color(21, 38, 74) : sf::Color(216, 234, 255));
     btnText.setOutlineThickness(1.0f);
     window.draw(btnText);
+
+    sf::Text feedbackText(font, "Please leave feedback on itch.io", 20);
+    fitPopupText(feedbackText, panelW - 40.f, 15);
+    sf::FloatRect fb = feedbackText.getLocalBounds();
+    float feedbackY = btnY + btnH + 8.f;
+    float maxFeedbackY = panelY + panelH - 10.f - (fb.position.y + fb.size.y);
+    if (feedbackY > maxFeedbackY) feedbackY = maxFeedbackY;
+    feedbackText.setPosition(sf::Vector2f(
+        panelX + panelW * 0.5f - (fb.position.x + fb.size.x * 0.5f),
+        feedbackY));
+    feedbackText.setFillColor(sf::Color(74, 104, 160));
+    feedbackText.setOutlineColor(sf::Color(238, 247, 255));
+    feedbackText.setOutlineThickness(0.8f);
+    window.draw(feedbackText);
 }
 
 bool UI::handleRoundSummaryClick(sf::Vector2i mousePos) const {
@@ -2255,13 +2384,13 @@ static std::string inventoryPinDesc(PinType t) {
         case PinType::Mischievous: return "One pin randomises value\n1-15 each shot.";
         case PinType::Exploding:   return "One pin explodes shortly\nafter being knocked.";
         case PinType::Light:       return "One pin is worth 2\nbut easy to knock.";
-        case PinType::Big:         return "One pin is worth 10\nbut hard to knock.";
+        case PinType::Big:         return "This pin is harder to knock over\nand worth 10.";
         case PinType::Ice:         return "One pin slides 15% faster\nwhen fallen.";
         case PinType::CopyCat:     return "Copies the type of\nthe first pin hit.";
         case PinType::LuckyDucky:  return "Worth 20 points.\n35% chance to score 0.";
         case PinType::LevelUp:     return "This pin is always\nworth +1 extra point.";
         case PinType::Lover:       return "When hit, adds +1 value\nto the next slot pin.";
-        case PinType::ChangeIsGood:return "Whenever another pin changes,\nthis pin gains +2 value.";
+        case PinType::ChangeIsGood:return "When another pin value rises\nor a new pin is bought,\nthis pin gains +2 value.";
         case PinType::ThirdTime:   return "Every 3rd time this pin is hit:\ncombo x2 this shot.";
         default:                   return "Normal pin.";
     }
@@ -2293,7 +2422,7 @@ static std::string inventoryPowerDesc(PowerType t) {
         case PowerType::Earthquake:          return "Every 10 shots,\na free strike.";
         case PowerType::Skip:                return "Permanent:\n2 rerolls each shop.";
         case PowerType::UpgradesForEveryone: return "Future shops show\nthree extra items.";
-        case PowerType::Sales:               return "Everything in shop\nis 20% cheaper.";
+        case PowerType::Sales:               return "Everything in shop\ncosts 1 less dollar.";
         case PowerType::PassedGo:            return "Round clears pay\n3 more dollars.";
         case PowerType::MoMoney:             return "Interest every 2 dollars,\nnot 3.";
         case PowerType::SevenEightNine:      return "Triples pin 7 value,\ndestroys pin 9. One use.";
@@ -2404,7 +2533,7 @@ static std::string inventoryPowerStatus(const ActiveItems& items, PowerType t, i
         case PowerType::UpgradesForEveryone:
             return "(currently: +3 shop items)";
         case PowerType::Sales:
-            return "(currently: 20% discount)";
+            return "(currently: -1 shop cost)";
         case PowerType::PassedGo:
             return "(currently: +3 clear payout)";
         case PowerType::MoMoney:
@@ -3389,7 +3518,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Pin, BallType::Normal, PinType::Light, ShoeType::None, PowerType::Greedy,
          "Light Pin",    "One pin worth 2\nbut very easy to knock.",           2},
         {ShopItemCategory::Pin, BallType::Normal, PinType::Big, ShoeType::None, PowerType::Greedy,
-         "Big Pin",      "One pin worth 10\nbut hard to knock.",               3},
+         "Big Pin",      "Harder to knock over.\nAlways worth 10.",            3},
         {ShopItemCategory::Pin, BallType::Normal, PinType::Ice, ShoeType::None, PowerType::Greedy,
          "Ice Pin",      "One pin slides\n15% faster when fallen.",            2},
         {ShopItemCategory::Pin, BallType::Normal, PinType::CopyCat, ShoeType::None, PowerType::Greedy,
@@ -3401,7 +3530,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Pin, BallType::Normal, PinType::Lover, ShoeType::None, PowerType::Greedy,
          "Lover",        "On hit, +1 value\nto the next slot pin.",            3},
         {ShopItemCategory::Pin, BallType::Normal, PinType::ChangeIsGood, ShoeType::None, PowerType::Greedy,
-         "Change Is Good","When another pin changes,\nthis pin gains +2 value.", 3},
+         "Change Is Good","When another pin value rises\nor a new pin is bought,\nthis pin gains +2 value.", 3},
         {ShopItemCategory::Pin, BallType::Normal, PinType::ThirdTime, ShoeType::None, PowerType::Greedy,
          "3rd Time",     "Every 3rd-Time this pin is hit:\ncombo x2 this shot.",     3},
         // Shoes
@@ -3445,7 +3574,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::UpgradesForEveryone,
          "Upgrades+3",   "Future shops show\nthree extra items.",               4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::Sales,
-         "Sales",        "Everything in shop\nis 20% cheaper.",                 4},
+         "Sales",        "Everything in shop\ncosts 1 less dollar.",            4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::PassedGo,
          "Passed Go",    "Round clears pay\n3 more dollars.",                   4},
         {ShopItemCategory::Power, BallType::Normal, PinType::Normal, ShoeType::None, PowerType::MoMoney,
@@ -3479,8 +3608,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
                 break;
         }
         if (items.powerSales && adjusted.cost > 0) {
-            int discounted = static_cast<int>(std::lround(static_cast<float>(adjusted.cost) * 0.8f));
-            adjusted.cost = std::max(1, discounted);
+            adjusted.cost = std::max(0, adjusted.cost - 1);
         }
         if (adjusted.category == ShopItemCategory::Shoe &&
             adjusted.shoeType == items.shoeType) {
@@ -3561,11 +3689,12 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
     const float skipW = 220.f;
     const float skipH = 40.f;
-    float skipX = cardLayout.areaMinX + (cardLayout.areaW - skipW) * 0.5f;
-    float skipY = cardLayout.firstCardY - skipH - 12.f;
-    if (skipY < 88.f) skipY = 88.f;
+    float skipX = cardLayout.areaMinX + 8.f;
+    float skipY = cardLayout.firstCardY - skipH - 10.f;
+    if (skipY < 124.f) skipY = 124.f;
     if (items.skipCharges > 0) {
-        bool canUseSkip = tokens >= 1;
+        int rerollCost = items.powerSales ? 0 : 1;
+        bool canUseSkip = tokens >= rerollCost;
         sf::RectangleShape skipBtn({skipW, skipH});
         skipBtn.setPosition({skipX, skipY});
         skipBtn.setFillColor(canUseSkip ? sf::Color(96, 216, 242) : sf::Color(177, 196, 232));
@@ -3574,7 +3703,7 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
         window.draw(skipBtn);
 
         sf::Text skipText(font,
-                          "REROLL (1) x" + std::to_string(items.skipCharges),
+                          "REROLL (" + std::to_string(rerollCost) + ") x" + std::to_string(items.skipCharges),
                           20);
         skipText.setPosition({skipX + 14.f, skipY + 8.f});
         skipText.setFillColor(sf::Color(19, 39, 82));
@@ -3988,12 +4117,13 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
 
     const float skipW = 220.f;
     const float skipH = 40.f;
-    float skipX = cardLayout.areaMinX + (cardLayout.areaW - skipW) * 0.5f;
-    float skipY = cardLayout.firstCardY - skipH - 12.f;
-    if (skipY < 88.f) skipY = 88.f;
+    float skipX = cardLayout.areaMinX + 8.f;
+    float skipY = cardLayout.firstCardY - skipH - 10.f;
+    if (skipY < 124.f) skipY = 124.f;
     sf::FloatRect rerollRect(sf::Vector2f(skipX, skipY), sf::Vector2f(skipW, skipH));
     if (items.skipCharges > 0 && pointInRect(rerollRect, mousePos, buttonPad)) {
-        if (tokens >= 1) return ShopActionReroll;
+        int rerollCost = items.powerSales ? 0 : 1;
+        if (tokens >= rerollCost) return ShopActionReroll;
         return ShopActionNone;
     }
 

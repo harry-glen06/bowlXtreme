@@ -63,6 +63,8 @@ private:
     void applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet);
     void applySavedPinSlotValues(std::vector<Pin>& pinSet);
     void updatePinSlotValueSnapshot(const std::vector<Pin>& pinSet);
+    void applyChangeIsGoodBonusForValueChange(std::vector<Pin>& pinSet, int changedPinIndex, bool includeChangedPin = false);
+    void applyChangeIsGoodBonusForNewPinPurchase(int purchasedSlot);
     int countStandingPins() const;
     void processExplosions();
     void prepareNewShot();

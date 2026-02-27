@@ -200,9 +200,59 @@ void Game::applyPendingRandomPinUpgrades(std::vector<Pin>& pinSet) {
     for (int n = 0; n < activeItems.pendingRandomPinUpgrades; n++) {
         int idx = candidates[rand() % candidates.size()];
         pinSet[idx].setValue(pinSet[idx].getValue() + 1);
+        applyChangeIsGoodBonusForValueChange(pinSet, idx, false);
     }
     activeItems.pendingRandomPinUpgrades = 0;
     updatePinSlotValueSnapshot(pinSet);
+}
+
+void Game::applyChangeIsGoodBonusForValueChange(std::vector<Pin>& pinSet,
+                                                int changedPinIndex,
+                                                bool includeChangedPin) {
+    int maxSlot = std::min((int)pinSet.size(), activeItems.getActivePinSlotCount());
+    if (maxSlot <= 0) return;
+
+    for (const auto& assignment : activeItems.pinSlotAssignments) {
+        if (assignment.type != PinType::ChangeIsGood) continue;
+        int slot = assignment.slot;
+        if (slot < 1 || slot > maxSlot) continue;
+        int idx = slot - 1;
+        if (!includeChangedPin && idx == changedPinIndex) continue;
+        pinSet[idx].setValue(pinSet[idx].getValue() + 2);
+    }
+    updatePinSlotValueSnapshot(pinSet);
+}
+
+void Game::applyChangeIsGoodBonusForNewPinPurchase(int purchasedSlot) {
+    int maxSlot = activeItems.getActivePinSlotCount();
+    if (maxSlot <= 0) return;
+
+    for (const auto& assignment : activeItems.pinSlotAssignments) {
+        if (assignment.type != PinType::ChangeIsGood) continue;
+        int slot = assignment.slot;
+        if (slot < 1 || slot > maxSlot) continue;
+        int idx = slot - 1;
+        if (idx < 0 || idx >= (int)activeItems.pinSlotCurrentValues.size()) continue;
+
+        if (activeItems.pinSlotCurrentValues[idx] <= 0) {
+            int fallback = slot;
+            if (idx >= 0 && idx < (int)pins.size()) {
+                fallback = pins[idx].getValue();
+            }
+            activeItems.pinSlotCurrentValues[idx] = std::max(1, fallback);
+        }
+        activeItems.pinSlotCurrentValues[idx] += 2;
+    }
+
+    int liveMax = std::min((int)pins.size(), activeItems.getActivePinSlotCount());
+    for (const auto& assignment : activeItems.pinSlotAssignments) {
+        if (assignment.type != PinType::ChangeIsGood) continue;
+        int slot = assignment.slot;
+        if (slot < 1 || slot > liveMax) continue;
+        int idx = slot - 1;
+        pins[idx].setValue(pins[idx].getValue() + 2);
+    }
+    updatePinSlotValueSnapshot(pins);
 }
 
 void Game::applyPowerPinLayout(std::vector<Pin>& pinSet) {
@@ -413,13 +463,21 @@ void Game::applySavedPinSlotValues(std::vector<Pin>& pinSet) {
     for (int i = 0; i < maxSlot; i++) {
         if (!pinSet[i].isActive()) continue;
         int saved = activeItems.pinSlotCurrentValues[i];
-        if (saved <= 0) continue;
+        if (saved <= 0) {
+            if (pinSet[i].getPinType() == PinType::Big) {
+                saved = 10;
+            } else {
+                continue;
+            }
+        }
 
         // Snapshot stores display value (+1 already shown for LevelUp),
         // but Pin::value stores base value before LevelUp bonus.
         int internalValue = saved;
         if (pinSet[i].getPinType() == PinType::LevelUp) {
             internalValue = std::max(0, saved - 1);
+        } else if (pinSet[i].getPinType() == PinType::Big) {
+            internalValue = std::max(10, saved);
         }
         pinSet[i].setValue(internalValue);
     }
@@ -1178,8 +1236,9 @@ void Game::handleEvents() {
                     };
 
                     if (purchased == UI::ShopActionReroll) {
-                        if (activeItems.skipCharges > 0 && xtreme.getTokens() >= 1) {
-                            xtreme.addTokens(-1);
+                        int rerollCost = activeItems.powerSales ? 0 : 1;
+                        if (activeItems.skipCharges > 0 && xtreme.getTokens() >= rerollCost) {
+                            xtreme.addTokens(-rerollCost);
                             activeItems.skipCharges--;
                             ui.generateShopOffers(activeItems);
                         }
@@ -1336,6 +1395,12 @@ void Game::handleEvents() {
                             int targetSlot = std::clamp(ui.getSelectedPinSlot(), 1, pinLimit);
                             if (!activeItems.hasPinAssignmentAtSlot(targetSlot)) {
                                 activeItems.setPinAssignment(targetSlot, offer.pinType);
+                                applyChangeIsGoodBonusForNewPinPurchase(targetSlot);
+                                if (offer.pinType == PinType::Big &&
+                                    targetSlot >= 1 &&
+                                    targetSlot <= (int)activeItems.pinSlotCurrentValues.size()) {
+                                    activeItems.pinSlotCurrentValues[targetSlot - 1] = 10;
+                                }
                             }
                             ui.recordOfferPicked(offer);
                         } else {
@@ -1549,8 +1614,14 @@ void Game::prepareNewShot() {
     for (auto& pin : pins) {
         if (!pin.isActive()) continue;
         pin.rollLuckyDucky();
-        if (!(activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme))
+        if (!(activeItems.lockPinChangesMidRound && ui.getState() == GameState::Xtreme)) {
+            int oldValue = pin.getValue();
             pin.randomiseMischievous();
+            if (pin.getValue() > oldValue) {
+                int changedIndex = (int)(&pin - pins.data());
+                applyChangeIsGoodBonusForValueChange(pins, changedIndex, false);
+            }
+        }
     }
 
     // 7 8 9 power: one-time effect if rack includes slot 9.
@@ -1562,6 +1633,7 @@ void Game::prepareNewShot() {
             pins[idx7].isActive() &&
             pins[idx9].isActive()) {
             pins[idx7].setValue(pins[idx7].getValue() * 3);
+            applyChangeIsGoodBonusForValueChange(pins, idx7, false);
             pins[idx9].setFallen(true);
             pins[idx9].setVel({0.0f, 0.0f});
             pins[idx9].setAngularVel(0.0f);
@@ -1699,27 +1771,7 @@ void Game::finishPendingResetIfReady(float dt) {
                 if (nextIdx < 0 || nextIdx >= maxSlot) continue;
                 if (!pins[nextIdx].isActive()) continue;
                 pins[nextIdx].setValue(pins[nextIdx].getValue() + 1);
-                if (nextIdx < (int)activeItems.pinChangeHitCountsThisShot.size()) {
-                    activeItems.pinChangeEventsThisShot++;
-                    activeItems.pinChangeHitCountsThisShot[nextIdx]++;
-                }
-            }
-        }
-
-        // Change Is Good: gains +2 for each changed "other" pin this shot.
-        if (activeItems.pinChangeEventsThisShot > 0) {
-            int maxSlot = std::min((int)pins.size(), activeItems.getActivePinSlotCount());
-            for (int i = 0; i < maxSlot; i++) {
-                if (!pins[i].isActive()) continue;
-                if (pins[i].getPinType() != PinType::ChangeIsGood) continue;
-                int ownChanges = 0;
-                if (i < (int)activeItems.pinChangeHitCountsThisShot.size()) {
-                    ownChanges = activeItems.pinChangeHitCountsThisShot[i];
-                }
-                int otherChanges = std::max(0, activeItems.pinChangeEventsThisShot - ownChanges);
-                if (otherChanges > 0) {
-                    pins[i].setValue(pins[i].getValue() + otherChanges * 2);
-                }
+                applyChangeIsGoodBonusForValueChange(pins, nextIdx, false);
             }
         }
 
@@ -2024,13 +2076,17 @@ void Game::finishPendingResetIfReady(float dt) {
             roundSummaryTarget = xtremeLastRoundTargetProgress;
             roundSummaryTokensEarned = xtreme.getTokens() - xtremeRoundStartTokens;
             roundSummaryTokensTotal = xtreme.getTokens();
-            roundSummaryPassed = true;
-            roundSummaryLeadsToGameOver = false;
+            roundSummaryPassed = (roundSummaryScore >= roundSummaryTarget);
+            roundSummaryLeadsToGameOver = !roundSummaryPassed;
             roundSummaryBossName =
-                isBossRound(roundSummaryRoundNumber) ? getActiveBossName() : "";
-            int bossesCleared = roundSummaryRoundNumber / 5;
-            if (!endlessMode && bossesCleared >= 3) {
-                ui.setState(GameState::GameWon);
+                (roundSummaryPassed && isBossRound(roundSummaryRoundNumber)) ? getActiveBossName() : "";
+            if (roundSummaryPassed) {
+                int bossesCleared = roundSummaryRoundNumber / 5;
+                if (!endlessMode && bossesCleared >= 3) {
+                    ui.setState(GameState::GameWon);
+                } else {
+                    ui.setState(GameState::RoundSummary);
+                }
             } else {
                 ui.setState(GameState::RoundSummary);
             }
@@ -2197,11 +2253,11 @@ void Game::doCollisions() {
                 activeItems.firstBallHitPinIndex >= 0) {
                 PinType copyFrom = pins[activeItems.firstBallHitPinIndex].getPinType();
                 if (!activeItems.lockPinChangesMidRound && copyFrom != PinType::CopyCat) {
-                    if (pin.getPinType() != copyFrom &&
-                        pi >= 0 &&
-                        pi < (int)activeItems.pinChangeHitCountsThisShot.size()) {
-                        activeItems.pinChangeEventsThisShot++;
-                        activeItems.pinChangeHitCountsThisShot[pi]++;
+                if (pin.getPinType() != copyFrom &&
+                    pi >= 0 &&
+                    pi < (int)activeItems.pinChangeHitCountsThisShot.size()) {
+                    activeItems.pinChangeEventsThisShot++;
+                    activeItems.pinChangeHitCountsThisShot[pi]++;
                     }
                     pin.setPinType(copyFrom);
                 }
@@ -2234,11 +2290,7 @@ void Game::doCollisions() {
                 // Upgrade ball: each hit pin gains +1 value
                 if (activeItems.ballType == BallType::Upgrade) {
                     pin.setValue(pin.getValue() + 1);
-                    if (pi >= 0 &&
-                        pi < (int)activeItems.pinChangeHitCountsThisShot.size()) {
-                        activeItems.pinChangeEventsThisShot++;
-                        activeItems.pinChangeHitCountsThisShot[pi]++;
-                    }
+                    applyChangeIsGoodBonusForValueChange(pins, pi, false);
                 }
 
                 // Midas ball: only the first pin hit this shot turns into Gold.
