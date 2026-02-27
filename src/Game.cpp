@@ -113,9 +113,10 @@ Game::Game()
     
     // Load high score
     loadHighScore();
+    loadTutorialSeenFlag();
     
-    // Start in menu state
-    ui.setState(GameState::Menu);
+    // First launch goes to tutorial once, then normal menu flow.
+    ui.setState(hasSeenTutorial ? GameState::Menu : GameState::Tutorial);
     audio.playMenuMusic();
 }
 
@@ -626,6 +627,23 @@ void Game::saveHighScore() {
     }
 }
 
+void Game::loadTutorialSeenFlag() {
+    std::ifstream file("tutorial_seen.txt");
+    if (!file.is_open()) {
+        hasSeenTutorial = false;
+        return;
+    }
+    int seen = 0;
+    file >> seen;
+    hasSeenTutorial = (seen != 0);
+}
+
+void Game::saveTutorialSeenFlag() const {
+    std::ofstream file("tutorial_seen.txt");
+    if (!file.is_open()) return;
+    file << (hasSeenTutorial ? 1 : 0) << "\n";
+}
+
 void Game::run() {
     while (window.isOpen()) {
         handleEvents();
@@ -977,6 +995,10 @@ void Game::handleEvents() {
                 }
                 if (ui.getState() == GameState::Tutorial) {
                     if (ui.handleTutorialClick(window, sf::Vector2i(worldPos.x, worldPos.y))) {
+                        if (!hasSeenTutorial) {
+                            hasSeenTutorial = true;
+                            saveTutorialSeenFlag();
+                        }
                         ui.setState(GameState::Menu);
                     }
                     continue;

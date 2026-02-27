@@ -86,8 +86,11 @@ private:
     // High score tracking
     void loadHighScore();
     void saveHighScore();
+    void loadTutorialSeenFlag();
+    void saveTutorialSeenFlag() const;
     int normalHighScore = 0;
     int xtremeBestRound = 0;
+    bool hasSeenTutorial = false;
     int finalNormalScore = 0;
     int finalXtremeRoundsCleared = 0;
 
