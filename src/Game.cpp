@@ -861,6 +861,25 @@ void Game::handleEvents() {
             continue;
         }
 
+        if (ev->is<sf::Event::MouseMoved>()) {
+            if (ui.getState() == GameState::Settings &&
+                sf::Mouse::isButtonPressed(sf::Mouse::Button::Left)) {
+                sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+                ui.handleSettingsDrag(window, sf::Vector2i((int)worldPos.x, (int)worldPos.y));
+            }
+            continue;
+        }
+
+        if (ev->is<sf::Event::MouseButtonReleased>()) {
+            auto mouseUp = ev->getIf<sf::Event::MouseButtonReleased>();
+            if (mouseUp && mouseUp->button == sf::Mouse::Button::Left &&
+                ui.getState() == GameState::Settings) {
+                ui.stopSettingsDrag();
+            }
+            continue;
+        }
+
         if (ev->is<sf::Event::KeyPressed>() && resetConfirmOpen) {
             auto keyEv = ev->getIf<sf::Event::KeyPressed>();
             if (keyEv->code == sf::Keyboard::Key::Enter) {
@@ -2762,7 +2781,7 @@ void Game::draw() {
         window.draw(dev);
     };
 
-    window.clear(sf::Color(84, 128, 208));
+    window.clear(sf::Color(42, 74, 138));
 
     // Draw menu if in menu state
     if (ui.getState() == GameState::Menu) {
@@ -2794,6 +2813,31 @@ void Game::draw() {
         window.display();
         return;
     }
+
+    // Gameplay backdrop: deeper sky gradient + soft light glows.
+    sf::VertexArray gameBg(sf::PrimitiveType::TriangleStrip, 4);
+    gameBg[0].position = {0.f, 0.f};
+    gameBg[1].position = {windowW, 0.f};
+    gameBg[2].position = {0.f, windowH};
+    gameBg[3].position = {windowW, windowH};
+    gameBg[0].color = sf::Color(45, 78, 145);
+    gameBg[1].color = sf::Color(49, 84, 151);
+    gameBg[2].color = sf::Color(61, 99, 168);
+    gameBg[3].color = sf::Color(56, 93, 162);
+    window.draw(gameBg);
+
+    sf::CircleShape glowLeft(windowW * 0.25f);
+    glowLeft.setOrigin({glowLeft.getRadius(), glowLeft.getRadius()});
+    glowLeft.setPosition({windowW * 0.15f, windowH * 0.55f});
+    glowLeft.setFillColor(sf::Color(160, 190, 255, 26));
+    window.draw(glowLeft);
+
+    sf::CircleShape glowRight(windowW * 0.21f);
+    glowRight.setOrigin({glowRight.getRadius(), glowRight.getRadius()});
+    glowRight.setPosition({windowW * 0.86f, windowH * 0.42f});
+    glowRight.setFillColor(sf::Color(150, 182, 245, 22));
+    window.draw(glowRight);
+
     // Draw game
     lane.draw(window);
     for (const auto& pin : pins) pin.draw(window);

@@ -86,6 +86,8 @@ public:
     // Settings
     void drawSettings(sf::RenderWindow& window, float windowW, float windowH);
     void handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos);
+    void handleSettingsDrag(sf::RenderWindow& window, sf::Vector2i mousePos);
+    void stopSettingsDrag();
 
     // Shop
     void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
@@ -200,6 +202,8 @@ private:
     float soundVolume = 70.0f;
     int defaultBallColor = 0;
     bool inSettings = false;
+    bool draggingMusicSlider = false;
+    bool draggingSoundSlider = false;
 
     std::vector<ShopOffer> shopOffers;
     int selectedBallSlot = 1;

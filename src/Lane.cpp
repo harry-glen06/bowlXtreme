@@ -37,55 +37,106 @@ void Lane::init(float windowW) {
 }
 
 void Lane::draw(sf::RenderWindow& window) const {
-    // Frame ends (black like your screenshot)
-    window.draw(topEnd);
-    window.draw(bottomEnd);
+    // Outer drop shadow
+    sf::RectangleShape frameShadow(sf::Vector2f(width + 40.0f, height + 56.0f));
+    frameShadow.setPosition(sf::Vector2f(left - 20.0f, top - 28.0f));
+    frameShadow.setFillColor(sf::Color(0, 0, 0, 86));
+    window.draw(frameShadow);
 
-    // Dark outer border behind everything
-    sf::RectangleShape border(sf::Vector2f(width + 24.0f, height + 40.0f));
-    border.setPosition(sf::Vector2f(left - 12.0f, top - 20.0f));
-    border.setFillColor(sf::Color(30, 30, 30));
-    window.draw(border);
+    // Metallic lane frame
+    sf::VertexArray frame(sf::PrimitiveType::TriangleStrip, 4);
+    frame[0].position = {left - 14.0f, top - 22.0f};
+    frame[1].position = {right + 14.0f, top - 22.0f};
+    frame[2].position = {left - 14.0f, bottom + 22.0f};
+    frame[3].position = {right + 14.0f, bottom + 22.0f};
+    frame[0].color = sf::Color(54, 59, 74);
+    frame[1].color = sf::Color(60, 66, 82);
+    frame[2].color = sf::Color(28, 32, 46);
+    frame[3].color = sf::Color(24, 30, 44);
+    window.draw(frame);
 
-    // Lane body
-    window.draw(laneRect);
+    // Frame caps at top/bottom
+    sf::RectangleShape topCap(sf::Vector2f(width + 28.0f, 18.0f));
+    topCap.setPosition(sf::Vector2f(left - 14.0f, top - 28.0f));
+    topCap.setFillColor(sf::Color(18, 21, 30));
+    window.draw(topCap);
+    sf::RectangleShape bottomCap(sf::Vector2f(width + 28.0f, 18.0f));
+    bottomCap.setPosition(sf::Vector2f(left - 14.0f, bottom + 10.0f));
+    bottomCap.setFillColor(sf::Color(18, 21, 30));
+    window.draw(bottomCap);
 
-    // Wood stripes (simple planks)
-    for (int i = 0; i < 9; i++) {
-        float stripeW = width / 9.0f;
+    // Lane wood base gradient
+    sf::VertexArray woodBase(sf::PrimitiveType::TriangleStrip, 4);
+    woodBase[0].position = {left, top};
+    woodBase[1].position = {right, top};
+    woodBase[2].position = {left, bottom};
+    woodBase[3].position = {right, bottom};
+    woodBase[0].color = sf::Color(186, 146, 90);
+    woodBase[1].color = sf::Color(180, 140, 86);
+    woodBase[2].color = sf::Color(148, 106, 62);
+    woodBase[3].color = sf::Color(142, 102, 60);
+    window.draw(woodBase);
+
+    // Planks
+    const int plankCount = 11;
+    for (int i = 0; i < plankCount; i++) {
+        float stripeW = width / static_cast<float>(plankCount);
         sf::RectangleShape plank(sf::Vector2f(stripeW, height));
         plank.setPosition(sf::Vector2f(left + i * stripeW, top));
-
-        // alternate slightly different wood colors
-        if (i % 2 == 0) plank.setFillColor(sf::Color(170, 130, 80));
-        else            plank.setFillColor(sf::Color(160, 120, 70));
-
+        if (i % 2 == 0) plank.setFillColor(sf::Color(176, 132, 80, 96));
+        else            plank.setFillColor(sf::Color(160, 118, 72, 96));
         window.draw(plank);
     }
 
-    // Gutters
-    window.draw(leftGutter);
-    window.draw(rightGutter);
+    // Center polish glow
+    sf::RectangleShape polish(sf::Vector2f(width * 0.16f, height));
+    polish.setPosition(sf::Vector2f(left + width * 0.42f, top));
+    polish.setFillColor(sf::Color(255, 245, 214, 20));
+    window.draw(polish);
+    sf::RectangleShape polishLine(sf::Vector2f(2.0f, height));
+    polishLine.setPosition(sf::Vector2f(left + width * 0.50f, top));
+    polishLine.setFillColor(sf::Color(255, 245, 214, 34));
+    window.draw(polishLine);
 
-    // Bumpers (only if on)
+    // Gutter gradients
+    auto drawGutter = [&](float x) {
+        sf::VertexArray gut(sf::PrimitiveType::TriangleStrip, 4);
+        gut[0].position = {x, top};
+        gut[1].position = {x + gutterWidth, top};
+        gut[2].position = {x, bottom};
+        gut[3].position = {x + gutterWidth, bottom};
+        gut[0].color = sf::Color(46, 54, 78);
+        gut[1].color = sf::Color(36, 43, 66);
+        gut[2].color = sf::Color(20, 25, 40);
+        gut[3].color = sf::Color(16, 20, 34);
+        window.draw(gut);
+    };
+    drawGutter(left);
+    drawGutter(right - gutterWidth);
+
+    // Bumpers
     if (bumpersOn) {
-        window.draw(leftBumper);
-        window.draw(rightBumper);
+        sf::RectangleShape leftB({bumperThickness, height});
+        leftB.setPosition({left + gutterWidth, top});
+        leftB.setFillColor(sf::Color(190, 248, 255, 225));
+        leftB.setOutlineColor(sf::Color(78, 180, 220));
+        leftB.setOutlineThickness(1.0f);
+        window.draw(leftB);
+
+        sf::RectangleShape rightB({bumperThickness, height});
+        rightB.setPosition({right - gutterWidth - bumperThickness, top});
+        rightB.setFillColor(sf::Color(190, 248, 255, 225));
+        rightB.setOutlineColor(sf::Color(78, 180, 220));
+        rightB.setOutlineThickness(1.0f);
+        window.draw(rightB);
     }
 
-    // REMOVED: Pin deck zone (brown section at top)
-    // sf::RectangleShape pinDeck(sf::Vector2f(width, 70.0f));
-    // pinDeck.setPosition(sf::Vector2f(left, top));
-    // pinDeck.setFillColor(sf::Color(190, 160, 110));
-    // window.draw(pinDeck);
-
-
-    // Thin inner border line (gives it that "lane frame" look)
+    // Thin inner border line
     sf::RectangleShape inner(sf::Vector2f(width, height));
     inner.setPosition(sf::Vector2f(left, top));
     inner.setFillColor(sf::Color::Transparent);
     inner.setOutlineThickness(3.0f);
-    inner.setOutlineColor(sf::Color(90, 90, 90));
+    inner.setOutlineColor(sf::Color(86, 96, 120));
     window.draw(inner);
 }
 

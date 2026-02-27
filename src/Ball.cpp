@@ -11,6 +11,24 @@ static sf::Vector2f vecNormalize(const sf::Vector2f& v) {
     return {v.x / len, v.y / len};
 }
 
+static sf::Color lighten(const sf::Color& c, int amount, std::uint8_t alpha = 255) {
+    return sf::Color(
+        static_cast<std::uint8_t>(std::clamp((int)c.r + amount, 0, 255)),
+        static_cast<std::uint8_t>(std::clamp((int)c.g + amount, 0, 255)),
+        static_cast<std::uint8_t>(std::clamp((int)c.b + amount, 0, 255)),
+        alpha
+    );
+}
+
+static sf::Color darken(const sf::Color& c, int amount, std::uint8_t alpha = 255) {
+    return sf::Color(
+        static_cast<std::uint8_t>(std::clamp((int)c.r - amount, 0, 255)),
+        static_cast<std::uint8_t>(std::clamp((int)c.g - amount, 0, 255)),
+        static_cast<std::uint8_t>(std::clamp((int)c.b - amount, 0, 255)),
+        alpha
+    );
+}
+
 Ball::Ball(float r)
     : pos(0.f, 0.f), vel(0.f, 0.f),
       baseRadius(r), radius(r), mass(4.0f),
@@ -68,51 +86,76 @@ void Ball::applyItemMultipliers(float radiusMult, float massMult) {
 // ─── Shared helper: draw the classic bowling-ball shell ──────────────────────
 static void drawBallShell(sf::RenderWindow& window, sf::Vector2f pos,
                            float radius, sf::Color color, float spin) {
-    // Shadow
-    float sr = radius * 1.10f;
-    sf::CircleShape shadow(sr);
-    shadow.setOrigin({sr, sr});
-    shadow.setPosition({pos.x + radius * 0.18f, pos.y + radius * 0.22f});
-    shadow.setFillColor({0, 0, 0, 70});
-    window.draw(shadow);
+    // Contact shadow (elliptical) for grounded depth.
+    float contactR = radius * 1.05f;
+    sf::CircleShape contactShadow(contactR);
+    contactShadow.setOrigin({contactR, contactR});
+    contactShadow.setPosition({pos.x + radius * 0.16f, pos.y + radius * 0.48f});
+    contactShadow.setScale({1.34f, 0.56f});
+    contactShadow.setFillColor(sf::Color(0, 0, 0, 86));
+    window.draw(contactShadow);
 
-    // Base
+    // Ambient shadow to opposite side of the key light.
+    float sideShadowR = radius * 0.92f;
+    sf::CircleShape sideShadow(sideShadowR);
+    sideShadow.setOrigin({sideShadowR, sideShadowR});
+    sideShadow.setPosition({pos.x + radius * 0.20f, pos.y + radius * 0.18f});
+    sideShadow.setFillColor(sf::Color(0, 0, 0, 44));
+    window.draw(sideShadow);
+
+    // Base sphere.
     sf::CircleShape ball(radius);
     ball.setOrigin({radius, radius});
     ball.setPosition(pos);
-    ball.setFillColor(color);
+    ball.setFillColor(darken(color, 24));
     window.draw(ball);
 
-    // Rim
+    // Layered radial lighting (fake PBR style) from top-left.
+    sf::Vector2f lightDir = vecNormalize({-0.55f, -0.82f});
+    sf::Vector2f lightPos = pos + lightDir * (radius * 0.14f);
+    for (int i = 0; i < 7; i++) {
+        float t = static_cast<float>(i) / 6.0f;
+        float layerR = radius * (0.96f - t * 0.48f);
+        sf::CircleShape lit(layerR);
+        lit.setOrigin({layerR, layerR});
+        lit.setPosition(lightPos);
+        int lift = static_cast<int>(54.0f - t * 28.0f);
+        std::uint8_t a = static_cast<std::uint8_t>(std::clamp(60 - i * 6, 14, 60));
+        lit.setFillColor(lighten(color, lift, a));
+        window.draw(lit);
+    }
+
+    // Dark rim / ambient occlusion near edges.
     sf::CircleShape rim(radius * 0.98f);
     rim.setOrigin({radius * 0.98f, radius * 0.98f});
     rim.setPosition(pos);
     rim.setFillColor(sf::Color::Transparent);
-    rim.setOutlineThickness(radius * 0.10f);
-    rim.setOutlineColor({0, 0, 0, 45});
+    rim.setOutlineThickness(radius * 0.14f);
+    rim.setOutlineColor(sf::Color(0, 0, 0, 62));
     window.draw(rim);
 
-    // Inner glow
-    sf::CircleShape layer1(radius * 0.92f);
-    layer1.setOrigin({radius * 0.92f, radius * 0.92f});
-    layer1.setPosition({pos.x - radius * 0.06f, pos.y - radius * 0.08f});
-    layer1.setFillColor({(uint8_t)std::min(255, color.r + 20),
-                         (uint8_t)std::min(255, color.g + 20),
-                         (uint8_t)std::min(255, color.b + 20), 90});
-    window.draw(layer1);
+    // Bottom reflected light.
+    sf::CircleShape bounce(radius * 0.42f);
+    bounce.setOrigin({radius * 0.42f, radius * 0.42f});
+    bounce.setPosition({pos.x + radius * 0.05f, pos.y + radius * 0.37f});
+    bounce.setScale({1.25f, 0.58f});
+    bounce.setFillColor(sf::Color(255, 255, 255, 32));
+    window.draw(bounce);
 
-    // Highlight
-    sf::CircleShape hl(radius * 0.36f);
-    hl.setOrigin({radius * 0.36f, radius * 0.36f});
-    hl.setPosition({pos.x - radius * 0.34f, pos.y - radius * 0.38f});
-    hl.setFillColor({255, 255, 255, 65});
-    window.draw(hl);
+    // Finger holes with depth/lip shading.
+    float holeLipR = radius * 0.175f;
+    float holeInnerR = radius * 0.122f;
+    sf::CircleShape holeLip(holeLipR);
+    holeLip.setOrigin({holeLipR, holeLipR});
+    holeLip.setFillColor(darken(color, 60, 188));
 
-    // Finger holes
-    float holeR = radius * 0.15f;
-    sf::CircleShape hole(holeR);
-    hole.setOrigin({holeR, holeR});
-    hole.setFillColor({0, 0, 0, 150});
+    sf::CircleShape holeInner(holeInnerR);
+    holeInner.setOrigin({holeInnerR, holeInnerR});
+    holeInner.setFillColor(sf::Color(4, 6, 12, 214));
+
+    sf::CircleShape holeSpec(holeInnerR * 0.46f);
+    holeSpec.setOrigin({holeInnerR * 0.46f, holeInnerR * 0.46f});
+    holeSpec.setFillColor(sf::Color(255, 255, 255, 34));
 
     float c = std::cos(spin), s = std::sin(spin);
     auto rot = [&](sf::Vector2f v) {
@@ -122,16 +165,31 @@ static void drawBallShell(sf::RenderWindow& window, sf::Vector2f pos,
     sf::Vector2f h2( radius*0.18f, -radius*0.10f);
     sf::Vector2f h3( 0.f,           radius*0.15f);
 
-    hole.setPosition(pos + rot(h1)); window.draw(hole);
-    hole.setPosition(pos + rot(h2)); window.draw(hole);
-    hole.setPosition(pos + rot(h3)); window.draw(hole);
+    auto drawHole = [&](sf::Vector2f localPos) {
+        sf::Vector2f hp = pos + rot(localPos);
+        holeLip.setPosition(hp + sf::Vector2f(radius * 0.010f, radius * 0.012f));
+        window.draw(holeLip);
+        holeInner.setPosition(hp);
+        window.draw(holeInner);
+        holeSpec.setPosition(hp + sf::Vector2f(-holeInnerR * 0.25f, -holeInnerR * 0.30f));
+        window.draw(holeSpec);
+    };
+    drawHole(h1);
+    drawHole(h2);
+    drawHole(h3);
 
-    // Specular dot
-    sf::CircleShape dot(radius * 0.10f);
-    dot.setOrigin({radius*0.10f, radius*0.10f});
-    dot.setPosition({pos.x - radius*0.20f, pos.y - radius*0.22f});
-    dot.setFillColor({255, 255, 255, 80});
-    window.draw(dot);
+    // Primary and secondary specular highlights.
+    sf::CircleShape hlA(radius * 0.30f);
+    hlA.setOrigin({radius * 0.30f, radius * 0.30f});
+    hlA.setPosition({pos.x - radius * 0.40f, pos.y - radius * 0.44f});
+    hlA.setFillColor(sf::Color(255, 255, 255, 82));
+    window.draw(hlA);
+
+    sf::CircleShape hlB(radius * 0.11f);
+    hlB.setOrigin({radius * 0.11f, radius * 0.11f});
+    hlB.setPosition({pos.x - radius * 0.17f, pos.y - radius * 0.22f});
+    hlB.setFillColor(sf::Color(255, 255, 255, 106));
+    window.draw(hlB);
 }
 
 // ─── Per-ball draw functions ─────────────────────────────────────────────────
