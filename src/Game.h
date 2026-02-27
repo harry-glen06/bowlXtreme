@@ -159,6 +159,7 @@ private:
     int xtremeRoundStartTokens = 0;
     int xtremeLastRoundScoreProgress = 0;
     int xtremeLastRoundTargetProgress = 0;
+    int xtremeLastShotAddDisplay = 0;
     bool roundSummaryLeadsToGameOver = false;
     bool roundSummaryPassed = false;
     int roundSummaryRoundNumber = 1;

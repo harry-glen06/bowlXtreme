@@ -1,39 +1,39 @@
 category,item,shown,picked,pick_rate_percent
-BALL,8-Ball,57,12,21.05
-BALL,Black Hole,37,3,8.11
-BALL,Fastball,38,9,23.68
-BALL,Heavy Ball,45,13,28.89
-BALL,Icy Ball,18,0,0.00
-BALL,Midas Ball,34,5,14.71
-BALL,Odd Ball,47,3,6.38
-BALL,Retrigger,33,3,9.09
-BALL,Upgrade Ball,41,13,31.71
-PIN,3rd Time,41,16,39.02
-PIN,Big Pin,42,13,30.95
-PIN,Change Is Good,29,6,20.69
-PIN,Copy Cat,36,4,11.11
-PIN,Exploding Pin,46,19,41.30
-PIN,Gold Pin,33,11,33.33
-PIN,Ice Pin,44,12,27.27
-PIN,Level Up,19,5,26.32
-PIN,Light Pin,46,5,10.87
-PIN,Lover,21,7,33.33
-PIN,Lucky Ducky,35,9,25.71
-PIN,Mischievous,40,4,10.00
-POWER,7 8 9,28,3,10.71
-POWER,Bumpers,40,4,10.00
-POWER,Confusion,39,7,17.95
-POWER,Duplicate,47,11,23.40
-POWER,Earthquake,43,2,4.65
-POWER,Extra Ball,49,10,20.41
-POWER,Extra Pins,40,13,32.50
-POWER,Extra Slot,37,5,13.51
-POWER,Greedy,42,4,9.52
-POWER,Home Base,44,12,27.27
-POWER,Mo Money,35,8,22.86
-POWER,Passed Go,38,7,18.42
-POWER,Random Upgrade,30,4,13.33
-POWER,Reroll,39,4,10.26
-POWER,Sales,37,8,21.62
-POWER,Swap Pins,50,3,6.00
-POWER,Upgrades+3,39,2,5.13
+BALL,8-Ball,59,13,22.03
+BALL,Black Hole,43,3,6.98
+BALL,Fastball,41,9,21.95
+BALL,Heavy Ball,50,14,28.00
+BALL,Icy Ball,24,1,4.17
+BALL,Midas Ball,36,5,13.89
+BALL,Odd Ball,49,3,6.12
+BALL,Retrigger,35,4,11.43
+BALL,Upgrade Ball,45,14,31.11
+PIN,3rd Time,45,17,37.78
+PIN,Big Pin,44,14,31.82
+PIN,Change Is Good,31,7,22.58
+PIN,Copy Cat,39,5,12.82
+PIN,Exploding Pin,48,20,41.67
+PIN,Gold Pin,38,12,31.58
+PIN,Ice Pin,46,17,36.96
+PIN,Level Up,21,5,23.81
+PIN,Light Pin,49,5,10.20
+PIN,Lover,27,10,37.04
+PIN,Lucky Ducky,36,9,25.00
+PIN,Mischievous,43,5,11.63
+POWER,7 8 9,32,21,65.62
+POWER,Bumpers,44,4,9.09
+POWER,Confusion,44,7,15.91
+POWER,Duplicate,49,12,24.49
+POWER,Earthquake,47,2,4.26
+POWER,Extra Ball,52,10,19.23
+POWER,Extra Pins,43,14,32.56
+POWER,Extra Slot,41,6,14.63
+POWER,Greedy,44,5,11.36
+POWER,Home Base,48,13,27.08
+POWER,Mo Money,37,8,21.62
+POWER,Passed Go,39,7,17.95
+POWER,Random Upgrade,31,5,16.13
+POWER,Reroll,40,5,12.50
+POWER,Sales,42,8,19.05
+POWER,Swap Pins,54,4,7.41
+POWER,Upgrades+3,42,3,7.14

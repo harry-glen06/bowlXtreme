@@ -655,6 +655,7 @@ void Game::confirmRunReset() {
 
     if (inXtremeRun) {
         xtreme.reset();
+        xtremeLastShotAddDisplay = 0;
         xtremeRoundStartTokens = xtreme.getTokens();
         ui.setState(GameState::Xtreme);
         xtremeMode = true;
@@ -843,6 +844,22 @@ void Game::handleEvents() {
             }
         }
 
+        if (ev->is<sf::Event::MouseWheelScrolled>()) {
+            if (ui.getState() == GameState::Shop) {
+                auto wheelEv = ev->getIf<sf::Event::MouseWheelScrolled>();
+                if (wheelEv) {
+                    sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+                    sf::Vector2f worldPos = window.mapPixelToCoords(mousePos);
+                    ui.handleShopScroll(sf::Vector2i((int)worldPos.x, (int)worldPos.y),
+                                        wheelEv->delta,
+                                        windowW,
+                                        windowH,
+                                        activeItems);
+                }
+            }
+            continue;
+        }
+
         if (ev->is<sf::Event::KeyPressed>() && resetConfirmOpen) {
             auto keyEv = ev->getIf<sf::Event::KeyPressed>();
             if (keyEv->code == sf::Keyboard::Key::Enter) {
@@ -927,6 +944,7 @@ void Game::handleEvents() {
                         ui.setState(GameState::Xtreme);
                         strikeConfetti.clear();
                         xtreme.reset();
+                        xtremeLastShotAddDisplay = 0;
                         bossIntroOpen = false;
                         bossIntroShownRound = 0;
                         xtremeMode = true;
@@ -1009,6 +1027,7 @@ void Game::handleEvents() {
                         strikeConfetti.clear();
                         scorer.resetGame();
                         xtreme.reset();
+                        xtremeLastShotAddDisplay = 0;
                         bossIntroOpen = false;
                         bossIntroShownRound = 0;
                         xtremeMode = false;
@@ -1845,6 +1864,7 @@ void Game::finishPendingResetIfReady(float dt) {
                 spareBonusThisShot,
                 static_cast<float>(thirdTimeComboMultiplier),
                 greedyComboBonus);
+            xtremeLastShotAddDisplay = xtreme.getLastShotScore();
 
             triggerStrikeFx = strikeThisShot || chainStrikeCheerThisShot;
 
@@ -2916,7 +2936,7 @@ void Game::draw() {
             xtreme.getTokens(),
             xtreme.getLastImpact(),
             xtreme.getLastCombo(),
-            xtreme.getLastShotScore(),
+            xtremeLastShotAddDisplay,
             windowW,
             windowH,
             activeItems,
@@ -3150,6 +3170,7 @@ void Game::draw() {
         strikeConfetti.clear();
         scorer.resetGame();
         xtreme.reset();
+        xtremeLastShotAddDisplay = 0;
         bossIntroOpen = false;
         bossIntroShownRound = 0;
         xtremeMode = false;

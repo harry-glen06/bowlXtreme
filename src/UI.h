@@ -92,6 +92,7 @@ public:
     // Returns purchase index (>=0) or one of the ShopAction* constants.
     // Per-item sell actions use ShopActionSellPinByIndexBase / ShopActionSellPowerByIndexBase.
     int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
+    void handleShopScroll(sf::Vector2i mousePos, float wheelDelta, float windowW, float windowH, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void recordOfferPicked(const ShopOffer& offer);
     void resetEquippedBall() { selectedBallSlot = 1; selectedPinSlot = 1; }
@@ -203,6 +204,7 @@ private:
     std::vector<ShopOffer> shopOffers;
     int selectedBallSlot = 1;
     int selectedPinSlot = 1;
+    float shopOwnedScroll = 0.0f;
     int tutorialPage = 0;
 
     // Xtreme shot-score animation state

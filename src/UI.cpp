@@ -654,8 +654,8 @@ void UI::drawMenu(sf::RenderWindow& window, float windowW, float windowH, float 
         window.draw(text);
     };
 
-    drawMenuButton(0, "Normal", sf::Color(235, 48, 56), sf::Color::White, 33);
-    drawMenuButton(1, "Xtreme", sf::Color(92, 212, 240), sf::Color::White, 33);
+    drawMenuButton(0, "Xtreme", sf::Color(92, 212, 240), sf::Color::White, 33);
+    drawMenuButton(1, "Normal", sf::Color(235, 48, 56), sf::Color::White, 33);
     drawMenuButton(2, "Tutorial", sf::Color(110, 156, 255), sf::Color::White, 31);
     drawMenuButton(3, "Settings", sf::Color(248, 232, 64), sf::Color::Black, 30);
 }
@@ -668,11 +668,11 @@ MenuButton UI::handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos) 
     const float clickPad = 10.0f;
 
     if (pointInRectPadded(layout.buttonRects[0], mousePos, clickPad)) {
-        return MenuButton::Normal;
+        return MenuButton::Xtreme;
     }
 
     if (pointInRectPadded(layout.buttonRects[1], mousePos, clickPad)) {
-        return MenuButton::Xtreme;
+        return MenuButton::Normal;
     }
 
     if (pointInRectPadded(layout.buttonRects[2], mousePos, clickPad)) {
@@ -1831,7 +1831,7 @@ void UI::drawRoundSummaryPopup(sf::RenderWindow& window,
     window.draw(overlay);
 
     const float panelW = 620.f;
-    const float panelH = 420.f;
+    const float panelH = 500.f;
     const float panelX = windowW * 0.5f - panelW * 0.5f;
     const float panelY = windowH * 0.5f - panelH * 0.5f;
 
@@ -3052,6 +3052,12 @@ struct ShopOwnedDynamicLayout {
     float contentTop = 0.f;
 };
 
+struct ShopOwnedScrollMetrics {
+    sf::FloatRect clipRect;
+    float contentBottom = 0.f;
+    float maxScroll = 0.f;
+};
+
 struct ShopCardLayout {
     float cardW = 210.f;
     float cardH = 340.f;
@@ -3224,6 +3230,98 @@ static ShopOwnedDynamicLayout computeShopOwnedDynamicLayout(const ShopOwnedPanel
     return out;
 }
 
+static float measureInventoryPanelContentHeight(const ActiveItems& items) {
+    float iy = 0.0f;
+
+    // Ball section.
+    bool hasExtraBallSlot =
+        items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall);
+    float ballR = hasExtraBallSlot ? 18.0f : 22.0f;
+    iy += 28.0f;
+    iy += ballR * 2.0f + 52.0f;
+
+    // Shoe section.
+    iy += 24.0f;
+    iy += 32.0f;
+
+    // Pin section.
+    iy += 28.0f;
+    int slotCount = std::clamp(items.getActivePinSlotCount(), 1, 12);
+    bool twoColumnPins = slotCount > 8;
+    const float lineH = 18.0f;
+    int pinRows = twoColumnPins ? ((slotCount + 1) / 2) : slotCount;
+    iy += pinRows * lineH;
+    iy += 8.0f;
+
+    // Power section (mirrors drawInventoryPanel logic).
+    const int powerCount = static_cast<int>(PowerType::ExtraPowerSlot) + 1;
+    std::vector<int> counts(powerCount, 0);
+    for (int raw : items.purchasedPowers) {
+        if (raw >= 0 && raw < powerCount) counts[raw]++;
+    }
+
+    auto forceOwned = [&](PowerType p, bool owned) {
+        if (owned) counts[(int)p] = std::max(counts[(int)p], 1);
+    };
+    forceOwned(PowerType::Greedy, items.powerGreedy);
+    forceOwned(PowerType::RandomUpgrade, items.powerRandomUpgrade);
+    forceOwned(PowerType::ExtraPins,
+               items.powerExtraPins || items.hasPurchasedPower(PowerType::ExtraPins));
+    forceOwned(PowerType::ExtraBall,
+               items.powerExtraBall || items.hasPurchasedPower(PowerType::ExtraBall));
+    forceOwned(PowerType::Bumpers, items.powerBumpers);
+    forceOwned(PowerType::HomeBase, items.powerHomeBase);
+    forceOwned(PowerType::Confusion, items.powerConfusion);
+    forceOwned(PowerType::Earthquake, items.powerEarthquake);
+    forceOwned(PowerType::Skip, items.powerSkip || items.hasPurchasedPower(PowerType::Skip));
+    forceOwned(PowerType::UpgradesForEveryone, items.powerUpgradesForEveryone);
+    forceOwned(PowerType::Sales, items.powerSales);
+    forceOwned(PowerType::PassedGo, items.powerPassedGo);
+    forceOwned(PowerType::MoMoney, items.powerMoMoney);
+    forceOwned(PowerType::ExtraPowerSlot, items.powerExtraPowerSlot);
+
+    counts[(int)PowerType::Duplicate] = items.duplicateCharges;
+    counts[(int)PowerType::SwapPins] = items.swapCharges;
+    counts[(int)PowerType::SevenEightNine] = items.sevenEightNineCharges;
+    counts[(int)PowerType::Skip] = items.skipCharges;
+
+    int shownPowers = 0;
+    for (int c : counts) {
+        if (c > 0) shownPowers++;
+    }
+    if (shownPowers > 0) {
+        iy += 26.0f;
+        int powerRows = (shownPowers + 1) / 2;
+        iy += powerRows * 18.0f;
+    }
+
+    return iy;
+}
+
+static ShopOwnedScrollMetrics computeShopOwnedScrollMetrics(const ShopOwnedPanelLayout& layout,
+                                                            const ShopOwnedDynamicLayout& dynamic,
+                                                            const ActiveItems& items) {
+    ShopOwnedScrollMetrics out;
+    const float clipPadX = 6.0f;
+    const float clipPadBottom = 8.0f;
+    const float clipX = layout.panelX + clipPadX;
+    const float clipY = layout.sellBall1.position.y - 8.0f;
+    const float clipW = layout.panelW - clipPadX * 2.0f;
+    const float clipH = layout.panelH - (clipY - layout.panelY) - clipPadBottom;
+    if (clipW <= 1.0f || clipH <= 1.0f) {
+        out.clipRect = sf::FloatRect({clipX, clipY}, {0.0f, 0.0f});
+        out.contentBottom = clipY;
+        out.maxScroll = 0.0f;
+        return out;
+    }
+
+    out.clipRect = sf::FloatRect({clipX, clipY}, {clipW, clipH});
+    out.contentBottom = dynamic.contentTop + measureInventoryPanelContentHeight(items);
+    float visibleBottom = clipY + clipH;
+    out.maxScroll = std::max(0.0f, out.contentBottom - visibleBottom);
+    return out;
+}
+
 // Inventory panel shown inside the shop screen
 void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
                               float windowW, float windowH) {
@@ -3250,17 +3348,8 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     window.draw(title);
 
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
-
-    const float actionAreaY = layout.sellBall1.position.y - 8.f;
-    const float actionAreaH = (dynamic.contentTop - actionAreaY) - 8.f;
-    if (actionAreaH > 20.f) {
-        sf::RectangleShape actionArea({layout.panelW - 14.f, actionAreaH});
-        actionArea.setPosition({layout.panelX + 7.f, actionAreaY});
-        actionArea.setFillColor({203, 220, 246, 236});
-        actionArea.setOutlineColor({119, 145, 202, 190});
-        actionArea.setOutlineThickness(1.4f);
-        window.draw(actionArea);
-    }
+    ShopOwnedScrollMetrics scrollMetrics = computeShopOwnedScrollMetrics(layout, dynamic, items);
+    shopOwnedScroll = std::clamp(shopOwnedScroll, 0.0f, scrollMetrics.maxScroll);
 
     BallType slot1Ball = items.getBallForSlot(1);
     BallType slot2Ball = items.getBallForSlot(2);
@@ -3273,11 +3362,6 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
     int s2Value = canSellS2 ? (ballTypeCost(slot2Ball) / 2) : 0;
     int s3Value = canSellS3 ? (ballTypeCost(slot3Ball) / 2) : 0;
     int shoeValue = canSellShoe ? (shoeTypeCost(items.shoeType) / 2) : 0;
-
-    sf::Text quick(font, "QUICK SELL", 14);
-    quick.setPosition({layout.panelX + 14.f, layout.sellBall1.position.y - 20.f});
-    quick.setFillColor({41, 66, 115});
-    window.draw(quick);
 
     auto drawSellButton = [&](const sf::FloatRect& rect, const std::string& label, bool enabled, int charSize) {
         sf::RectangleShape button(rect.size);
@@ -3293,78 +3377,114 @@ void UI::drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items,
         window.draw(text);
     };
 
-    drawSellButton(layout.sellBall1, "Sell Ball 1 (+" + std::to_string(s1Value) + ")", canSellS1, 15);
-    drawSellButton(layout.sellBall2, "Sell Ball 2 (+" + std::to_string(s2Value) + ")", canSellS2, 15);
-    if (layout.hasExtraBallSlot) {
-        drawSellButton(layout.sellBall3, "Sell Ball 3 (+" + std::to_string(s3Value) + ")", canSellS3, 15);
-    }
-    drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe, 18);
-
-    sf::Text pinHeader(font, "SELL PINS", 15);
-    pinHeader.setPosition({layout.panelX + 10.f, dynamic.pinHeaderY});
-    pinHeader.setFillColor({34, 58, 108});
-    window.draw(pinHeader);
-
-    std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
-    for (int i = 0; i < (int)dynamic.pinSellRects.size() && i < (int)sortedPins.size(); i++) {
-        PinType type = sortedPins[i].type;
-        int raw = static_cast<int>(type);
-        int value = pinTypeCost(type) / 2;
-        std::string label = "P" + std::to_string(sortedPins[i].slot) + " " +
-                            pinShortName(raw) + " +" + std::to_string(value);
-        drawSellButton(dynamic.pinSellRects[i], label, true, 16);
-    }
-    if (dynamic.pinSellRects.empty()) {
-        sf::Text none(font, "None", 14);
-        none.setPosition({layout.panelX + 12.f, dynamic.pinHeaderY + 14.f});
-        none.setFillColor({78, 99, 142});
-        window.draw(none);
-    }
-
-    sf::Text powerHeader(font, "SELL POWERS", 15);
-    powerHeader.setPosition({layout.panelX + 10.f, dynamic.powerHeaderY});
-    powerHeader.setFillColor({34, 58, 108});
-    window.draw(powerHeader);
-
-    for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
-        PowerType p = dynamic.sellablePowers[i];
-        int value = powerTypeCost(p) / 2;
-        std::string label = powerShortName(p) + " +" + std::to_string(value);
-        drawSellButton(dynamic.powerSellRects[i], label, true, 16);
-    }
-    if (dynamic.powerSellRects.empty()) {
-        sf::Text none(font, "None", 14);
-        none.setPosition({layout.panelX + 12.f, dynamic.powerHeaderY + 14.f});
-        none.setFillColor({78, 99, 142});
-        window.draw(none);
-    }
-
-    // Clip inventory content to the panel interior so large loadouts never
-    // draw outside the box.
-    const float clipPadX = 6.f;
-    const float clipPadBottom = 8.f;
-    const float clipX = layout.panelX + clipPadX;
-    const float clipY = dynamic.contentTop;
-    const float clipW = layout.panelW - clipPadX * 2.f;
-    const float clipH = layout.panelH - (dynamic.contentTop - layout.panelY) - clipPadBottom;
-
-    if (clipW > 1.f && clipH > 1.f) {
+    if (scrollMetrics.clipRect.size.x > 1.f && scrollMetrics.clipRect.size.y > 1.f) {
         sf::View prevView = window.getView();
-        sf::View clipView(sf::FloatRect(sf::Vector2f(clipX, clipY), sf::Vector2f(clipW, clipH)));
+        sf::View clipView(sf::FloatRect(
+            sf::Vector2f(scrollMetrics.clipRect.position.x,
+                         scrollMetrics.clipRect.position.y + shopOwnedScroll),
+            scrollMetrics.clipRect.size));
         sf::FloatRect baseVp = prevView.getViewport();
         sf::FloatRect clipVp(
             sf::Vector2f(
-                baseVp.position.x + (clipX / windowW) * baseVp.size.x,
-                baseVp.position.y + (clipY / windowH) * baseVp.size.y),
+                baseVp.position.x + (scrollMetrics.clipRect.position.x / windowW) * baseVp.size.x,
+                baseVp.position.y + (scrollMetrics.clipRect.position.y / windowH) * baseVp.size.y),
             sf::Vector2f(
-                (clipW / windowW) * baseVp.size.x,
-                (clipH / windowH) * baseVp.size.y));
+                (scrollMetrics.clipRect.size.x / windowW) * baseVp.size.x,
+                (scrollMetrics.clipRect.size.y / windowH) * baseVp.size.y));
         clipView.setViewport(clipVp);
         window.setView(clipView);
 
-        drawInventoryPanel(window, items, layout.panelX + 6.f, dynamic.contentTop, layout.panelW - 12.f);
+        const float actionAreaY = layout.sellBall1.position.y - 8.f;
+        const float actionAreaH = (dynamic.contentTop - actionAreaY) - 8.f;
+        if (actionAreaH > 20.f) {
+            sf::RectangleShape actionArea({layout.panelW - 14.f, actionAreaH});
+            actionArea.setPosition({layout.panelX + 7.f, actionAreaY});
+            actionArea.setFillColor({203, 220, 246, 236});
+            actionArea.setOutlineColor({119, 145, 202, 190});
+            actionArea.setOutlineThickness(1.4f);
+            window.draw(actionArea);
+        }
 
+        sf::Text quick(font, "QUICK SELL", 14);
+        quick.setPosition({layout.panelX + 14.f, layout.sellBall1.position.y - 20.f});
+        quick.setFillColor({41, 66, 115});
+        window.draw(quick);
+
+        drawSellButton(layout.sellBall1, "Sell Ball 1 (+" + std::to_string(s1Value) + ")", canSellS1, 15);
+        drawSellButton(layout.sellBall2, "Sell Ball 2 (+" + std::to_string(s2Value) + ")", canSellS2, 15);
+        if (layout.hasExtraBallSlot) {
+            drawSellButton(layout.sellBall3, "Sell Ball 3 (+" + std::to_string(s3Value) + ")", canSellS3, 15);
+        }
+        drawSellButton(layout.sellShoe, "Sell Shoe (+" + std::to_string(shoeValue) + ")", canSellShoe, 18);
+
+        sf::Text pinHeader(font, "SELL PINS", 15);
+        pinHeader.setPosition({layout.panelX + 10.f, dynamic.pinHeaderY});
+        pinHeader.setFillColor({34, 58, 108});
+        window.draw(pinHeader);
+
+        std::vector<ActiveItems::PinSlotAssignment> sortedPins = items.getSortedPinAssignments();
+        for (int i = 0; i < (int)dynamic.pinSellRects.size() && i < (int)sortedPins.size(); i++) {
+            PinType type = sortedPins[i].type;
+            int raw = static_cast<int>(type);
+            int value = pinTypeCost(type) / 2;
+            std::string label = "P" + std::to_string(sortedPins[i].slot) + " " +
+                                pinShortName(raw) + " +" + std::to_string(value);
+            drawSellButton(dynamic.pinSellRects[i], label, true, 16);
+        }
+        if (dynamic.pinSellRects.empty()) {
+            sf::Text none(font, "None", 14);
+            none.setPosition({layout.panelX + 12.f, dynamic.pinHeaderY + 14.f});
+            none.setFillColor({78, 99, 142});
+            window.draw(none);
+        }
+
+        sf::Text powerHeader(font, "SELL POWERS", 15);
+        powerHeader.setPosition({layout.panelX + 10.f, dynamic.powerHeaderY});
+        powerHeader.setFillColor({34, 58, 108});
+        window.draw(powerHeader);
+
+        for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
+            PowerType p = dynamic.sellablePowers[i];
+            int value = powerTypeCost(p) / 2;
+            std::string label = powerShortName(p) + " +" + std::to_string(value);
+            drawSellButton(dynamic.powerSellRects[i], label, true, 16);
+        }
+        if (dynamic.powerSellRects.empty()) {
+            sf::Text none(font, "None", 14);
+            none.setPosition({layout.panelX + 12.f, dynamic.powerHeaderY + 14.f});
+            none.setFillColor({78, 99, 142});
+            window.draw(none);
+        }
+
+        drawInventoryPanel(window, items, layout.panelX + 6.f, dynamic.contentTop, layout.panelW - 12.f);
         window.setView(prevView);
+    }
+
+    if (scrollMetrics.maxScroll > 0.5f) {
+        const float trackW = 7.0f;
+        const float trackX = layout.panelX + layout.panelW - trackW - 3.0f;
+        const float trackY = scrollMetrics.clipRect.position.y + 2.0f;
+        const float trackH = scrollMetrics.clipRect.size.y - 4.0f;
+        sf::RectangleShape track({trackW, trackH});
+        track.setPosition({trackX, trackY});
+        track.setFillColor({168, 188, 225, 180});
+        track.setOutlineColor({96, 124, 182, 220});
+        track.setOutlineThickness(1.0f);
+        window.draw(track);
+
+        float contentH = scrollMetrics.clipRect.size.y + scrollMetrics.maxScroll;
+        float thumbH = std::clamp((scrollMetrics.clipRect.size.y / contentH) * trackH, 30.0f, trackH);
+        float travel = std::max(0.0f, trackH - thumbH);
+        float ratio = (scrollMetrics.maxScroll > 0.0f)
+                        ? (shopOwnedScroll / scrollMetrics.maxScroll)
+                        : 0.0f;
+        float thumbY = trackY + travel * ratio;
+        sf::RectangleShape thumb({trackW, thumbH});
+        thumb.setPosition({trackX, thumbY});
+        thumb.setFillColor({86, 122, 202, 235});
+        thumb.setOutlineColor({50, 78, 145, 240});
+        thumb.setOutlineThickness(1.0f);
+        window.draw(thumb);
     }
 }
 
@@ -3689,9 +3809,12 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
 
     const float skipW = 220.f;
     const float skipH = 40.f;
-    float skipX = cardLayout.areaMinX + 8.f;
-    float skipY = cardLayout.firstCardY - skipH - 10.f;
-    if (skipY < 124.f) skipY = 124.f;
+    // Keep reroll next to the SHOP title instead of near side selectors.
+    float skipX = windowW * 0.5f + 90.f;
+    float skipY = 58.f;
+    float maxSkipX = windowW - skipW - 260.f; // reserve right-side space for token text
+    if (maxSkipX < 16.f) maxSkipX = 16.f;
+    if (skipX > maxSkipX) skipX = maxSkipX;
     if (items.skipCharges > 0) {
         int rerollCost = items.powerSales ? 0 : 1;
         bool canUseSkip = tokens >= rerollCost;
@@ -4059,6 +4182,30 @@ void UI::drawShop(sf::RenderWindow& window, int tokens, float windowW, float win
     drawInventoryInShop(window, items, windowW, windowH);
 }
 
+void UI::handleShopScroll(sf::Vector2i mousePos,
+                          float wheelDelta,
+                          float windowW,
+                          float windowH,
+                          const ActiveItems& items) {
+    if (!fontLoaded) return;
+    if (state != GameState::Shop) return;
+
+    ShopOwnedPanelLayout layout = computeShopOwnedPanelLayout(windowW, windowH, shopOffers.size(), items);
+    ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
+    ShopOwnedScrollMetrics scrollMetrics = computeShopOwnedScrollMetrics(layout, dynamic, items);
+    if (scrollMetrics.maxScroll <= 0.5f) {
+        shopOwnedScroll = 0.0f;
+        return;
+    }
+
+    if (!pointInRect(scrollMetrics.clipRect, mousePos, 0.0f)) return;
+
+    // Positive wheel delta scrolls upward; negative scrolls down through content.
+    const float scrollStep = 34.0f;
+    shopOwnedScroll -= wheelDelta * scrollStep;
+    shopOwnedScroll = std::clamp(shopOwnedScroll, 0.0f, scrollMetrics.maxScroll);
+}
+
 int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items) {
     sf::View v = window.getView();
     float windowW = v.getSize().x;
@@ -4117,9 +4264,11 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
 
     const float skipW = 220.f;
     const float skipH = 40.f;
-    float skipX = cardLayout.areaMinX + 8.f;
-    float skipY = cardLayout.firstCardY - skipH - 10.f;
-    if (skipY < 124.f) skipY = 124.f;
+    float skipX = windowW * 0.5f + 90.f;
+    float skipY = 58.f;
+    float maxSkipX = windowW - skipW - 260.f;
+    if (maxSkipX < 16.f) maxSkipX = 16.f;
+    if (skipX > maxSkipX) skipX = maxSkipX;
     sf::FloatRect rerollRect(sf::Vector2f(skipX, skipY), sf::Vector2f(skipW, skipH));
     if (items.skipCharges > 0 && pointInRect(rerollRect, mousePos, buttonPad)) {
         int rerollCost = items.powerSales ? 0 : 1;
@@ -4128,27 +4277,42 @@ int UI::handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tok
     }
 
     ShopOwnedDynamicLayout dynamic = computeShopOwnedDynamicLayout(layout, items);
-    if (pointInRect(layout.sellBall1, mousePos, 6.0f) && items.getBallForSlot(1) != BallType::Normal) {
+    ShopOwnedScrollMetrics scrollMetrics = computeShopOwnedScrollMetrics(layout, dynamic, items);
+    shopOwnedScroll = std::clamp(shopOwnedScroll, 0.0f, scrollMetrics.maxScroll);
+    bool insideOwnedScroll = pointInRect(scrollMetrics.clipRect, mousePos, 0.0f);
+    sf::Vector2i ownedMouse = mousePos;
+    if (insideOwnedScroll && shopOwnedScroll > 0.0f) {
+        ownedMouse.y += static_cast<int>(std::lround(shopOwnedScroll));
+    }
+
+    if (insideOwnedScroll &&
+        pointInRect(layout.sellBall1, ownedMouse, 6.0f) &&
+        items.getBallForSlot(1) != BallType::Normal) {
         return ShopActionSellBallSlot1;
     }
-    if (pointInRect(layout.sellBall2, mousePos, 6.0f) && items.getBallForSlot(2) != BallType::Normal) {
+    if (insideOwnedScroll &&
+        pointInRect(layout.sellBall2, ownedMouse, 6.0f) &&
+        items.getBallForSlot(2) != BallType::Normal) {
         return ShopActionSellBallSlot2;
     }
     if (layout.hasExtraBallSlot &&
-        pointInRect(layout.sellBall3, mousePos, 6.0f) &&
+        insideOwnedScroll &&
+        pointInRect(layout.sellBall3, ownedMouse, 6.0f) &&
         items.getBallForSlot(3) != BallType::Normal) {
         return ShopActionSellBallSlot3;
     }
-    if (pointInRect(layout.sellShoe, mousePos, 6.0f) && items.shoeType != ShoeType::None) {
+    if (insideOwnedScroll &&
+        pointInRect(layout.sellShoe, ownedMouse, 6.0f) &&
+        items.shoeType != ShoeType::None) {
         return ShopActionSellShoe;
     }
     for (int i = 0; i < (int)dynamic.pinSellRects.size(); i++) {
-        if (pointInRect(dynamic.pinSellRects[i], mousePos, 6.0f)) {
+        if (insideOwnedScroll && pointInRect(dynamic.pinSellRects[i], ownedMouse, 6.0f)) {
             return ShopActionSellPinByIndexBase - i;
         }
     }
     for (int i = 0; i < (int)dynamic.powerSellRects.size(); i++) {
-        if (pointInRect(dynamic.powerSellRects[i], mousePos, 6.0f)) {
+        if (insideOwnedScroll && pointInRect(dynamic.powerSellRects[i], ownedMouse, 6.0f)) {
             return ShopActionSellPowerByIndexBase - i;
         }
     }
