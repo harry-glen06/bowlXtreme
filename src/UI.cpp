@@ -2398,7 +2398,7 @@ static std::string inventoryPinDesc(PinType t) {
 
 static std::string inventoryShoeDesc(ShoeType t) {
     switch (t) {
-        case ShoeType::Clown:    return "Wobble launch angle.\n8% slower.\nFirst buy: +10 dollars.";
+        case ShoeType::Clown:    return "Wobble launch angle.\n8% slower.\nLasts 3 rounds.\nFirst buy: +10 dollars.";
         case ShoeType::Running:  return "Ball launches 18% faster.";
         case ShoeType::Moon:     return "All pins are 26% lighter.";
         case ShoeType::Slippers: return "Everything slides 18% more.";
@@ -2488,8 +2488,8 @@ static std::string inventoryShoeStatus(const ActiveItems& items, ShoeType type) 
     switch (type) {
         case ShoeType::Clown:
             return items.clownBonusClaimed
-                ? "(currently: +10 bonus already claimed, speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")"
-                : "(currently: +10 bonus on first buy, speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")";
+                ? "(currently: " + std::to_string(std::max(0, items.clownRoundsRemaining)) + " rounds left, +10 bonus already claimed, speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")"
+                : "(currently: " + std::to_string(std::max(0, items.clownRoundsRemaining)) + " rounds left, +10 bonus on first buy, speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")";
         case ShoeType::Running:
             return "(currently: launch speed x" + formatCompactFloat(items.launchSpeedMultiplier) + ")";
         case ShoeType::Moon:
@@ -3655,7 +3655,7 @@ void UI::generateShopOffers(const ActiveItems& items) {
          "3rd Time",     "Every 3rd-Time this pin is hit:\ncombo x2 this shot.",     3},
         // Shoes
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Clown, PowerType::Greedy,
-         "Clown Shoes",  "Wobble launch angle.\n8% slower.\nFirst buy: +10 dollars.", 0},
+         "Clown Shoes",  "Wobble launch angle.\n8% slower.\nLasts 3 rounds.\nFirst buy: +10 dollars.", 0},
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Running, PowerType::Greedy,
          "Running Shoes","Ball launches\n18% faster.",                         3},
         {ShopItemCategory::Shoe, BallType::Normal, PinType::Normal, ShoeType::Moon, PowerType::Greedy,

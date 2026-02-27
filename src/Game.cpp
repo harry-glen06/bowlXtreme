@@ -813,6 +813,7 @@ void Game::handleEvents() {
 
                 if (keyEv->code == sf::Keyboard::Key::F4) {
                     xtreme.debugAdvanceRounds(1);
+                    activeItems.advanceRoundsAndExpireTemporaryEffects(1);
                     xtremeRoundStartTokens = xtreme.getTokens();
                     xtremeLastRoundScoreProgress = 0;
                     xtremeLastRoundTargetProgress = xtreme.getTargetScore();
@@ -1864,6 +1865,11 @@ void Game::finishPendingResetIfReady(float dt) {
                 spareBonusThisShot,
                 static_cast<float>(thirdTimeComboMultiplier),
                 greedyComboBonus);
+            int roundAfterRecord = xtreme.getRound();
+            int roundsAdvanced = std::max(0, roundAfterRecord - roundBeforeRecord);
+            if (roundsAdvanced > 0) {
+                activeItems.advanceRoundsAndExpireTemporaryEffects(roundsAdvanced);
+            }
             xtremeLastShotAddDisplay = xtreme.getLastShotScore();
 
             triggerStrikeFx = strikeThisShot || chainStrikeCheerThisShot;

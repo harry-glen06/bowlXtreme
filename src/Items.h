@@ -156,6 +156,7 @@ struct ActiveItems {
     bool powerExtraPowerSlot = false;
     bool clownBonusClaimed = false;
     bool clownShoesPurchased = false;
+    int clownRoundsRemaining = 0;
 
     int duplicateCharges = 0;
     int swapCharges = 0;
@@ -232,6 +233,7 @@ struct ActiveItems {
         powerExtraPowerSlot = false;
         clownBonusClaimed = false;
         clownShoesPurchased = false;
+        clownRoundsRemaining = 0;
 
         duplicateCharges = 0;
         swapCharges = 0;
@@ -365,6 +367,7 @@ struct ActiveItems {
         pinMassMultiplier      = 1.0f;
         slideMultiplier        = 1.0f;
         lockPinChangesMidRound = false;
+        clownRoundsRemaining   = (type == ShoeType::Clown) ? 3 : 0;
 
         switch (type) {
             case ShoeType::Running:
@@ -387,6 +390,16 @@ struct ActiveItems {
             case ShoeType::None:
             default:
                 break;
+        }
+    }
+
+    void advanceRoundsAndExpireTemporaryEffects(int roundsAdvanced = 1) {
+        if (roundsAdvanced <= 0) return;
+        if (shoeType == ShoeType::Clown) {
+            clownRoundsRemaining = std::max(0, clownRoundsRemaining - roundsAdvanced);
+            if (clownRoundsRemaining <= 0) {
+                applyShoeType(ShoeType::None);
+            }
         }
     }
 
