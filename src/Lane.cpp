@@ -1,154 +1,78 @@
 #include "Lane.h"
+#include "rlgl.h"
 
 void Lane::init(float windowW) {
-    left = (windowW - width) / 2.0f;
-    right = left + width;
+    left   = (windowW - width) / 2.0f;
+    right  = left + width;
     bottom = top + height;
-
-    laneRect = sf::RectangleShape(sf::Vector2f(width, height));
-    laneRect.setPosition(sf::Vector2f(left, top));
-    laneRect.setFillColor(sf::Color(160, 120, 70));
-
-    leftGutter = sf::RectangleShape(sf::Vector2f(gutterWidth, height));
-    leftGutter.setPosition(sf::Vector2f(left, top));
-    leftGutter.setFillColor(sf::Color(35, 35, 35));
-
-    rightGutter = sf::RectangleShape(sf::Vector2f(gutterWidth, height));
-    rightGutter.setPosition(sf::Vector2f(right - gutterWidth, top));
-    rightGutter.setFillColor(sf::Color(35, 35, 35));
-
-    leftBumper = sf::RectangleShape(sf::Vector2f(bumperThickness, height));
-    leftBumper.setPosition(sf::Vector2f(left + gutterWidth, top));
-    leftBumper.setFillColor(sf::Color::White);
-
-    rightBumper = sf::RectangleShape(sf::Vector2f(bumperThickness, height));
-    rightBumper.setPosition(sf::Vector2f(right - gutterWidth - bumperThickness, top));
-    rightBumper.setFillColor(sf::Color::White);
-
-    float endZoneSize = 20.0f;
-
-    topEnd = sf::RectangleShape(sf::Vector2f(width, endZoneSize));
-    topEnd.setPosition(sf::Vector2f(left, top - endZoneSize));
-    topEnd.setFillColor(sf::Color::Black);
-
-    bottomEnd = sf::RectangleShape(sf::Vector2f(width, endZoneSize));
-    bottomEnd.setPosition(sf::Vector2f(left, bottom));
-    bottomEnd.setFillColor(sf::Color::Black);
 }
 
-void Lane::draw(sf::RenderWindow& window) const {
+static void drawGradientQuad(float x0, float y0, float x1, float y1,
+                              Color c00, Color c10, Color c01, Color c11) {
+    rlBegin(RL_TRIANGLES);
+    rlColor4ub(c00.r, c00.g, c00.b, c00.a); rlVertex2f(x0, y0);
+    rlColor4ub(c10.r, c10.g, c10.b, c10.a); rlVertex2f(x1, y0);
+    rlColor4ub(c01.r, c01.g, c01.b, c01.a); rlVertex2f(x0, y1);
+
+    rlColor4ub(c10.r, c10.g, c10.b, c10.a); rlVertex2f(x1, y0);
+    rlColor4ub(c11.r, c11.g, c11.b, c11.a); rlVertex2f(x1, y1);
+    rlColor4ub(c01.r, c01.g, c01.b, c01.a); rlVertex2f(x0, y1);
+    rlEnd();
+}
+
+void Lane::draw() const {
     // Outer drop shadow
-    sf::RectangleShape frameShadow(sf::Vector2f(width + 40.0f, height + 56.0f));
-    frameShadow.setPosition(sf::Vector2f(left - 20.0f, top - 28.0f));
-    frameShadow.setFillColor(sf::Color(0, 0, 0, 86));
-    window.draw(frameShadow);
+    DrawRectangle((int)(left - 20.0f), (int)(top - 28.0f),
+                  (int)(width + 40.0f), (int)(height + 56.0f),
+                  {0, 0, 0, 86});
 
     // Metallic lane frame
-    sf::VertexArray frame(sf::PrimitiveType::TriangleStrip, 4);
-    frame[0].position = {left - 14.0f, top - 22.0f};
-    frame[1].position = {right + 14.0f, top - 22.0f};
-    frame[2].position = {left - 14.0f, bottom + 22.0f};
-    frame[3].position = {right + 14.0f, bottom + 22.0f};
-    frame[0].color = sf::Color(54, 59, 74);
-    frame[1].color = sf::Color(60, 66, 82);
-    frame[2].color = sf::Color(28, 32, 46);
-    frame[3].color = sf::Color(24, 30, 44);
-    window.draw(frame);
+    drawGradientQuad(left - 14.0f, top - 22.0f, right + 14.0f, bottom + 22.0f,
+        {54, 59, 74, 255}, {60, 66, 82, 255}, {28, 32, 46, 255}, {24, 30, 44, 255});
 
-    // Frame caps at top/bottom
-    sf::RectangleShape topCap(sf::Vector2f(width + 28.0f, 18.0f));
-    topCap.setPosition(sf::Vector2f(left - 14.0f, top - 28.0f));
-    topCap.setFillColor(sf::Color(18, 21, 30));
-    window.draw(topCap);
-    sf::RectangleShape bottomCap(sf::Vector2f(width + 28.0f, 18.0f));
-    bottomCap.setPosition(sf::Vector2f(left - 14.0f, bottom + 10.0f));
-    bottomCap.setFillColor(sf::Color(18, 21, 30));
-    window.draw(bottomCap);
+    // Frame caps
+    DrawRectangle((int)(left - 14.0f), (int)(top - 28.0f), (int)(width + 28.0f), 18, {18, 21, 30, 255});
+    DrawRectangle((int)(left - 14.0f), (int)(bottom + 10.0f), (int)(width + 28.0f), 18, {18, 21, 30, 255});
 
     // Lane wood base gradient
-    sf::VertexArray woodBase(sf::PrimitiveType::TriangleStrip, 4);
-    woodBase[0].position = {left, top};
-    woodBase[1].position = {right, top};
-    woodBase[2].position = {left, bottom};
-    woodBase[3].position = {right, bottom};
-    woodBase[0].color = sf::Color(186, 146, 90);
-    woodBase[1].color = sf::Color(180, 140, 86);
-    woodBase[2].color = sf::Color(148, 106, 62);
-    woodBase[3].color = sf::Color(142, 102, 60);
-    window.draw(woodBase);
+    drawGradientQuad(left, top, right, bottom,
+        {186, 146, 90, 255}, {180, 140, 86, 255}, {148, 106, 62, 255}, {142, 102, 60, 255});
 
     // Planks
     const int plankCount = 11;
     for (int i = 0; i < plankCount; i++) {
-        float stripeW = width / static_cast<float>(plankCount);
-        sf::RectangleShape plank(sf::Vector2f(stripeW, height));
-        plank.setPosition(sf::Vector2f(left + i * stripeW, top));
-        if (i % 2 == 0) plank.setFillColor(sf::Color(176, 132, 80, 96));
-        else            plank.setFillColor(sf::Color(160, 118, 72, 96));
-        window.draw(plank);
+        float stripeW = width / (float)plankCount;
+        Color pc = (i % 2 == 0)
+            ? Color{176, 132, 80, 96}
+            : Color{160, 118, 72, 96};
+        DrawRectangle((int)(left + i * stripeW), (int)top, (int)stripeW, (int)height, pc);
     }
 
     // Center polish glow
-    sf::RectangleShape polish(sf::Vector2f(width * 0.16f, height));
-    polish.setPosition(sf::Vector2f(left + width * 0.42f, top));
-    polish.setFillColor(sf::Color(255, 245, 214, 20));
-    window.draw(polish);
-    sf::RectangleShape polishLine(sf::Vector2f(2.0f, height));
-    polishLine.setPosition(sf::Vector2f(left + width * 0.50f, top));
-    polishLine.setFillColor(sf::Color(255, 245, 214, 34));
-    window.draw(polishLine);
+    DrawRectangle((int)(left + width * 0.42f), (int)top, (int)(width * 0.16f), (int)height, {255, 245, 214, 20});
+    DrawRectangle((int)(left + width * 0.50f), (int)top, 2, (int)height, {255, 245, 214, 34});
 
     // Gutter gradients
     auto drawGutter = [&](float x) {
-        sf::VertexArray gut(sf::PrimitiveType::TriangleStrip, 4);
-        gut[0].position = {x, top};
-        gut[1].position = {x + gutterWidth, top};
-        gut[2].position = {x, bottom};
-        gut[3].position = {x + gutterWidth, bottom};
-        gut[0].color = sf::Color(46, 54, 78);
-        gut[1].color = sf::Color(36, 43, 66);
-        gut[2].color = sf::Color(20, 25, 40);
-        gut[3].color = sf::Color(16, 20, 34);
-        window.draw(gut);
+        drawGradientQuad(x, top, x + gutterWidth, bottom,
+            {46, 54, 78, 255}, {36, 43, 66, 255}, {20, 25, 40, 255}, {16, 20, 34, 255});
     };
     drawGutter(left);
     drawGutter(right - gutterWidth);
 
     // Bumpers
     if (bumpersOn) {
-        sf::RectangleShape leftB({bumperThickness, height});
-        leftB.setPosition({left + gutterWidth, top});
-        leftB.setFillColor(sf::Color(190, 248, 255, 225));
-        leftB.setOutlineColor(sf::Color(78, 180, 220));
-        leftB.setOutlineThickness(1.0f);
-        window.draw(leftB);
+        DrawRectangle((int)(left + gutterWidth), (int)top, (int)bumperThickness, (int)height, {190, 248, 255, 225});
+        DrawRectangleLinesEx({left + gutterWidth, top, bumperThickness, height}, 1.0f, {78, 180, 220, 255});
 
-        sf::RectangleShape rightB({bumperThickness, height});
-        rightB.setPosition({right - gutterWidth - bumperThickness, top});
-        rightB.setFillColor(sf::Color(190, 248, 255, 225));
-        rightB.setOutlineColor(sf::Color(78, 180, 220));
-        rightB.setOutlineThickness(1.0f);
-        window.draw(rightB);
+        DrawRectangle((int)(right - gutterWidth - bumperThickness), (int)top, (int)bumperThickness, (int)height, {190, 248, 255, 225});
+        DrawRectangleLinesEx({right - gutterWidth - bumperThickness, top, bumperThickness, height}, 1.0f, {78, 180, 220, 255});
     }
 
-    // Thin inner border line
-    sf::RectangleShape inner(sf::Vector2f(width, height));
-    inner.setPosition(sf::Vector2f(left, top));
-    inner.setFillColor(sf::Color::Transparent);
-    inner.setOutlineThickness(3.0f);
-    inner.setOutlineColor(sf::Color(86, 96, 120));
-    window.draw(inner);
+    // Inner border
+    DrawRectangleLinesEx({left, top, width, height}, 3.0f, {86, 96, 120, 255});
 }
 
-
-float Lane::playLeft() const {
-    return left + gutterWidth + bumperThickness;
-}
-
-float Lane::playRight() const {
-    return right - gutterWidth - bumperThickness;
-}
-
-float Lane::centerX() const {
-    return left + width * 0.5f;
-}
+float Lane::playLeft()  const { return left + gutterWidth + bumperThickness; }
+float Lane::playRight() const { return right - gutterWidth - bumperThickness; }
+float Lane::centerX()   const { return left + width * 0.5f; }

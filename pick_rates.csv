@@ -1,14 +1,14 @@
 category,item,shown,picked,pick_rate_percent
-BALL,8-Ball,60,13,21.67
+BALL,8-Ball,61,13,21.31
 BALL,Black Hole,44,3,6.82
 BALL,Fastball,45,10,22.22
-BALL,Heavy Ball,52,15,28.85
+BALL,Heavy Ball,53,15,28.30
 BALL,Icy Ball,27,1,3.70
 BALL,Midas Ball,38,5,13.16
 BALL,Odd Ball,52,3,5.77
 BALL,Retrigger,39,5,12.82
 BALL,Upgrade Ball,49,17,34.69
-PIN,3rd Time,52,22,42.31
+PIN,3rd Time,53,22,41.51
 PIN,Big Pin,45,15,33.33
 PIN,Change Is Good,35,11,31.43
 PIN,Copy Cat,41,6,14.63
@@ -18,20 +18,20 @@ PIN,Ice Pin,48,17,35.42
 PIN,Level Up,25,6,24.00
 PIN,Light Pin,56,6,10.71
 PIN,Lover,29,13,44.83
-PIN,Lucky Ducky,37,9,24.32
+PIN,Lucky Ducky,38,9,23.68
 PIN,Mischievous,45,5,11.11
 POWER,7 8 9,34,21,61.76
 POWER,Bumpers,49,4,8.16
 POWER,Confusion,46,8,17.39
 POWER,Duplicate,51,12,23.53
 POWER,Earthquake,48,2,4.17
-POWER,Extra Ball,53,10,18.87
+POWER,Extra Ball,54,10,18.52
 POWER,Extra Pins,47,16,34.04
 POWER,Extra Slot,45,6,13.33
 POWER,Greedy,47,5,10.64
 POWER,Home Base,51,14,27.45
 POWER,Mo Money,40,9,22.50
-POWER,Passed Go,43,8,18.60
+POWER,Passed Go,44,8,18.18
 POWER,Random Upgrade,32,6,18.75
 POWER,Reroll,41,5,12.20
 POWER,Sales,45,8,17.78

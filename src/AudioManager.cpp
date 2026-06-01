@@ -1,221 +1,191 @@
 #include "AudioManager.h"
 #include <cstdlib>
 #include <algorithm>
-#include <initializer_list>
+#include <cstring>
 
-namespace {
-bool loadBufferFromCandidates(sf::SoundBuffer& buffer, std::initializer_list<const char*> paths) {
-    for (const char* path : paths) {
-        if (buffer.loadFromFile(path)) return true;
+// Try loading a sound from multiple candidate paths; returns true on success.
+static bool trySoundLoad(Sound& out, const char* const* paths, int count) {
+    for (int i = 0; i < count; i++) {
+        out = LoadSound(paths[i]);
+        if (out.stream.buffer != nullptr) return true;
     }
     return false;
 }
+static bool tryMusicLoad(Music& out, const char* const* paths, int count) {
+    for (int i = 0; i < count; i++) {
+        out = LoadMusicStream(paths[i]);
+        if (out.stream.buffer != nullptr) return true;
+    }
+    return false;
 }
 
 AudioManager::AudioManager() {
+    InitAudioDevice();
     loadSounds();
 }
 
+AudioManager::~AudioManager() {
+    // Unload sounds
+    if (ballRollLoaded)     UnloadSound(ballRollSound);
+    for (int i = 0; i < 5; i++) if (pinHitLoaded[i])    UnloadSound(pinHitSounds[i]);
+    if (pinCollisionLoaded) UnloadSound(pinCollisionSound);
+    if (explodingPinLoaded) UnloadSound(explodingPinSound);
+    if (strikeCheerLoaded)  UnloadSound(strikeCheerSound);
+    for (int i = 0; i < 5; i++) if (bossLaughLoaded[i]) UnloadSound(bossLaughSounds[i]);
+    if (menuMusic1Loaded)   UnloadMusicStream(menuMusic1);
+    if (menuMusic2Loaded)   UnloadMusicStream(menuMusic2);
+    if (gameMusicLoaded)    UnloadMusicStream(gameMusic);
+    CloseAudioDevice();
+}
+
 void AudioManager::loadSounds() {
-    // --- Sound Effects (.wav) ---
-    if (ballRollBuffer.loadFromFile("assets/ball_roll.wav")) {
-        ballRollSound = std::make_unique<sf::Sound>(ballRollBuffer);
-        ballRollSound->setLooping(true);
-        ballRollSound->setVolume(95.0f);
-    }
-    
-    if (pinHitBuffer1.loadFromFile("assets/pin_hit1.wav")) {
-        pinHitSound1 = std::make_unique<sf::Sound>(pinHitBuffer1);
-    }
-    if (pinHitBuffer2.loadFromFile("assets/pin_hit2.wav")) {
-        pinHitSound2 = std::make_unique<sf::Sound>(pinHitBuffer2);
-    }
-    if (pinHitBuffer3.loadFromFile("assets/pin_hit3.wav")) {
-        pinHitSound3 = std::make_unique<sf::Sound>(pinHitBuffer3);
-    }
-    if (pinHitBuffer4.loadFromFile("assets/pin_hit4.wav")) {
-        pinHitSound4 = std::make_unique<sf::Sound>(pinHitBuffer4);
-    }
-    if (pinHitBuffer5.loadFromFile("assets/pin_hit5.wav")) {
-        pinHitSound5 = std::make_unique<sf::Sound>(pinHitBuffer5);
-    }
-    
-    if (pinCollisionBuffer.loadFromFile("assets/pin_collision.wav")) {
-        pinCollisionSound = std::make_unique<sf::Sound>(pinCollisionBuffer);
-        pinCollisionSound->setVolume(50.0f);
+    const char* rollPaths[]  = {"assets/ball_roll.wav"};
+    ballRollLoaded = trySoundLoad(ballRollSound, rollPaths, 1);
+
+    const char* hitPaths[5][1] = {
+        {"assets/pin_hit1.wav"}, {"assets/pin_hit2.wav"}, {"assets/pin_hit3.wav"},
+        {"assets/pin_hit4.wav"}, {"assets/pin_hit5.wav"}
+    };
+    for (int i = 0; i < 5; i++)
+        pinHitLoaded[i] = trySoundLoad(pinHitSounds[i], hitPaths[i], 1);
+
+    const char* colPaths[] = {"assets/pin_collision.wav"};
+    pinCollisionLoaded = trySoundLoad(pinCollisionSound, colPaths, 1);
+
+    const char* expPaths[] = {"assets/exploding_pin.wav"};
+    explodingPinLoaded = trySoundLoad(explodingPinSound, expPaths, 1);
+
+    const char* cheerPaths[] = {"assets/cheering.wav"};
+    strikeCheerLoaded = trySoundLoad(strikeCheerSound, cheerPaths, 1);
+
+    const char* laughPaths[5][2] = {
+        {"assets/EnchantressLaugh.wav", nullptr},
+        {"assets/OverlordLaugh.wav",    nullptr},
+        {"assets/TwinsLaugh.wav",       nullptr},
+        {"assets/EmperorLaugh.wav",     "assets/EmeperorLaugh.wav"},
+        {"assets/MonsterLaugh.wav",     nullptr}
+    };
+    for (int i = 0; i < 5; i++) {
+        int cnt = (laughPaths[i][1] != nullptr) ? 2 : 1;
+        bossLaughLoaded[i] = trySoundLoad(bossLaughSounds[i], laughPaths[i], cnt);
     }
 
-    if (explodingPinBuffer.loadFromFile("assets/exploding_pin.wav")) {
-        explodingPinSound = std::make_unique<sf::Sound>(explodingPinBuffer);
-        explodingPinSound->setVolume(75.0f);
-    }
+    // Music
+    const char* m1[]  = {"assets/music1.wav"};
+    const char* m2[]  = {"assets/music2.wav"};
+    const char* gm[]  = {"assets/background_music.flac"};
+    menuMusic1Loaded = tryMusicLoad(menuMusic1, m1, 1);
+    menuMusic2Loaded = tryMusicLoad(menuMusic2, m2, 1);
+    gameMusicLoaded  = tryMusicLoad(gameMusic,  gm, 1);
 
-    if (strikeCheerBuffer.loadFromFile("assets/cheering.wav")) {
-        strikeCheerSound = std::make_unique<sf::Sound>(strikeCheerBuffer);
-        strikeCheerSound->setVolume(85.0f);
-    }
+    if (menuMusic1Loaded) { menuMusic1.looping = false; SetMusicVolume(menuMusic1, musicVolVol / 100.f); }
+    if (menuMusic2Loaded) { menuMusic2.looping = false; SetMusicVolume(menuMusic2, musicVolVol / 100.f); }
+    if (gameMusicLoaded)  { gameMusic.looping = true;   SetMusicVolume(gameMusic,  musicVolVol / 100.f); }
 
-    if (loadBufferFromCandidates(enchantressLaughBuffer, {"assets/EnchantressLaugh.wav"})) {
-        enchantressLaughSound = std::make_unique<sf::Sound>(enchantressLaughBuffer);
-    }
-    if (loadBufferFromCandidates(overlordLaughBuffer, {"assets/OverlordLaugh.wav"})) {
-        overlordLaughSound = std::make_unique<sf::Sound>(overlordLaughBuffer);
-    }
-    if (loadBufferFromCandidates(twinsLaughBuffer, {"assets/TwinsLaugh.wav"})) {
-        twinsLaughSound = std::make_unique<sf::Sound>(twinsLaughBuffer);
-    }
-    if (loadBufferFromCandidates(emperorLaughBuffer, {"assets/EmperorLaugh.wav", "assets/EmeperorLaugh.wav"})) {
-        emperorLaughSound = std::make_unique<sf::Sound>(emperorLaughBuffer);
-    }
-    if (loadBufferFromCandidates(monsterLaughBuffer, {"assets/MonsterLaugh.wav"})) {
-        monsterLaughSound = std::make_unique<sf::Sound>(monsterLaughBuffer);
-    }
-    
-    // --- Music Files (Using if checks to silence [[nodiscard]] warnings) ---
-    
-    if (menuMusic1.openFromFile("assets/music1.wav")) {
-        menuMusic1.setLooping(false); 
-        menuMusic1.setVolume(30.0f); // Set to 30% volume
-
-    }
-    
-    if (menuMusic2.openFromFile("assets/music2.wav")) {
-        menuMusic2.setLooping(false);
-        menuMusic1.setVolume(30.0f); // Set to 30% volume
-    }
-
-    if (gameMusic.openFromFile("assets/background_music.flac")) {
-        gameMusic.setLooping(true);
-    }
-    
     soundsLoaded = true;
 }
 
-void AudioManager::playMenuMusic() {
-    // Stop game music if transitioning from game to menu
-    if (gameMusic.getStatus() == sf::Music::Status::Playing) {
-        gameMusic.stop();
-    }
+void AudioManager::update() {
+    if (menuMusic1Loaded) UpdateMusicStream(menuMusic1);
+    if (menuMusic2Loaded) UpdateMusicStream(menuMusic2);
+    if (gameMusicLoaded)  UpdateMusicStream(gameMusic);
+}
 
-    // If a menu track is already playing, just let it finish
-    if (menuMusic1.getStatus() == sf::Music::Status::Playing || 
-        menuMusic2.getStatus() == sf::Music::Status::Playing) {
+void AudioManager::playMenuMusic() {
+    if (gameMusicLoaded && IsMusicStreamPlaying(gameMusic)) StopMusicStream(gameMusic);
+
+    if ((menuMusic1Loaded && IsMusicStreamPlaying(menuMusic1)) ||
+        (menuMusic2Loaded && IsMusicStreamPlaying(menuMusic2))) {
         return;
     }
 
-    // Cycle between the two menu tracks
     if (currentTrack != 1) {
-        menuMusic1.play();
-        currentTrack = 1;
+        if (menuMusic1Loaded) { PlayMusicStream(menuMusic1); currentTrack = 1; }
     } else {
-        menuMusic2.play();
-        currentTrack = 2;
+        if (menuMusic2Loaded) { PlayMusicStream(menuMusic2); currentTrack = 2; }
     }
 }
 
 void AudioManager::playBackgroundMusic() {
-    // Stop menu music
-    menuMusic1.stop();
-    menuMusic2.stop();
-
-    // Play the main game music (.flac)
-    if (gameMusic.getStatus() != sf::Music::Status::Playing) {
-        gameMusic.play();
-    }
+    if (menuMusic1Loaded) StopMusicStream(menuMusic1);
+    if (menuMusic2Loaded) StopMusicStream(menuMusic2);
+    if (gameMusicLoaded && !IsMusicStreamPlaying(gameMusic))
+        PlayMusicStream(gameMusic);
 }
 
 void AudioManager::stopBackgroundMusic() {
-    menuMusic1.stop();
-    menuMusic2.stop();
-    gameMusic.stop();
+    if (menuMusic1Loaded) StopMusicStream(menuMusic1);
+    if (menuMusic2Loaded) StopMusicStream(menuMusic2);
+    if (gameMusicLoaded)  StopMusicStream(gameMusic);
     currentTrack = 0;
 }
 
 void AudioManager::setMusicVolume(float volume) {
-    // SFML volume is 0 to 100
-    menuMusic1.setVolume(volume);
-    menuMusic2.setVolume(volume);
-    gameMusic.setVolume(volume);
+    musicVolVol = volume;
+    float v = volume / 100.f;
+    if (menuMusic1Loaded) SetMusicVolume(menuMusic1, v);
+    if (menuMusic2Loaded) SetMusicVolume(menuMusic2, v);
+    if (gameMusicLoaded)  SetMusicVolume(gameMusic,  v);
 }
 
 void AudioManager::setSoundVolume(float volume) {
-    sfxVolume = std::clamp(volume, 0.0f, 100.0f);
+    sfxVolume = std::clamp(volume, 0.f, 100.f);
 }
-
-// --- Sound Effect Logic ---
 
 void AudioManager::playRandomPinHit(float volume) {
     if (!soundsLoaded) return;
-    int randomSound = rand() % 5 + 1;
-    sf::Sound* sound = nullptr;
-    switch(randomSound) {
-        case 1: sound = pinHitSound1.get(); break;
-        case 2: sound = pinHitSound2.get(); break;
-        case 3: sound = pinHitSound3.get(); break;
-        case 4: sound = pinHitSound4.get(); break;
-        case 5: sound = pinHitSound5.get(); break;
-    }
-    if (sound && sound->getStatus() != sf::SoundSource::Status::Playing) {
-        sound->setVolume(volume * (sfxVolume / 100.0f));
-        sound->play();
+    int idx = rand() % 5;
+    if (pinHitLoaded[idx] && !IsSoundPlaying(pinHitSounds[idx])) {
+        SetSoundVolume(pinHitSounds[idx], volume * (sfxVolume / 100.f) / 100.f);
+        PlaySound(pinHitSounds[idx]);
     }
 }
 
 void AudioManager::playPinCollision(float volume) {
-    if (!soundsLoaded || !pinCollisionSound) return;
-    if (pinCollisionSound->getStatus() != sf::SoundSource::Status::Playing) {
-        pinCollisionSound->setVolume(volume * (sfxVolume / 100.0f));
-        pinCollisionSound->play();
+    if (!soundsLoaded || !pinCollisionLoaded) return;
+    if (!IsSoundPlaying(pinCollisionSound)) {
+        SetSoundVolume(pinCollisionSound, volume * (sfxVolume / 100.f) / 100.f);
+        PlaySound(pinCollisionSound);
     }
 }
 
 void AudioManager::playExplodingPin(float volume) {
-    if (!soundsLoaded || !explodingPinSound) return;
-    if (explodingPinSound->getStatus() != sf::SoundSource::Status::Playing) {
-        explodingPinSound->setVolume(volume * (sfxVolume / 100.0f));
-        explodingPinSound->play();
+    if (!soundsLoaded || !explodingPinLoaded) return;
+    if (!IsSoundPlaying(explodingPinSound)) {
+        SetSoundVolume(explodingPinSound, volume * (sfxVolume / 100.f) / 100.f);
+        PlaySound(explodingPinSound);
     }
 }
 
 void AudioManager::playStrikeCheer(float volume) {
-    if (!soundsLoaded || !strikeCheerSound) return;
-    if (strikeCheerSound->getStatus() != sf::SoundSource::Status::Playing) {
-        strikeCheerSound->setVolume(volume * (sfxVolume / 100.0f));
-        strikeCheerSound->play();
+    if (!soundsLoaded || !strikeCheerLoaded) return;
+    if (!IsSoundPlaying(strikeCheerSound)) {
+        SetSoundVolume(strikeCheerSound, volume * (sfxVolume / 100.f) / 100.f);
+        PlaySound(strikeCheerSound);
     }
 }
 
 void AudioManager::playBossLaugh(BossLaughType boss, float volume) {
     if (!soundsLoaded) return;
-
-    sf::Sound* sound = nullptr;
-    switch (boss) {
-        case BossLaughType::Enchantress: sound = enchantressLaughSound.get(); break;
-        case BossLaughType::Overlord:    sound = overlordLaughSound.get(); break;
-        case BossLaughType::Twins:       sound = twinsLaughSound.get(); break;
-        case BossLaughType::Emperor:     sound = emperorLaughSound.get(); break;
-        case BossLaughType::Monster:     sound = monsterLaughSound.get(); break;
-    }
-    if (!sound) return;
-
-    // Restart so boss intro / boss loss always fires audibly when requested.
-    sound->stop();
-    sound->setVolume(volume * (sfxVolume / 100.0f));
-    sound->play();
+    int idx = (int)boss;
+    if (!bossLaughLoaded[idx]) return;
+    StopSound(bossLaughSounds[idx]);
+    SetSoundVolume(bossLaughSounds[idx], volume * (sfxVolume / 100.f) / 100.f);
+    PlaySound(bossLaughSounds[idx]);
 }
 
 void AudioManager::startBallRoll() {
-    if (!soundsLoaded || !ballRollSound) return;
-    if (ballRollSound->getStatus() != sf::SoundSource::Status::Playing) {
-        ballRollSound->setVolume(95.0f * (sfxVolume / 100.0f));
-        ballRollSound->play();
+    if (!soundsLoaded || !ballRollLoaded) return;
+    if (!IsSoundPlaying(ballRollSound)) {
+        SetSoundVolume(ballRollSound, 0.95f * (sfxVolume / 100.f));
+        PlaySound(ballRollSound);
         ballRolling = true;
     }
 }
 
 void AudioManager::stopBallRoll() {
-    if (ballRolling && ballRollSound) {
-        ballRollSound->stop();
+    if (ballRolling && ballRollLoaded) {
+        StopSound(ballRollSound);
         ballRolling = false;
     }
 }

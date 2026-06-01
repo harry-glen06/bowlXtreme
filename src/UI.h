@@ -1,5 +1,5 @@
 #pragma once
-#include <SFML/Graphics.hpp>
+#include "raylib.h"
 #include <array>
 #include <map>
 #include <string>
@@ -68,33 +68,31 @@ public:
     static constexpr int ShopActionSellBallSlot3 = -6;
     static constexpr int ShopActionSellShoe = -7;
     static constexpr int ShopActionSellPower = -8;
-    static constexpr int ShopActionSellPinByIndexBase = -1000;   // action = base - pinIndex
-    static constexpr int ShopActionSellPowerByIndexBase = -2000; // action = base - powerIndex
+    static constexpr int ShopActionSellPinByIndexBase = -1000;
+    static constexpr int ShopActionSellPowerByIndexBase = -2000;
 
     UI();
-    
+
     void loadFont();
-    
+
     // Menu
-    void drawMenu(sf::RenderWindow& window, float windowW, float windowH, float dt);
-    MenuButton handleMenuClick(sf::RenderWindow& window, sf::Vector2i mousePos);
+    void drawMenu(float windowW, float windowH, float dt);
+    MenuButton handleMenuClick(float windowW, float windowH, Vector2 mousePos);
 
     // Tutorial
-    void drawTutorial(sf::RenderWindow& window, float windowW, float windowH);
-    bool handleTutorialClick(sf::RenderWindow& window, sf::Vector2i mousePos);
-    
+    void drawTutorial(float windowW, float windowH);
+    bool handleTutorialClick(float windowW, float windowH, Vector2 mousePos);
+
     // Settings
-    void drawSettings(sf::RenderWindow& window, float windowW, float windowH);
-    void handleSettingsClick(sf::RenderWindow& window, sf::Vector2i mousePos);
-    void handleSettingsDrag(sf::RenderWindow& window, sf::Vector2i mousePos);
+    void drawSettings(float windowW, float windowH);
+    void handleSettingsClick(float windowW, float windowH, Vector2 mousePos);
+    void handleSettingsDrag(float windowW, float windowH, Vector2 mousePos);
     void stopSettingsDrag();
 
     // Shop
-    void drawShop(sf::RenderWindow& window, int tokens, float windowW, float windowH, const ActiveItems& items);
-    // Returns purchase index (>=0) or one of the ShopAction* constants.
-    // Per-item sell actions use ShopActionSellPinByIndexBase / ShopActionSellPowerByIndexBase.
-    int  handleShopClick(sf::RenderWindow& window, sf::Vector2i mousePos, int tokens, const ActiveItems& items);
-    void handleShopScroll(sf::Vector2i mousePos, float wheelDelta, float windowW, float windowH, const ActiveItems& items);
+    void drawShop(int tokens, float windowW, float windowH, const ActiveItems& items);
+    int  handleShopClick(Vector2 mousePos, int tokens, const ActiveItems& items);
+    void handleShopScroll(Vector2 mousePos, float wheelDelta, float windowW, float windowH, const ActiveItems& items);
     void generateShopOffers(const ActiveItems& items);
     void recordOfferPicked(const ShopOffer& offer);
     void resetEquippedBall() { selectedBallSlot = 1; selectedPinSlot = 1; }
@@ -103,20 +101,19 @@ public:
     const std::vector<ShopOffer>& getShopOffers() const { return shopOffers; }
 
     // Shared inventory drawing
-    void drawInventoryBar(sf::RenderWindow& window, const ActiveItems& items, float windowW, float windowH);
-    void drawInventoryInShop(sf::RenderWindow& window, const ActiveItems& items, float windowW, float windowH);
-    
-    // Game UI
-    GameAction drawScorecard(sf::RenderWindow& window, 
-                       const std::array<FrameScore, 10>& frames, 
-                       int currentFrame, 
-                       int currentBall, 
-                       int highScore,
-                       float windowW, 
-                       float windowH);
+    void drawInventoryBar(const ActiveItems& items, float windowW, float windowH);
+    void drawInventoryInShop(const ActiveItems& items, float windowW, float windowH);
 
-    // Xtreme HUD (new scoring)
-    GameAction drawXtremeHUD(sf::RenderWindow& window,
+    // Game UI
+    GameAction drawScorecard(const std::array<FrameScore, 10>& frames,
+                             int currentFrame,
+                             int currentBall,
+                             int highScore,
+                             float windowW,
+                             float windowH);
+
+    // Xtreme HUD
+    GameAction drawXtremeHUD(float dt,
                              int round,
                              int frameInRound,
                              int shotInFrame,
@@ -138,17 +135,15 @@ public:
                              bool bossRound,
                              const std::string& bossName,
                              const std::string& bossDescription);
-    
-    void drawGameOverScreen(sf::RenderWindow& window,
-                           GameOverMode mode,
-                           int finalScore, 
-                           int highScore, 
-                           float windowW,
-                           float windowH,
-                           int progressScore = -1,
-                           int progressTarget = -1);
-    void drawRoundSummaryPopup(sf::RenderWindow& window,
-                               int roundNumber,
+
+    void drawGameOverScreen(GameOverMode mode,
+                            int finalScore,
+                            int highScore,
+                            float windowW,
+                            float windowH,
+                            int progressScore = -1,
+                            int progressTarget = -1);
+    void drawRoundSummaryPopup(int roundNumber,
                                int roundScore,
                                int targetScore,
                                int tokensEarned,
@@ -158,44 +153,50 @@ public:
                                const std::string& bossName,
                                float windowW,
                                float windowH);
-    bool handleRoundSummaryClick(sf::Vector2i mousePos) const;
-    void drawGameWonPopup(sf::RenderWindow& window,
-                          int roundsCleared,
+    bool handleRoundSummaryClick(Vector2 mousePos) const;
+    void drawGameWonPopup(int roundsCleared,
                           int tokensTotal,
                           float windowW,
                           float windowH);
-    GameWonAction handleGameWonClick(sf::Vector2i mousePos) const;
-    
+    GameWonAction handleGameWonClick(Vector2 mousePos) const;
+
     // State management
     GameState getState() const { return state; }
     void setState(GameState newState) { state = newState; }
-    
+
     // Settings getters
     bool getBumpersDefault() const { return bumpersDefault; }
     float getMusicVolume() const { return musicVolume; }
     float getSoundVolume() const { return soundVolume; }
     int getDefaultBallColor() const { return defaultBallColor; }
-    
+
     bool isFontLoaded() const { return fontLoaded; }
-    const sf::Font& getFont() const { return font; }
-    
+    const Font& getFont() const { return font; }
+
+    void setCamera(Camera2D cam) { camera = cam; }
+    void setWorldMousePos(Vector2 pos) { worldMousePos = pos; }
+
 private:
-    sf::Font font;
+    Camera2D camera = {};
+    float lastWindowW = 1024.0f;
+    float lastWindowH = 768.0f;
+    Vector2 worldMousePos = {};
+    Font font{};
     bool fontLoaded = false;
-    
+
     GameState state = GameState::Menu;
-    
+
     // Cloud animation
     struct Cloud {
-        sf::Vector2f position;
+        Vector2 position;
         float speed;
         float size;
     };
     std::vector<Cloud> clouds;
     void initClouds(float windowW, float windowH);
     void updateClouds(float dt, float windowW, float windowH);
-    void drawClouds(sf::RenderWindow& window);
-    
+    void drawClouds();
+
     // Settings
     bool bumpersDefault = false;
     float musicVolume = 50.0f;
@@ -229,8 +230,6 @@ private:
     bool hudCountingFormula = false;
     bool hudShowBigScore = false;
     float hudBigTimer = 0.0f;
-    sf::Clock hudAnimClock;
-    bool hudAnimClockPrimed = false;
     bool bossInfoPopupOpen = false;
     bool xtremeMouseWasDown = false;
 
@@ -249,9 +248,9 @@ private:
     static std::string offerStatKey(const ShopOffer& offer);
 
     // Shared inventory rendering core
-    void drawInventoryPanel(sf::RenderWindow& window, const ActiveItems& items, float x, float y, float width);
-    sf::FloatRect roundSummaryContinueRect{};
-    sf::FloatRect gameWonEndlessRect{};
-    sf::FloatRect gameWonRestartRect{};
-    sf::FloatRect gameWonMenuRect{};
+    void drawInventoryPanel(const ActiveItems& items, float x, float y, float width);
+    Rectangle roundSummaryContinueRect{};
+    Rectangle gameWonEndlessRect{};
+    Rectangle gameWonRestartRect{};
+    Rectangle gameWonMenuRect{};
 };

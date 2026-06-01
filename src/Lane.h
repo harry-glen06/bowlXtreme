@@ -1,6 +1,5 @@
 #pragma once
-#include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
+#include "raylib.h"
 
 struct Lane {
     float width = 300.0f;
@@ -16,16 +15,8 @@ struct Lane {
 
     bool bumpersOn = false;
 
-    sf::RectangleShape laneRect;
-    sf::RectangleShape leftGutter;
-    sf::RectangleShape rightGutter;
-    sf::RectangleShape leftBumper;
-    sf::RectangleShape rightBumper;
-    sf::RectangleShape topEnd;
-    sf::RectangleShape bottomEnd;
-
     void init(float windowW);
-    void draw(sf::RenderWindow& window) const;
+    void draw() const;
 
     float playLeft() const;
     float playRight() const;

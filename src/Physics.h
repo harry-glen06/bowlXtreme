@@ -1,15 +1,14 @@
 #pragma once
-#include <SFML/Graphics.hpp>
+#include "raylib.h"
 
-float dot(sf::Vector2f a, sf::Vector2f b);
-float length(sf::Vector2f v);
+float dot(Vector2 a, Vector2 b);
+float length(Vector2 v);
 float degToRad(float deg);
 
-// Impulse collision for two moving circles
 void resolveCircleCollision(
-    sf::Vector2f& p1, sf::Vector2f& v1, float m1, float r1,
-    sf::Vector2f& p2, sf::Vector2f& v2, float m2, float r2,
+    Vector2& p1, Vector2& v1, float m1, float r1,
+    Vector2& p2, Vector2& v2, float m2, float r2,
     float restitution
 );
 
-void applyOilEffect(sf::Vector2f& velocity, int pinsStanding);
+void applyOilEffect(Vector2& velocity, int pinsStanding);

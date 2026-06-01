@@ -1,28 +1,27 @@
 #pragma once
-#include <SFML/Graphics.hpp>
-#include <SFML/Audio.hpp>
+#include "raylib.h"
 
 enum class PinType {
     Normal,
-    Gold,           // Knocked = +1 token
-    Mischievous,    // Value randomises 1-15 each shot
-    Exploding,      // Knocked over -> explodes after 1s, knocks nearby pins
-    Light,          // Worth 2, very easy to knock over (low mass)
-    Big,            // Worth 10, hard to knock over (high mass)
-    Ice,            // Slides 15% faster when fallen
-    CopyCat,        // Becomes the type of the first ball-hit pin this shot
-    LuckyDucky,     // Worth 20, 35% chance to score 0
-    LevelUp,        // Worth +1 point
-    Lover,          // On hit, adds +1 value to the next slot pin
-    ChangeIsGood,   // Gains +2 value whenever another pin changes
-    ThirdTime,      // Every 3rd time scored, combo x2 (counter persists whole run)
+    Gold,
+    Mischievous,
+    Exploding,
+    Light,
+    Big,
+    Ice,
+    CopyCat,
+    LuckyDucky,
+    LevelUp,
+    Lover,
+    ChangeIsGood,
+    ThirdTime,
 };
 
 class Pin {
 private:
-    sf::Vector2f pos;
-    sf::Vector2f vel;
-    sf::Vector2f startPos;
+    Vector2 pos;
+    Vector2 vel;
+    Vector2 startPos;
 
     float radius;
     float baseMass;
@@ -37,45 +36,40 @@ private:
     bool active;
 
     int value = 0;
-    int baseValue = 0;      // value before Mischievous randomisation
+    int baseValue = 0;
 
     PinType pinType = PinType::Normal;
 
-    // Exploding pin
-    bool  explodeArmed  = false;   // true once fallen
+    bool  explodeArmed  = false;
     float explodeTimer  = 0.f;
     bool  hasExploded   = false;
 
-    // ThirdTime pin
-    int timesScored = 0;           // persists whole run
+    int timesScored = 0;
 
-    // LuckyDucky
-    bool luckyZero = false;        // set at shot-start if this shot scores 0
+    bool luckyZero = false;
     float slideMultiplier = 1.0f;
 
 public:
-    Pin(sf::Vector2f startPosition, float radius, int value = 0);
+    Pin(Vector2 startPosition, float radius, int value = 0);
 
     void update(float dt);
-    void draw(sf::RenderWindow& window) const;
+    void draw() const;
     void resetToOriginalPosition();
     void resetToOriginalPositionKeepType();
 
-    // Type
     PinType getPinType() const { return pinType; }
     void    setPinType(PinType t);
 
-    // Accessors
-    sf::Vector2f getPos() const;
-    sf::Vector2f getVel() const;
+    Vector2 getPos() const;
+    Vector2 getVel() const;
     float getRadius() const;
     float getMass()   const;
     float getRestitution() const;
     bool  isActive()  const;
 
-    void setPos(sf::Vector2f p);
-    void translate(sf::Vector2f delta);
-    void setVel(sf::Vector2f v);
+    void setPos(Vector2 p);
+    void translate(Vector2 delta);
+    void setVel(Vector2 v);
     void setActive(bool a);
     void setSlideMultiplier(float mult);
 
@@ -88,20 +82,16 @@ public:
     int  getValue() const { return value; }
     void setValue(int v)  { value = v; }
 
-    // Exploding
-    bool  shouldExplode()  const { return explodeArmed && !hasExploded && explodeTimer >= 1.f; }
-    bool  hasExplodedAlready() const { return hasExploded; }
-    void  markExploded()         { hasExploded = true; explodeArmed = false; }
-    float getExplodeTimer() const { return explodeTimer; }
+    bool  shouldExplode()     const { return explodeArmed && !hasExploded && explodeTimer >= 1.f; }
+    bool  hasExplodedAlready()const { return hasExploded; }
+    void  markExploded()            { hasExploded = true; explodeArmed = false; }
+    float getExplodeTimer()   const { return explodeTimer; }
 
-    // ThirdTime
-    int  getTimesScored() const { return timesScored; }
-    void incrementTimesScored() { timesScored++; }
+    int  getTimesScored()    const { return timesScored; }
+    void incrementTimesScored()    { timesScored++; }
 
-    // LuckyDucky
     bool isLuckyZero() const { return luckyZero; }
-    void rollLuckyDucky();   // call at shot start to set luckyZero
+    void rollLuckyDucky();
 
-    // Mischievous — randomise value, called at start of each shot
     void randomiseMischievous();
 };
